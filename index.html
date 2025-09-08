@@ -2,87 +2,81 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>三劍客台指期策略分析（單檔｜含 Risk-Return 面板）</title>
+  <!-- 圖表套件 -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <!-- 字體（可選） -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
   <style>
-    :root {
-      --bg:#0b1117; /* 深色背景以貼近你現站配色 */
-      --panel:#111827;
-      --muted:#9CA3AF;
-      --text:#E5E7EB;
-      --accent:#10b981; /* 綠 */
-      --danger:#ef4444; /* 紅 */
-      --card:#0f172a;
-      --border:#1f2937;
+    :root{
+      --bg:#f6f7fb; --text:#0f172a;
+      --card:#ffffff; --border:#e5e7eb;
+      --muted:#64748b; --muted2:#94a3b8;
+      --accent:#0ea5e9; --good:#16a34a; --bad:#ef4444;
     }
     *{box-sizing:border-box}
-    body{margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial; background:var(--bg); color:var(--text)}
-    .container{max-width:1280px;margin:24px auto;padding:0 16px}
-    h1{font-size:22px;margin:0 0 16px 0;font-weight:800}
-    .row{display:flex;gap:12px;flex-wrap:wrap}
-    .btn{background:#1f2937;border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:10px;cursor:pointer}
-    .btn:hover{background:#111827}
-    .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px}
-    .flex{display:flex;align-items:center;gap:8px}
-    textarea{width:100%;min-height:140px;background:#0b1220;color:var(--text);border:1px solid var(--border);border-radius:10px;padding:10px;font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace}
-    .grid{display:grid;grid-template-columns:repeat(12,1fr);gap:12px}
-    .kpi{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:14px}
-    .kpi h3{margin:0 0 8px 0;font-size:14px;color:#cbd5e1}
-    .kpi .val{font-size:18px;font-weight:800}
-    .kpi .sub{font-size:12px;color:var(--muted)}
-    .kpi.good .val{color:var(--accent)}
-    .kpi.bad  .val{color:var(--danger)}
-    .section-title{font-size:16px;font-weight:800;margin:14px 0}
-    .muted{color:var(--muted)}
-    table{width:100%;border-collapse:collapse}
-    th,td{padding:8px 10px;border-bottom:1px solid var(--border);font-size:12px;text-align:right}
-    th:first-child,td:first-child{text-align:left}
-    .sticky-head{position:sticky;top:0;background:var(--panel);}
-    .help{font-size:12px;color:var(--muted)}
-    .two-col{display:grid;grid-template-columns: 1.2fr 1fr; gap:12px}
+    body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial}
+    .container{max-width:1200px;margin:28px auto;padding:0 16px}
+    h1{margin:0 0 16px;font-size:22px;font-weight:800}
+    .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px}
+    .btn{background:#fff;border:1px solid var(--border);border-radius:10px;padding:8px 12px;cursor:pointer}
+    .btn:hover{background:#f3f4f6}
+    textarea{width:100%;min-height:140px;padding:10px;border:1px solid var(--border);border-radius:10px;
+             background:#fff;color:var(--text);font-family:ui-monospace,Consolas,Menlo,monospace}
+    .muted{color:var(--muted);font-size:12px}
+    .grid{display:grid;gap:12px}
+    .two-col{display:grid;grid-template-columns:1.2fr 1fr;gap:12px}
     @media (max-width:1000px){.two-col{grid-template-columns:1fr}}
+    .kpi{background:#fafafa;border:1px solid var(--border);border-radius:10px;padding:12px}
+    .kpi h3{margin:0 0 6px;font-size:12px;color:var(--muted)}
+    .kpi .val{font-size:18px;font-weight:800}
+    table{width:100%;border-collapse:collapse}
+    th,td{font-size:12px;padding:8px 10px;border-bottom:1px solid var(--border);text-align:right}
+    th:first-child,td:first-child{text-align:left}
+    thead th{position:sticky;top:0;background:#f9fafb}
+    .section-title{font-weight:800;margin:6px 0 10px}
   </style>
 </head>
 <body>
   <div class="container">
     <h1>三劍客台指期策略分析（單檔）</h1>
 
-    <!-- 上傳 / 貼上區 -->
+    <!-- 上傳/貼上 -->
     <div class="card" style="margin-bottom:12px">
-      <div class="row">
+      <div class="row" style="margin-bottom:8px">
         <button id="pasteBtn" class="btn">貼上內容</button>
         <input id="fileInput" type="file" accept=".txt" class="btn" />
-        <div class="help">支援：直接貼上策略輸出的 TXT；或選擇檔案。欄位至少需含日期/時間與損益(或點數)。</div>
+        <span class="muted">支援：貼上策略輸出的 TXT 或直接上傳檔案（需有 日期/時間 與 損益 或 點數）。</span>
       </div>
       <textarea id="raw" placeholder="貼上 TXT 內容..."></textarea>
-      <div class="row">
+      <div class="row" style="margin-top:8px">
         <button id="runBtn" class="btn">解析並繪圖</button>
-        <div class="muted">風險資本 (NAV) ：<input id="navInput" type="number" value="1000000" style="width:140px;background:#0b1220;border:1px solid var(--border);border-radius:8px;color:var(--text);padding:4px 8px"> 元；無風險利率 rf：<input id="rfInput" type="number" step="0.001" value="0.00" style="width:90px;background:#0b1220;border:1px solid var(--border);border-radius:8px;color:var(--text);padding:4px 8px">（年化）</div>
+        <span class="muted">風險資本(NAV)：</span>
+        <input id="navInput" type="number" value="1000000" style="width:140px;padding:6px;border:1px solid var(--border);border-radius:8px">
+        <span class="muted">元；無風險利率 rf(年化)：</span>
+        <input id="rfInput" type="number" step="0.001" value="0.00" style="width:90px;padding:6px;border:1px solid var(--border);border-radius:8px">
       </div>
     </div>
 
-    <!-- 概覽（你原本的 summary 列）可在此動態填入，如果已有就忽略 -->
-
-    <!-- 圖表 + 右側 KPI 概覽（原位置）-->
+    <!-- 圖表 + 基礎 KPI -->
     <div class="two-col" style="margin-bottom:12px">
+      <div class="card"><canvas id="equityChart" height="240"></canvas></div>
       <div class="card">
-        <canvas id="equityChart" height="240"></canvas>
-      </div>
-      <div class="card" id="topSummary">
         <div class="section-title">概覽（基礎）</div>
         <div id="basicSummary" class="grid" style="grid-template-columns:repeat(2,1fr)"></div>
       </div>
     </div>
 
-    <!-- ★★★ 新增：Risk-Return 面板（插在圖表與交易明細中間） ★★★ -->
-    <div class="card" style="margin-bottom:12px">
+    <!-- ★ Risk-Return 面板：插在圖表與交易明細中間 ★ -->
+    <div id="rr-panel" class="card" style="margin-bottom:12px">
       <div class="section-title">Risk-Return 指標</div>
-      <div id="riskGrid" class="grid" style="grid-template-columns:repeat(6,1fr)"></div>
-      <div class="help" style="margin-top:8px">Sharpe/Sortino/MAR 以「日聚合報酬序列」計算；VaR/ES 使用歷史模擬法。</div>
+      <div id="rr-grid" class="grid" style="grid-template-columns:repeat(6,1fr)"></div>
+      <div class="muted" style="margin-top:6px">Sharpe/Sortino/MAR 以「日聚合報酬序列」計算；VaR/ES 為歷史模擬法。</div>
     </div>
 
     <!-- 交易明細 -->
@@ -90,17 +84,10 @@
       <div class="section-title">交易明細</div>
       <div style="overflow:auto;max-height:520px">
         <table id="tbl">
-          <thead class="sticky-head">
+          <thead>
             <tr>
-              <th>#</th>
-              <th>日期</th>
-              <th>時間</th>
-              <th>方向</th>
-              <th>口數</th>
-              <th>進場價</th>
-              <th>出場價</th>
-              <th>點數</th>
-              <th>損益</th>
+              <th>#</th><th>日期</th><th>時間</th><th>方向</th><th>口數</th>
+              <th>進場價</th><th>出場價</th><th>點數</th><th>損益</th>
             </tr>
           </thead>
           <tbody></tbody>
@@ -110,243 +97,181 @@
   </div>
 
   <script>
-    // ---------------------------
-    // 解析：嘗試適配常見欄位（中文/英文）
-    // 支援兩種格式：
-    // 1) CSV/TSV（含表頭） 2) 逐行 key:value 或空白切分
-    // 必要欄位：日期/時間 + 損益(或點數)
-    // ---------------------------
+    // ---------- 工具 ----------
+    const fmt = n => Math.abs(n)>=1e6 ? (n/1e6).toFixed(2)+'M'
+                 : Math.abs(n)>=1e3 ? (n/1e3).toFixed(1)+'k'
+                 : (Math.round(n)).toLocaleString();
+    const pct = x => (x*100).toFixed(2)+'%';
+    const avg = a => a.length ? a.reduce((x,y)=>x+y,0)/a.length : 0;
+    const stdev = a => { if(a.length<2) return 0; const m=avg(a); return Math.sqrt(a.reduce((s,x)=>s+(x-m)*(x-m),0)/(a.length-1)); };
 
+    // ---------- 解析 TXT ----------
     function parseText(raw){
       const lines = raw.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
-      if(lines.length===0) return { trades:[], daily:[] };
+      if(!lines.length) return { trades:[], daily:[] };
 
-      // 嘗試 CSV/TSV
+      // 偵測 CSV/TSV
       const sep = lines[0].includes('\t') ? '\t' : ',';
       let headers = lines[0].split(new RegExp(sep)).map(h=>h.trim());
-      let isTable = headers.some(h => /日期|time|date|進場時間|出場時間|損益|profit|點數/i.test(h));
+      const looksTable = headers.some(h => /日期|time|date|進場時間|出場時間|損益|profit|點數/i.test(h));
 
       let rows=[];
-      if(isTable){
+      if(looksTable){
         for(let i=1;i<lines.length;i++){
           const arr = lines[i].split(new RegExp(sep)).map(s=>s.trim());
           if(arr.length<2) continue;
           rows.push(Object.fromEntries(arr.map((v,idx)=>[headers[idx]||('c'+idx),v])));
         }
       }else{
-        // 退而求其次：空白切分
         rows = lines.map(l=>{
-          const parts = l.split(/[\s,]+/).filter(Boolean);
-          return { raw:l, c0:parts[0], c1:parts[1], c2:parts[2], c3:parts[3] };
+          const p=l.split(/[\s,]+/).filter(Boolean);
+          return { c0:p[0], c1:p[1], c2:p[2], c3:p[3] };
         });
-        headers = Object.keys(rows[0]||{});
       }
 
       const trades=[];
       for(const r of rows){
-        const date = pick(r, [/^日期$/i, /date/i, /trade\s*date/i]);
-        const time = pick(r, [/^時間$/i, /time/i, /trade\s*time/i, /進場時間/i]);
-        const dir  = pick(r, [/^方向$/i, /side/i, /type/i]);
-        const qty  = +(pick(r, [/口數/, /qty/i]) || 1);
-        const inPx = toNum(pick(r, [/進場價/, /entry/i]));
-        const outPx= toNum(pick(r, [/出場價/, /exit/i]));
-        const pts  = toNum(pick(r, [/^點數$/, /points?/i]));
-        const pnl  = toNum(pick(r, [/^損益$/, /^獲利$/, /pnl/i, /profit/i]));
+        const date = pick(r,[/^日期$/i,/date/i]);
+        const time = pick(r,[/^時間$/i,/time/i,/進場時間/i]);
+        const dir  = pick(r,[/^方向$/i,/side/i,/type/i]);
+        const qty  = +(pick(r,[/口數/,/qty/i])||1);
+        const inPx = toNum(pick(r,[/進場價/,/entry/i]));
+        const outPx= toNum(pick(r,[/出場價/,/exit/i]));
+        const pts  = toNum(pick(r,[/^點數$/, /points?/i]));
+        const pnl  = toNum(pick(r,[/^損益$/, /^獲利$/, /pnl/i, /profit/i]));
         const when = parseWhen(date, time);
-
-        // 若僅有點數 → 以 1 口、乘數 200 計（台指期）
-        const pointValue = 200; // 需要時可改成輸入參數
-        let pnlUse = Number.isFinite(pnl) ? pnl : (Number.isFinite(pts) ? pts*pointValue*qty : NaN);
+        const pointValue = 200; // 台指期點值，可改
+        const pnlUse = Number.isFinite(pnl) ? pnl : (Number.isFinite(pts) ? pts*pointValue*qty : NaN);
         if(!when || !Number.isFinite(pnlUse)) continue;
-
         trades.push({ when, date:when.toISOString().slice(0,10), time:when.toTimeString().slice(0,8), dir, qty, inPx, outPx, pts, pnl:pnlUse });
       }
 
-      // 依日期聚合
+      // 轉成「日損益」
       const dailyMap = new Map();
-      for(const t of trades){
-        dailyMap.set(t.date, (dailyMap.get(t.date)||0) + t.pnl);
-      }
-      const daily = [...dailyMap.entries()].sort((a,b)=>a[0].localeCompare(b[0]))
-                      .map(([d,v])=>({date:d, pnl:v}));
+      for(const t of trades){ dailyMap.set(t.date, (dailyMap.get(t.date)||0) + t.pnl); }
+      const daily = [...dailyMap.entries()].sort((a,b)=>a[0].localeCompare(b[0])).map(([d,v])=>({date:d,pnl:v}));
 
       return { trades, daily };
 
-      function pick(obj, keys){
-        for(const k of Object.keys(obj)){
-          for(const re of keys){ if(re.test(k)) return obj[k]; }
-        }
-        return undefined;
-      }
-      function toNum(v){ const n = parseFloat(String(v||'').replace(/[^\-\d\.]/g,'')); return Number.isFinite(n)?n:NaN; }
+      function pick(obj, regs){ for(const k of Object.keys(obj)){ if(regs.some(re=>re.test(k))) return obj[k]; } }
+      function toNum(v){ const n=parseFloat(String(v||'').replace(/[^\-\d\.]/g,'')); return Number.isFinite(n)?n:NaN; }
       function parseWhen(d,t){
         if(!d && !t) return null;
-        let s = '';
-        if(d){ s += (''+d).replace(/\D/g,''); }
-        if(t){ s += 'T'+((''+t).replace(/\D/g,'').padEnd(6,'0')).replace(/(\d{2})(\d{2})(\d{2}).*/, '$1:$2:$3'); }
-        // 嘗試多種格式
-        try{
-          if(/\d{8}T\d{2}:\d{2}:\d{2}/.test(s)){
-            const iso = s.replace(/(\d{4})(\d{2})(\d{2})T/, '$1-$2-$3T');
-            return new Date(iso);
-          }
-        }catch(e){return null}
+        let s=''; if(d) s+=String(d).replace(/\D/g,'');
+        if(t) s+='T'+String(t).replace(/\D/g,'').padEnd(6,'0').replace(/(\d{2})(\d{2})(\d{2}).*/,'$1:$2:$3');
+        if(/\d{8}T\d{2}:\d{2}:\d{2}/.test(s)){ const iso=s.replace(/(\d{4})(\d{2})(\d{2})T/,'$1-$2-$3T'); return new Date(iso); }
         return null;
       }
     }
 
-    // ---------------------------
-    // KPI 計算（以日聚合報酬序列）
-    // ---------------------------
-
-    function calcKPI(daily, trades, nav=1_000_000, rf=0){
-      const eq = []; // 權益曲線（金額）
-      let cum=0; for(const d of daily){ cum+=d.pnl; eq.push({date:d.date, nav: nav+cum}); }
-
-      // MDD 與 TUW/Recovery
-      let peak = -Infinity, maxDD=0, ddStart=null, ddEnd=null;
-      let curPeakDate=null, maxTUW=0, curTUW=0, maxTUWStart=null, maxTUWEnd=null;
-      for(let i=0;i<eq.length;i++){
-        const v = eq[i].nav;
-        if(v>peak){ peak=v; curPeakDate=eq[i].date; curTUW=0; }
-        else{ // underwater
-          const dd = peak - v; if(dd>maxDD){ maxDD=dd; ddStart=curPeakDate; ddEnd=eq[i].date; }
-          curTUW+=1; if(curTUW>maxTUW){ maxTUW=curTUW; maxTUWStart=curPeakDate; maxTUWEnd=eq[i].date; }
-        }
+    // ---------- KPI（用日損益序列） ----------
+    function computeRiskReturnKPI(daily, nav=1_000_000, rf=0){
+      // 權益曲線 & MDD/TUW
+      let cum=0;
+      const eq = daily.map(d => ({date:d.date, nav:(cum+=d.pnl, nav+cum)}));
+      let peak=-Infinity, maxDD=0, ddStart=null, ddEnd=null, curPeak=null, TUW=0, maxTUW=0;
+      for(const p of eq){
+        if(p.nav>peak){ peak=p.nav; curPeak=p.date; TUW=0; }
+        else{ const dd=peak-p.nav; if(dd>maxDD){ maxDD=dd; ddStart=curPeak; ddEnd=p.date; } TUW++; if(TUW>maxTUW) maxTUW=TUW; }
       }
 
-      // 日報酬率（以 NAV 為分母）
-      const dailyRet = daily.map(d=> d.pnl / nav);
+      // 日報酬（資本回報）
+      const dailyRet = daily.map(d=> d.pnl/nav);
       const mean = avg(dailyRet);
-      const vol  = std(dailyRet) * Math.sqrt(252);
-      const downside = std(dailyRet.filter(x=>x < (rf/252))) * Math.sqrt(252);
+      const vol = stdev(dailyRet)*Math.sqrt(252);
+      const downside = stdev(dailyRet.filter(x=>x<(rf/252)))*Math.sqrt(252);
 
-      // CAGR 估算（以期間與總報酬推回）
+      // 年化、Sharpe/Sortino/MAR
       const totalPnL = daily.reduce((a,b)=>a+b.pnl,0);
-      const start = daily[0]?.date, end = daily[daily.length-1]?.date;
-      const days = start && end ? ( (new Date(end)-new Date(start))/86400000 + 1 ) : 252;
-      const years = Math.max(days/365, 1/365);
-      const CAGR = Math.pow((nav+totalPnL)/nav, 1/years) - 1;
+      const years = daily.length ? Math.max(daily.length/252, 1/365) : 1/365;
+      const CAGR = Math.pow((nav+totalPnL)/nav, 1/years)-1;
+      const sharpe = vol>0 ? ((mean*252 - rf)/vol) : 0;
+      const sortino = downside>0 ? ((mean*252 - rf)/downside) : 0;
+      const MAR = maxDD>0 ? (CAGR/(maxDD/nav)) : 0;
 
-      const sharpe = vol>0 ? ( (mean*252 - rf) / vol ) : 0;
-      const sortino = downside>0 ? ( (mean*252 - rf) / downside ) : 0;
-      const MAR = maxDD>0 ? ((CAGR) / (maxDD/nav)) : 0;
-
-      // VaR / ES（歷史法）
-      const q = (arr,p)=>{ const a=[...arr].sort((x,y)=>x-y); const i=Math.max(0,Math.min(a.length-1, Math.floor((1-p)*a.length))); return a[i]; };
-      const VaR95 = -q(dailyRet,0.95)*nav; // 金額表示
-      const VaR99 = -q(dailyRet,0.99)*nav;
-      const ES = (arr,p)=>{ const a=[...arr].sort((x,y)=>x-y); const cut=Math.floor((1-p)*a.length); const sl=a.slice(0,cut); if(sl.length===0) return 0; return -(sl.reduce((x,y)=>x+y,0)/sl.length)*nav; };
+      // VaR / ES
+      const q=(arr,p)=>{ const a=[...arr].sort((x,y)=>x-y); const i=Math.max(0,Math.min(a.length-1,Math.floor((1-p)*a.length))); return a[i]; };
+      const ES=(arr,p)=>{ const a=[...arr].sort((x,y)=>x-y); const cut=Math.floor((1-p)*a.length); const sl=a.slice(0,cut); return sl.length? -(sl.reduce((x,y)=>x+y,0)/sl.length)*nav : 0; };
+      const VaR95= -q(dailyRet,0.95)*nav, VaR99=-q(dailyRet,0.99)*nav;
       const ES95 = ES(dailyRet,0.95), ES99 = ES(dailyRet,0.99);
 
-      // 交易層
-      const wins = trades.filter(t=>t.pnl>0).length;
-      const losses = trades.filter(t=>t.pnl<0).length;
-      const winRate = trades.length? wins/trades.length : 0;
-      const avgWin = wins? avg(trades.filter(t=>t.pnl>0).map(t=>t.pnl)) : 0;
-      const avgLoss= losses? Math.abs(avg(trades.filter(t=>t.pnl<0).map(t=>t.pnl))) : 0;
-      const payoff = avgLoss>0 ? (avgWin/avgLoss) : 0;
-      const PF = (wins? trades.filter(t=>t.pnl>0).reduce((a,b)=>a+b.pnl,0):0) /
-                 Math.max(1, Math.abs(losses? trades.filter(t=>t.pnl<0).reduce((a,b)=>a+b.pnl,0):0));
-      const expectancy = trades.length? (totalPnL/trades.length) : 0;
-
-      // 最大連敗
-      let cur=0, maxLose=0; for(const t of trades){ if(t.pnl<=0){ cur++; maxLose=Math.max(maxLose,cur);} else cur=0; }
-
-      return { eq, totalPnL, maxDD, ddStart, ddEnd, maxTUW, maxTUWStart, maxTUWEnd, mean, vol, downside, CAGR, sharpe, sortino, MAR, VaR95, VaR99, ES95, ES99, trades: trades.length, wins, losses, winRate, avgWin, avgLoss, payoff, PF, expectancy, maxLosingStreak:maxLose };
-
-      function avg(a){return a.length? a.reduce((x,y)=>x+y,0)/a.length : 0}
-      function std(a){ if(a.length<2) return 0; const m=avg(a); return Math.sqrt(a.reduce((s,x)=>s+(x-m)*(x-m),0)/(a.length-1)); }
+      return { totalPnL, CAGR, sharpe, sortino, MAR, maxDD, ddStart, ddEnd, maxTUW, VaR95, VaR99, ES95, ES99, eq };
     }
 
-    // ---------------------------
-    // UI render
-    // ---------------------------
+    // ---------- 畫面渲染 ----------
     let chart;
     function renderEquity(eq){
-      const ctx=document.getElementById('equityChart');
-      const labels=eq.map(x=>x.date);
-      const data=eq.map(x=>x.nav);
       chart && chart.destroy();
-      chart = new Chart(ctx, {
+      chart = new Chart(document.getElementById('equityChart'), {
         type:'line',
-        data:{ labels, datasets:[{ label:'權益曲線', data, borderWidth:1.8, pointRadius:0 }]},
-        options:{ responsive:true, maintainAspectRatio:false, scales:{ x:{ ticks:{ color:'#9CA3AF' }}, y:{ ticks:{ color:'#9CA3AF' } } }, plugins:{ legend:{ labels:{ color:'#cbd5e1' } } } }
+        data:{ labels:eq.map(x=>x.date),
+               datasets:[{label:'權益曲線', data:eq.map(x=>x.nav), borderWidth:1.8, pointRadius:0}] },
+        options:{ responsive:true, maintainAspectRatio:false,
+          scales:{ x:{ ticks:{ color:'#6b7280' }}, y:{ ticks:{ color:'#6b7280' }}},
+          plugins:{ legend:{ labels:{ color:'#334155' }}}
+        }
       });
     }
-
-    function fmt(n){ if(Math.abs(n)>=1e6) return (n/1e6).toFixed(2)+'M'; if(Math.abs(n)>=1e3) return (n/1e3).toFixed(1)+'k'; return (n).toLocaleString(); }
-    function pct(x){ return (x*100).toFixed(2)+'%'; }
-
-    function renderBasic(k){
-      const el=document.getElementById('basicSummary');
-      const rows=[
-        ['累積獲利', fmt(k.totalPnL)],
-        ['交易數', k.trades.toLocaleString()],
-        ['勝率', pct(k.winRate)],
-        ['平均每筆', fmt(k.expectancy)],
-        ['最大回撤', '-'+fmt(k.maxDD)],
-        ['最大連敗', k.maxLosingStreak.toString()+' 筆'],
-      ];
-      el.innerHTML = rows.map(([t,v])=>`<div class="kpi"><h3>${t}</h3><div class="val">${v}</div></div>`).join('');
-    }
-
-    function renderRisk(k){
-      const grid=document.getElementById('riskGrid');
+    function renderBasic(k, trades){
+      const el = document.getElementById('basicSummary');
+      const winRate = trades.length? (trades.filter(t=>t.pnl>0).length/trades.length) : 0;
+      const expectancy = trades.length? (k.totalPnL/trades.length) : 0;
       const cells = [
+        ['累積獲利', fmt(k.totalPnL)],
+        ['交易數', trades.length.toLocaleString()],
+        ['勝率', pct(winRate)],
+        ['平均每筆', fmt(expectancy)],
+        ['最大回撤', '-'+fmt(k.maxDD)],
+        ['TUW 最長(天)', (k.maxTUW||0)+' 天'],
+      ];
+      el.innerHTML = cells.map(([t,v])=>`<div class="kpi"><h3>${t}</h3><div class="val">${v}</div></div>`).join('');
+    }
+    function renderRR(k){
+      const rr = [
         ['CAGR', pct(k.CAGR)],
         ['Sharpe', k.sharpe.toFixed(2)],
         ['Sortino', k.sortino.toFixed(2)],
         ['MAR (CAGR/MDD)', k.MAR.toFixed(2)],
-        ['PF (獲利因子)', k.PF.toFixed(2)],
-        ['Payoff 盈虧比', k.payoff.toFixed(2)],
-        ['日化波動', pct(k.vol)],
-        ['下行波動', pct(k.downside)],
         ['VaR 95%', '-'+fmt(k.VaR95)],
         ['ES 95%', '-'+fmt(k.ES95)],
         ['VaR 99%', '-'+fmt(k.VaR99)],
         ['ES 99%', '-'+fmt(k.ES99)],
-        ['TUW 水下最長天數', (k.maxTUW||0)+' 天'],
-        ['回撤區間', (k.ddStart||'—') + ' → ' + (k.ddEnd||'—')],
+        ['回撤區間', (k.ddStart||'—')+' → '+(k.ddEnd||'—')],
       ];
-      grid.innerHTML = cells.map(([t,v])=>`<div class="kpi"><h3>${t}</h3><div class="val">${v}</div></div>`).join('');
+      document.getElementById('rr-grid').innerHTML =
+        rr.map(([t,v])=>`<div class="kpi"><h3>${t}</h3><div class="val">${v}</div></div>`).join('');
     }
-
     function renderTable(trades){
-      const tbody=document.querySelector('#tbl tbody');
-      tbody.innerHTML = trades.map((t,i)=>`<tr>
-        <td>${i+1}</td>
-        <td>${t.date}</td>
-        <td>${t.time}</td>
-        <td>${t.dir||''}</td>
-        <td style="text-align:right">${t.qty||1}</td>
-        <td>${t.inPx? t.inPx: ''}</td>
-        <td>${t.outPx? t.outPx: ''}</td>
-        <td>${Number.isFinite(t.pts)? t.pts: ''}</td>
+      const tb = document.querySelector('#tbl tbody');
+      tb.innerHTML = trades.map((t,i)=>`<tr>
+        <td>${i+1}</td><td>${t.date}</td><td>${t.time}</td>
+        <td>${t.dir||''}</td><td style="text-align:right">${t.qty||1}</td>
+        <td>${t.inPx||''}</td><td>${t.outPx||''}</td>
+        <td>${Number.isFinite(t.pts)?t.pts:''}</td>
         <td>${fmt(t.pnl)}</td>
       </tr>`).join('');
     }
 
-    // ---------------------------
-    // 事件
-    // ---------------------------
+    // ---------- 事件 ----------
     document.getElementById('pasteBtn').onclick = async ()=>{
-      try{ const txt = await navigator.clipboard.readText(); document.getElementById('raw').value = txt; }catch(e){ alert('無法讀取剪貼簿，請改用 Ctrl+V 貼上'); }
+      try{ document.getElementById('raw').value = await navigator.clipboard.readText(); }
+      catch{ alert('讀取剪貼簿失敗，請手動貼上(Ctrl+V)。'); }
     };
-    document.getElementById('fileInput').addEventListener('change', (e)=>{
-      const f=e.target.files?.[0]; if(!f) return; const r=new FileReader(); r.onload=()=>{ document.getElementById('raw').value = r.result; }; r.readAsText(f);
+    document.getElementById('fileInput').addEventListener('change',e=>{
+      const f=e.target.files?.[0]; if(!f) return;
+      const r=new FileReader(); r.onload=()=>{ document.getElementById('raw').value=r.result; }; r.readAsText(f);
     });
     document.getElementById('runBtn').onclick = ()=>{
       const raw = document.getElementById('raw').value.trim();
-      if(!raw){ alert('請先貼上 TXT 內容'); return; }
+      if(!raw){ alert('請先貼上或上傳 TXT'); return; }
       const nav = parseFloat(document.getElementById('navInput').value||'1000000');
-      const rf = parseFloat(document.getElementById('rfInput').value||'0');
+      const rf  = parseFloat(document.getElementById('rfInput').value||'0');
       const { trades, daily } = parseText(raw);
-      if(trades.length===0){ alert('未解析到交易資料，請確認欄位名稱（日期/時間/損益/點數）'); return; }
-      const k = calcKPI(daily, trades, nav, rf);
+      if(!trades.length){ alert('未解析到交易資料，請確認欄位（日期/時間/損益 或 點數）'); return; }
+      const k = computeRiskReturnKPI(daily, nav, rf);
       renderEquity(k.eq);
-      renderBasic(k);
-      renderRisk(k);
+      renderBasic(k, trades);
+      renderRR(k);
       renderTable(trades);
     };
   </script>
