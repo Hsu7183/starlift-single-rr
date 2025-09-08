@@ -12,23 +12,14 @@
   <script defer src="./shared.js"></script>
   <!-- 本頁腳本 -->
   <script defer src="./single.js"></script>
-
   <style>
-    /* Risk-Return 直式行列樣式 */
+    /* Risk-Return 一行一列（中文｜數值｜說明） */
     .rr-wrap.card-panel{padding:12px}
-    .rr-line{display:flex;justify-content:space-between;align-items:center;
-      border-bottom:1px solid var(--line); padding:8px 4px}
-    .rr-line:last-child{border-bottom:0}
-    .rr-k{color:#475569}               /* 指標名稱 */
-    .rr-v{font-weight:800; min-width:10ch; text-align:right}
-    .rr-help{margin-top:8px; color:#6b7280; font-size:12px}
-    .rr-doc details{border:1px solid var(--line);border-radius:10px;background:#fff;margin:8px 0}
-    .rr-doc summary{cursor:pointer;padding:10px 12px;font-weight:700;list-style:none}
-    .rr-doc summary::-webkit-details-marker{display:none}
-    .rr-doc details[open] summary{border-bottom:1px solid var(--line);background:#fafafa}
-    .rr-doc ul{margin:8px 0 10px 18px;padding-right:12px}
-    .rr-doc li{margin:6px 0}
-    .rr-doc code{background:#f3f4f6;border:1px solid #e5e7eb;border-radius:6px;padding:2px 6px}
+    .rr-pre{
+      background:#fff;border:1px solid var(--line);border-radius:10px;
+      padding:10px;white-space:pre-wrap;font: 14px/1.8 ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    }
+    .rr-help{margin-top:6px;color:#6b7280;font-size:12px}
   </style>
 </head>
 <body>
@@ -52,57 +43,11 @@
       </div>
     </div>
 
-    <!-- ★ 這裡是一行一指標（直式）＋ 下方說明 ★ -->
+    <!-- ★ Risk-Return：中文｜數值｜說明（在圖表與交易明細之間） -->
     <h3>Risk-Return 指標</h3>
-    <div class="rr-wrap card-panel" id="rrPanel">
-      <div class="rr-line"><span class="rr-k">Total Return（累積報酬）</span><span class="rr-v" id="rrTotal">—</span></div>
-      <div class="rr-line"><span class="rr-k">CAGR（年化複利）</span><span class="rr-v" id="rrCAGR">—</span></div>
-      <div class="rr-line"><span class="rr-k">年化報酬（Arithmetic）</span><span class="rr-v" id="rrAnnRet">—</span></div>
-      <div class="rr-line"><span class="rr-k">勝率（Hit Ratio）</span><span class="rr-v" id="rrWin">—</span></div>
-      <div class="rr-line"><span class="rr-k">Expectancy（平均每筆）</span><span class="rr-v" id="rrExp">—</span></div>
-      <div class="rr-line"><span class="rr-k">Sharpe</span><span class="rr-v" id="rrSharpe">—</span></div>
-      <div class="rr-line"><span class="rr-k">Sortino</span><span class="rr-v" id="rrSortino">—</span></div>
-      <div class="rr-line"><span class="rr-k">MAR = CAGR / |MDD|</span><span class="rr-v" id="rrMAR">—</span></div>
-      <div class="rr-line"><span class="rr-k">PF（獲利因子）</span><span class="rr-v" id="rrPF">—</span></div>
-      <div class="rr-line"><span class="rr-k">Payoff（盈虧比）</span><span class="rr-v" id="rrPayoff">—</span></div>
-      <div class="rr-line"><span class="rr-k">最大回撤（MDD，金額）</span><span class="rr-v" id="rrMDD">—</span></div>
-      <div class="rr-line"><span class="rr-k">TUW（在水下天數）</span><span class="rr-v" id="rrTUW">—</span></div>
-      <div class="rr-line"><span class="rr-k">VaR 95%</span><span class="rr-v" id="rrVaR95">—</span></div>
-      <div class="rr-line"><span class="rr-k">ES 95%</span><span class="rr-v" id="rrES95">—</span></div>
-      <div class="rr-line"><span class="rr-k">VaR 99%</span><span class="rr-v" id="rrVaR99">—</span></div>
-      <div class="rr-line"><span class="rr-k">ES 99%</span><span class="rr-v" id="rrES99">—</span></div>
-      <div class="rr-line"><span class="rr-k">單日最大虧損</span><span class="rr-v" id="rrMaxDayLoss">—</span></div>
-      <div class="rr-line"><span class="rr-k">單筆最大虧損</span><span class="rr-v" id="rrMaxTradeLoss">—</span></div>
-
-      <div class="rr-help">※ 以上以「日損益 / NAV」為日報酬序列；VaR/ES 使用歷史模擬法（金額）。</div>
-
-      <!-- 摺疊文字說明 -->
-      <div class="rr-doc">
-        <details open>
-          <summary>一、報酬（Return）</summary>
-          <ul>
-            <li><b>Total Return</b>＝期末資金 − 期初資金（含成本/滑價淨 P&amp;L）。</li>
-            <li><b>CAGR</b>：<code>(Ending NAV / Starting NAV)^(1/年數) − 1</code>；分母用風險資本。</li>
-            <li><b>年化報酬</b>：<code>mean(日報酬) × 252</code>；先聚合每天。</li>
-            <li><b>勝率</b>：獲利筆數 / 總筆數。</li>
-            <li><b>Expectancy</b>：<code>E = p·ĪW − (1−p)·ĪL</code>（平均每筆）。</li>
-          </ul>
-        </details>
-        <details>
-          <summary>二、風險（Risk）</summary>
-          <ul>
-            <li><b>MDD</b> 與 <b>TUW</b>（在水下天數）。</li>
-            <li><b>VaR / ES</b>：95%、99%（金額）。</li>
-            <li><b>單日/單筆最大虧損</b>：日內熄火與停損參考。</li>
-          </ul>
-        </details>
-        <details>
-          <summary>三、風險調整報酬（Risk-Adjusted）</summary>
-          <ul>
-            <li><b>Sharpe</b>、<b>Sortino</b>；<b>MAR</b>=CAGR/|MDD|；<b>PF</b>、<b>Payoff</b>。</li>
-          </ul>
-        </details>
-      </div>
+    <div class="rr-wrap card-panel">
+      <pre id="rrLines" class="rr-pre">（載入 TXT 後顯示）</pre>
+      <div class="rr-help">※ 指標一律以「日損益（含滑價）/ NAV」為日報酬序列；VaR/ES 為歷史模擬法（金額）。</div>
     </div>
 
     <h3>交易明細</h3>
