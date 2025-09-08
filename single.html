@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <title>三劍客台指期策略分析（單檔）</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <link rel="stylesheet" href="./style.css?v=20250815" />
+  <!-- Chart.js + datalabels -->
+  <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0"></script>
+  <!-- 共用工具（一定要先載入） -->
+  <script defer src="./shared.js?v=20250815"></script>
+  <!-- 本頁腳本 -->
+  <script defer src="./single.js?v=20250815"></script>
+</head>
+<body>
+  <div class="page">
+    <h1 class="page-title">三劍客台指期策略分析（單檔）</h1>
+    <div class="toolbar">
+      <button id="btn-clip" class="btn">貼上內容</button>
+      <label class="btn"><input id="file" type="file" accept=".txt,.TF" hidden>選擇檔案</label>
+    </div>
+
+    <div class="card-panel">
+      <div class="chart-wrap">
+        <!-- KPI 區（單行 + 對齊）：ID 與 single.js 對應 -->
+        <div class="kpi-box">
+          <div><span class="tag">參數</span><span id="paramChip">尚未載入</span></div>
+          <pre id="kpiAll" class="kpi-pre">—</pre>
+          <pre id="kpiL"   class="kpi-pre">—</pre>
+          <pre id="kpiS"   class="kpi-pre">—</pre>
+        </div>
+        <canvas id="chart"></canvas>
+      </div>
+    </div>
+
+    <!-- ★ 新增 Risk-Return 面板：放在圖表與交易明細之間 ★ -->
+    <h3>Risk-Return 指標</h3>
+    <div id="rrPanel" class="card-panel">
+      <div class="table">
+        <table id="rrTable">
+          <thead>
+            <tr>
+              <th>CAGR</th><th>Sharpe</th><th>Sortino</th><th>MAR</th>
+              <th>PF</th><th>Payoff</th><th>最大回撤</th><th>TUW(日)</th>
+              <th>VaR95</th><th>ES95</th><th>VaR99</th><th>ES99</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td id="rrCAGR">—</td><td id="rrSharpe">—</td><td id="rrSortino">—</td><td id="rrMAR">—</td>
+              <td id="rrPF">—</td><td id="rrPayoff">—</td><td id="rrMDD">—</td><td id="rrTUW">—</td>
+              <td id="rrVaR95">—</td><td id="rrES95">—</td><td id="rrVaR99">—</td><td id="rrES99">—</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <!-- 若要顯示回撤區間，可在 single.js 內將 data-dd-range 設上，再用 CSS ::after 顯示 -->
+    </div>
+
+    <h3>交易明細</h3>
+    <div class="table">
+      <table id="tradeTable">
+        <thead>
+          <tr>
+            <th>筆數</th><th>進場時間</th><th>進場價</th><th>類型</th>
+            <th>點數</th><th>手續費</th><th>期交稅</th>
+            <th>獲利</th><th>累積獲利</th>
+            <th>滑價獲利</th><th>累積滑價獲利</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <p class="note">提示：第一行若為參數會自動辨識；顯示參數僅取整數。</p>
+  </div>
+</body>
+</html>
