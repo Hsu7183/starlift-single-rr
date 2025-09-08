@@ -1,4 +1,4 @@
-/* 單檔頁面（6 線圖 + 單行KPI + 直式 Risk-Return 數值＋說明） */
+/* 單檔頁面（6 線圖 + 單行KPI + RR 一行一列：中文｜數值｜說明） */
 (function(){
   const $ = s=>document.querySelector(s);
 
@@ -56,14 +56,15 @@
     ];
   }
 
-  // -------- 交易明細 --------
+  // -------- 交易明細表 --------
   function renderTable(report){
     const {fmtTs, fmtMoney, MULT, FEE, TAX} = window.SHARED;
     const tb = document.querySelector('#tradeTable tbody');
     tb.innerHTML = '';
     let cum=0, cumSlip=0;
     report.trades.forEach((t,i)=>{
-      cum += t.gain; cumSlip += t.gainSlip;
+      cum += t.gain;        // 不含滑價的「帳面累積」
+      cumSlip += t.gainSlip; // 含滑價的「真實累積」
       const tr1 = document.createElement('tr');
       tr1.innerHTML = `
         <td rowspan="2">${i+1}</td>
@@ -81,37 +82,37 @@
     });
   }
 
-  // -------- 計算 Risk-Return（以日損益 / NAV）--------
-  function computeRiskReturnKPI(daily, trades, nav = DEFAULT_NAV, rf = DEFAULT_RF){
-    // 權益曲線 + MDD/TUW
+  // -------- Risk-Return（全部用含滑價 gainSlip）--------
+  function computeRiskReturnKPI(dailySlip, trades, nav = DEFAULT_NAV, rf = DEFAULT_RF){
+    // 權益曲線 + MDD/TUW（以含滑價的日損益計）
     let cum = 0;
-    const eq = daily.map(d => ({ date:d.date, nav: (cum += d.pnl, nav + cum) }));
+    const eq = dailySlip.map(d => ({ date:d.date, nav: (cum += d.pnl, nav + cum) }));
     let peak = -Infinity, maxDD = 0, ddStart=null, ddEnd=null, curPeak=null, curTUW=0, maxTUW=0;
     for(const p of eq){
       if(p.nav > peak){ peak = p.nav; curPeak = p.date; curTUW=0; }
       else{ const dd = peak - p.nav; if(dd>maxDD){ maxDD=dd; ddStart=curPeak; ddEnd=p.date; } curTUW++; if(curTUW>maxTUW) maxTUW=curTUW; }
     }
 
-    // 日報酬
-    const dailyRet = daily.map(d => d.pnl / nav);
+    // 日報酬（以 NAV 作分母）
+    const dailyRet = dailySlip.map(d => d.pnl / nav);
     const mean = avg(dailyRet);
     const vol  = stdev(dailyRet) * Math.sqrt(252);
     const downside = stdev(dailyRet.filter(x => x < (rf/252))) * Math.sqrt(252);
 
-    // 年數取實際日期間距，避免 NaN 或爆衝
-    const start = daily.length ? new Date(daily[0].date) : null;
-    const end   = daily.length ? new Date(daily[daily.length-1].date) : null;
+    // 年數用實際日期間距
+    const start = dailySlip.length ? new Date(dailySlip[0].date) : null;
+    const end   = dailySlip.length ? new Date(dailySlip[dailySlip.length-1].date) : null;
     const days  = (start && end) ? Math.max(1, Math.round((end - start)/86400000) + 1) : 252;
-    const years = Math.max( days/365, 1/365 );
+    const years = Math.max(days/365, 1/365);
 
-    const totalPnL = daily.reduce((a,b)=>a+b.pnl,0);
+    const totalPnL = dailySlip.reduce((a,b)=>a+b.pnl,0);
     const cagr = Math.pow((nav + totalPnL)/nav, 1/years) - 1;
     const annRet = mean * 252;
     const sharpe  = vol>0 ? ((annRet - rf)/vol) : 0;
     const sortino = downside>0 ? ((annRet - rf)/downside) : 0;
     const MAR     = maxDD>0 ? (cagr / (maxDD/nav)) : 0;
 
-    // VaR / ES（歷史法，金額顯示為正數）
+    // VaR / ES（歷史法，金額）
     const q = (arr,p)=>{ const a=[...arr].sort((x,y)=>x-y); const i=Math.max(0,Math.min(a.length-1, Math.floor((1-p)*a.length))); return a[i]; };
     const ES = (arr,p)=>{ const a=[...arr].sort((x,y)=>x-y); const cut=Math.floor((1-p)*a.length); const sl=a.slice(0,cut); return sl.length? -(sl.reduce((x,y)=>x+y,0)/sl.length)*nav : 0; };
     const var95 = Math.abs(q(dailyRet,0.05))*nav;
@@ -119,58 +120,58 @@
     const es95  = Math.abs(ES(dailyRet,0.95));
     const es99  = Math.abs(ES(dailyRet,0.99));
 
-    // 交易層
-    const winTrades = trades.filter(t=>t.gain>0), loseTrades = trades.filter(t=>t.gain<0);
-    const winPnL = sum(winTrades.map(t=>t.gain));
-    const losePnL= sum(loseTrades.map(t=>t.gain));
+    // 交易層（全部採用 gainSlip）
+    const wins = trades.filter(t=>t.gainSlip>0);
+    const losses = trades.filter(t=>t.gainSlip<0);
+    const winPnL = sum(wins.map(t=>t.gainSlip));
+    const losePnL= sum(losses.map(t=>t.gainSlip));
     const PF = Math.abs(losePnL)>0 ? (winPnL/Math.abs(losePnL)) : 0;
 
-    const avgWin = winTrades.length ? winPnL / winTrades.length : 0;
-    const avgLoss= loseTrades.length? Math.abs(losePnL / loseTrades.length) : 0;
+    const avgWin = wins.length ? winPnL / wins.length : 0;
+    const avgLoss= losses.length? Math.abs(losePnL / losses.length) : 0;
     const payoff = avgLoss>0 ? (avgWin/avgLoss) : 0;
-    const winRate = trades.length ? (winTrades.length/trades.length) : 0;
+    const winRate = trades.length ? (wins.length/trades.length) : 0;
     const expectancy = trades.length ? (totalPnL/trades.length) : 0;
 
-    const maxDailyLoss  = Math.abs(Math.min(0, ...byDay(trades, t=>t.gain)));
-    const maxSingleLoss = Math.abs(Math.min(0, ...trades.map(t=>t.gain)));
+    // 風險邊界（以含滑價計）
+    const byDaySlip = (()=>{ const m=new Map(); for(const t of trades){ const d=ymd(new Date(t.tsOut)); m.set(d,(m.get(d)||0)+t.gainSlip); } return [...m.values()]; })();
+    const maxDailyLoss  = Math.abs(Math.min(0, ...byDaySlip));
+    const maxSingleLoss = Math.abs(Math.min(0, ...trades.map(t=>t.gainSlip)));
 
-    return {
-      totalPnL, cagr, annRet, winRate, expectancy,
-      sharpe, sortino, MAR, PF, payoff,
-      maxDD: Math.abs(maxDD), maxTUW,
-      var95, es95, var99, es99,
-      maxDailyLoss, maxSingleLoss
-    };
-
-    function byDay(list, pick){ const m=new Map(); for(const t of list){ const d=ymd(new Date(t.tsOut)); m.set(d,(m.get(d)||0)+pick(t)); } return [...m.values()]; }
+    return { totalPnL, cagr, annRet, winRate, expectancy,
+             sharpe, sortino, MAR, PF, payoff,
+             maxDD: Math.abs(maxDD), maxTUW, var95, es95, var99, es99,
+             maxDailyLoss, maxSingleLoss };
   }
 
-  // -------- 把數值填進每一行 --------
-  function renderRiskReturn(k){
-    const {fmtMoney} = window.SHARED;
-    const set = (id, val)=>{ const el = document.getElementById(id); if(el) el.textContent = val; };
-    const pct2 = x => (x*100).toFixed(2)+'%';
-    const fix2 = x => Number(x).toFixed(2);
+  // -------- 輸出：中文｜數值｜說明（以「｜」分隔） --------
+  function renderRiskReturnLines(k){
+    const money = n => (Number(n)||0).toLocaleString('zh-TW');
+    const pmoney = n => (Number(n)>0? '' : '-') + money(Math.abs(Number(n)||0)); // 帶負號
+    const pct2 = x => (Number.isFinite(x)? (x*100).toFixed(2) : '0.00') + '%';
 
-    set('rrTotal',   fmtMoney(k.totalPnL));
-    set('rrCAGR',    pct2(k.cagr));
-    set('rrAnnRet',  pct2(k.annRet));
-    set('rrWin',     pct2(k.winRate));
-    set('rrExp',     fmtMoney(k.expectancy));
-    set('rrSharpe',  fix2(k.sharpe));
-    set('rrSortino', fix2(k.sortino));
-    set('rrMAR',     fix2(k.MAR));
-    set('rrPF',      fix2(k.PF));
-    set('rrPayoff',  fix2(k.payoff));
+    const lines = [
+      `總報酬（Total Return）｜${money(k.totalPnL)}｜回測期間累積淨損益（含手續費／期交稅／滑價）。`,
+      `CAGR（年化複利）｜${pct2(k.cagr)}｜以 NAV 為分母，按實際天數年化。`,
+      `年化報酬（Arithmetic）｜${pct2(k.annRet)}｜日報酬均值 × 252。`,
+      `勝率（Hit Ratio）｜${pct2(k.winRate)}｜獲利筆數 ÷ 總筆數。`,
+      `平均每筆（Expectancy）｜${money(k.expectancy)}｜每筆平均淨損益（含滑價）。`,
+      `夏普（Sharpe）｜${k.sharpe.toFixed(2)}｜（年化報酬 − rf）／年化波動。`,
+      `索提諾（Sortino）｜${k.sortino.toFixed(2)}｜只懲罰下行波動的夏普。`,
+      `MAR（CAGR/|MDD|）｜${k.MAR.toFixed(2)}｜CTA 常用之風險調整指標。`,
+      `獲利因子（PF, Profit Factor）｜${k.PF.toFixed(2)}｜總獲利 ÷ 總虧損（含成本／滑價）。`,
+      `盈虧比（Payoff）｜${k.payoff.toFixed(2)}｜平均獲利 ÷ 平均虧損。`,
+      `最大回撤（MDD，金額）｜-${money(k.maxDD)}｜權益峰值到谷值的最大跌幅（金額）。`,
+      `水下時間（TUW, Time Under Water）｜${k.maxTUW}｜創新高前處於回撤的天數。`,
+      `VaR 95%（風險值）｜-${money(k.var95)}｜單日 95% 置信最大虧損（歷史模擬，金額）。`,
+      `ES 95%（期望短缺, CVaR）｜-${money(k.es95)}｜落於 VaR95 之後的平均虧損（更嚴格）。`,
+      `VaR 99%（風險值）｜-${money(k.var99)}｜單日 99% 置信最大虧損（歷史模擬，金額）。`,
+      `ES 99%（期望短缺, CVaR）｜-${money(k.es99)}｜落於 VaR99 之後的平均虧損。`,
+      `單日最大虧損｜-${money(k.maxDailyLoss)}｜樣本期間最糟的一天。`,
+      `單筆最大虧損｜-${money(k.maxSingleLoss)}｜樣本期間最糟的一筆交易。`,
+    ];
 
-    set('rrMDD',         '-' + fmtMoney(k.maxDD));
-    set('rrTUW',         String(k.maxTUW));
-    set('rrVaR95',       '-' + fmtMoney(k.var95));
-    set('rrES95',        '-' + fmtMoney(k.es95));
-    set('rrVaR99',       '-' + fmtMoney(k.var99));
-    set('rrES99',        '-' + fmtMoney(k.es99));
-    set('rrMaxDayLoss',  '-' + fmtMoney(k.maxDailyLoss));
-    set('rrMaxTradeLoss','-' + fmtMoney(k.maxSingleLoss));
+    $('#rrLines').textContent = lines.join('\n');
   }
 
   // -------- 主流程 --------
@@ -178,9 +179,7 @@
     const {parseTXT, buildReport, paramsLabel} = window.SHARED;
     const parsed = parseTXT(raw);
     const report = buildReport(parsed.rows);
-    if (report.trades.length===0){
-      alert('沒有成功配對的交易'); return;
-    }
+    if (report.trades.length===0){ alert('沒有成功配對的交易'); return; }
 
     // (1) 圖表
     drawChart({
@@ -200,19 +199,20 @@
     $('#kpiL').textContent   = lineL;
     $('#kpiS').textContent   = lineS;
 
-    // (3) 以出場日聚合 → RR 指標 → 渲染
+    // (3) 以「含滑價 gainSlip 的出場日」聚合成日損益
     const dailyMap = new Map();
     for (const t of report.trades){
-      const key = ymd(new Date(t.tsOut));
-      dailyMap.set(key, (dailyMap.get(key)||0) + t.gain); // 含滑價
+      const d = ymd(new Date(t.tsOut));
+      dailyMap.set(d, (dailyMap.get(d)||0) + t.gainSlip); // ← 含滑價
     }
-    const daily = [...dailyMap.entries()].sort((a,b)=>a[0].localeCompare(b[0]))
-                    .map(([date,pnl])=>({date,pnl}));
+    const dailySlip = [...dailyMap.entries()].sort((a,b)=>a[0].localeCompare(b[0]))
+                      .map(([date,pnl])=>({date,pnl}));
 
-    const k = computeRiskReturnKPI(daily, report.trades, DEFAULT_NAV, DEFAULT_RF);
-    renderRiskReturn(k);
+    // (4) 計算 RR（全用滑價後）並輸出中文一行一列
+    const k = computeRiskReturnKPI(dailySlip, report.trades, DEFAULT_NAV, DEFAULT_RF);
+    renderRiskReturnLines(k);
 
-    // (4) 交易明細
+    // (5) 交易明細
     renderTable(report);
   }
 
@@ -223,10 +223,8 @@
   });
   document.getElementById('file').addEventListener('change', async e=>{
     const f = e.target.files[0]; if(!f) return;
-    try{
-      const txt = await window.SHARED.readAsTextAuto(f);
-      await handleRaw(txt);
-    }catch(err){ alert(err.message || '讀檔失敗'); }
+    try{ const txt = await window.SHARED.readAsTextAuto(f); await handleRaw(txt); }
+    catch(err){ alert(err.message || '讀檔失敗'); }
   });
 
   // 小工具
