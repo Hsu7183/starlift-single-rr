@@ -4,14 +4,29 @@
   <meta charset="utf-8" />
   <title>三劍客台指期策略分析（單檔）</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <link rel="stylesheet" href="./style.css?v=20250815" />
+  <link rel="stylesheet" href="./style.css" />
   <!-- Chart.js + datalabels -->
   <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0"></script>
   <!-- 共用工具（一定要先載入） -->
-  <script defer src="./shared.js?v=20250815"></script>
+  <script defer src="./shared.js"></script>
   <!-- 本頁腳本 -->
-  <script defer src="./single.js?v=20250815"></script>
+  <script defer src="./single.js"></script>
+  <style>
+    /* 讓 RR 區塊跟你的卡片一致 */
+    .rr-wrap.card-panel{padding:10px}
+    .rr-grid{overflow:auto}
+    .rr-grid table{border-collapse:collapse;width:max-content;min-width:100%}
+    .rr-grid th,.rr-grid td{border-bottom:1px solid var(--line);padding:8px 10px;white-space:nowrap;text-align:center}
+    .rr-grid thead th{background:#fafafa;position:sticky;top:0}
+    .rr-doc details{border:1px solid var(--line);border-radius:10px;background:#fff;margin:8px 0}
+    .rr-doc summary{cursor:pointer;padding:10px 12px;font-weight:700;list-style:none}
+    .rr-doc summary::-webkit-details-marker{display:none}
+    .rr-doc details[open] summary{border-bottom:1px solid var(--line);background:#fafafa}
+    .rr-doc ul{margin:8px 0 10px 22px;padding-right:12px}
+    .rr-doc li{margin:8px 0}
+    .rr-doc code{background:#f3f4f6;border:1px solid #e5e7eb;border-radius:6px;padding:2px 6px}
+  </style>
 </head>
 <body>
   <div class="page">
@@ -34,28 +49,61 @@
       </div>
     </div>
 
-    <!-- ★ 新增 Risk-Return 面板：放在圖表與交易明細之間 ★ -->
+    <!-- ★ 數值面板（在圖表與交易明細之間） ★ -->
     <h3>Risk-Return 指標</h3>
-    <div id="rrPanel" class="card-panel">
-      <div class="table">
+    <div class="rr-wrap card-panel">
+      <div class="rr-grid">
         <table id="rrTable">
           <thead>
             <tr>
-              <th>CAGR</th><th>Sharpe</th><th>Sortino</th><th>MAR</th>
-              <th>PF</th><th>Payoff</th><th>最大回撤</th><th>TUW(日)</th>
-              <th>VaR95</th><th>ES95</th><th>VaR99</th><th>ES99</th>
+              <th>Total Return</th><th>CAGR</th><th>年化報酬</th><th>勝率</th><th>Expectancy</th>
+              <th>Sharpe</th><th>Sortino</th><th>MAR</th><th>PF</th><th>Payoff</th>
+              <th>最大回撤</th><th>TUW(日)</th><th>VaR95</th><th>ES95</th><th>VaR99</th><th>ES99</th>
+              <th>單日最大虧損</th><th>單筆最大虧損</th>
             </tr>
           </thead>
           <tbody>
             <tr>
-              <td id="rrCAGR">—</td><td id="rrSharpe">—</td><td id="rrSortino">—</td><td id="rrMAR">—</td>
-              <td id="rrPF">—</td><td id="rrPayoff">—</td><td id="rrMDD">—</td><td id="rrTUW">—</td>
-              <td id="rrVaR95">—</td><td id="rrES95">—</td><td id="rrVaR99">—</td><td id="rrES99">—</td>
+              <td id="rrTotal">—</td><td id="rrCAGR">—</td><td id="rrAnnRet">—</td><td id="rrWin">—</td><td id="rrExp">—</td>
+              <td id="rrSharpe">—</td><td id="rrSortino">—</td><td id="rrMAR">—</td><td id="rrPF">—</td><td id="rrPayoff">—</td>
+              <td id="rrMDD">—</td><td id="rrTUW">—</td><td id="rrVaR95">—</td><td id="rrES95">—</td><td id="rrVaR99">—</td><td id="rrES99">—</td>
+              <td id="rrMaxDayLoss">—</td><td id="rrMaxTradeLoss">—</td>
             </tr>
           </tbody>
         </table>
       </div>
-      <!-- 若要顯示回撤區間，可在 single.js 內將 data-dd-range 設上，再用 CSS ::after 顯示 -->
+
+      <!-- 摺疊說明：放在數值面板下方 -->
+      <div class="rr-doc">
+        <details open>
+          <summary>一、報酬（Return）</summary>
+          <ul>
+            <li><b>Total Return（累積報酬）</b>＝期末資金 − 期初資金；期貨以<b>含成本/滑價</b>淨 P&amp;L。</li>
+            <li><b>CAGR</b>：<code>(Ending NAV / Starting NAV)^(1/年數) − 1</code>；分母用<b>風險資本</b>。</li>
+            <li><b>年化報酬</b>：<code>mean(日報酬) × 252</code>；先做<b>日聚合</b>再年化。</li>
+            <li><b>勝率</b>：獲利筆數 / 總筆數；搭配 Payoff 才有意義。</li>
+            <li><b>Expectancy</b>：<code>E = p·ĪW − (1−p)·ĪL</code>（平均每筆獲利）。</li>
+          </ul>
+        </details>
+
+        <details>
+          <summary>二、風險（Risk）</summary>
+          <ul>
+            <li><b>最大回撤（MDD）</b>與 <b>TUW</b>（在水下天數）。</li>
+            <li><b>VaR/ES</b>（歷史模擬，金額）：95%、99% 置信水位。</li>
+            <li><b>單日/單筆最大虧損</b>：日內熄火與停損閥值參考。</li>
+          </ul>
+        </details>
+
+        <details>
+          <summary>三、風險調整報酬（Risk-Adjusted）</summary>
+          <ul>
+            <li><b>Sharpe</b>、<b>Sortino</b>：以日報酬序列計；Sortino 只懲罰下行波動。</li>
+            <li><b>MAR</b>：<code>CAGR / |MDD|</code>；CTA 常用。</li>
+            <li><b>PF</b>（獲利因子）、<b>Payoff</b>（盈虧比）。</li>
+          </ul>
+        </details>
+      </div>
     </div>
 
     <h3>交易明細</h3>
