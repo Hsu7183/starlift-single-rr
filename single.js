@@ -1,4 +1,4 @@
-/* 6 線圖 + 三行KPI + Risk-Return（表格｜五欄｜紅綠著色｜建議調整） */
+/* 6 線圖 + 三行KPI + Risk-Return（表格｜五欄｜紅綠著色｜建議調整｜核心→重要→進階） */
 (function () {
   const $ = s => document.querySelector(s);
   const DEFAULT_NAV = Number(new URLSearchParams(location.search).get("nav")) || 1_000_000;
@@ -17,7 +17,8 @@
       .rr-table thead th{background:#fafafa;position:sticky;top:0;z-index:1}
       .rr-section-header td{background:#f6f7fb;font-weight:800;border-top:1px solid var(--line,#e5e7eb)}
       .rr-subhead td{background:#fafafa;font-weight:700}
-      /* 建議調整：更強的視覺分隔 */
+      .rr-tier{opacity:.7;font-weight:600}
+      /* Improve 區塊強調 */
       .rr-improve-title td{background:#fff1f2;border-top:2px solid #fecdd3;border-bottom:1px solid #fecdd3;font-weight:800;color:#be123c}
       .rr-improve-head td{background:#ffe4e6;color:#be123c;font-weight:700}
       .rr-improve-row td{background:#fff5f5;color:#b91c1c}
@@ -91,15 +92,19 @@
 
   // ---------- Risk-Return 計算（含滑價） ----------
   function computeRR(dailySlip,trades,nav=DEFAULT_NAV,rf=DEFAULT_RF){
+    // 權益曲線與回撤
     let cum=0; const eq=dailySlip.map(d=>({date:d.date,nav:(cum+=d.pnl,nav+cum)}));
     let peak=-Infinity,maxDD=0,curTUW=0,maxTUW=0,inDraw=false,rec=0,curRec=0;
+    const ddSeriesPct=[]; // drawdown% for Ulcer/Pain
     for(const p of eq){
-      if(p.nav>peak){ peak=p.nav; if(inDraw){ rec=Math.max(rec,curRec); inDraw=false; } curTUW=0; curRec=0; }
-      else{ const dd=peak-p.nav; if(dd>maxDD){ maxDD=dd; inDraw=true; curRec=0; } curTUW++; curRec++; maxTUW=Math.max(maxTUW,curTUW); }
+      if(p.nav>peak){ peak=p.nav; if(inDraw){ rec=Math.max(rec,curRec); inDraw=false; } curTUW=0; curRec=0; ddSeriesPct.push(0); }
+      else{ const dd=peak-p.nav; if(dd>maxDD){ maxDD=dd; inDraw=true; curRec=0; } curTUW++; curRec++; maxTUW=Math.max(maxTUW,curTUW); ddSeriesPct.push(-(dd/peak)); }
     }
+    // 報酬序列
     const dailyRet=dailySlip.map(d=>d.pnl/nav);
     const mean=avg(dailyRet), vol=stdev(dailyRet)*Math.sqrt(252);
     const downside=stdev(dailyRet.filter(x=>x<(rf/252)))*Math.sqrt(252);
+    // 年化
     const start=dailySlip[0]?.date, end=dailySlip[dailySlip.length-1]?.date;
     const dayCnt=start&&end? daysBetween(start,end) : 252;
     const years=Math.max(dayCnt/365,1/365);
@@ -109,10 +114,12 @@
     const sharpe = vol>0?((annRet-DEFAULT_RF)/vol):0;
     const sortino= downside>0?((annRet-DEFAULT_RF)/downside):0;
     const MAR= maxDD? cagr/(maxDD/nav) : 0;
+    // VaR/ES
     const q =(arr,p)=>{ const a=[...arr].sort((x,y)=>x-y); const i=Math.floor((1-p)*a.length); return a[Math.max(0,Math.min(i,a.length-1))]||0; };
     const ES=(arr,p)=>{ const a=[...arr].sort((x,y)=>x-y); const cut=Math.floor((1-p)*a.length); const sl=a.slice(0,cut); return sl.length? -(sl.reduce((x,y)=>x+y,0)/sl.length)*nav : 0; };
     const var95=Math.abs(q(dailyRet,0.05))*nav, var99=Math.abs(q(dailyRet,0.01))*nav;
     const es95=Math.abs(ES(dailyRet,0.95)), es99=Math.abs(ES(dailyRet,0.99));
+    // 交易層
     const wins=trades.filter(t=>t.gainSlip>0), losses=trades.filter(t=>t.gainSlip<0);
     const winPnL=wins.reduce((a,b)=>a+b.gainSlip,0), losePnL=losses.reduce((a,b)=>a+b.gainSlip,0);
     const PF=Math.abs(losePnL)? winPnL/Math.abs(losePnL) : 0;
@@ -131,14 +138,25 @@
     const tradesPerMonth=trades.length/months;
     const rollSharpe=rollingSharpe(dailyRet,126,DEFAULT_RF/252), rollSharpeMed=rollSharpe.length? median(rollSharpe) : 0;
 
+    // 進階：回撤段落（平均/中位深度）、Ulcer、Pain、Burke、Recovery Factor、分布矩（偏/峰）
+    const {avgDD, medDD} = drawdownStats(eq); // 金額
+    const ulcer = Math.sqrt( mean0(ddSeriesPct.map(x=>x*x)) ); // 以百分比（0~1）計
+    const pain  = (ulcer>0? (annRet/ulcer) : 0);               // 近似 Pain=年化報酬/Ulcer
+    const burke = pain;                                       // 近似：常見實作與 Ulcer 相同分母
+    const recFactor = maxDD? (totalPnL/Math.abs(maxDD)) : 0;
+    const {skew, kurt} = momentSkewKurt(dailyRet);            // kurt 為「總峰度」（非 excess）
+
     return { totalPnL,cagr,annRet,winRate,expectancy,
       maxDD,maxTUW:Math.round(maxTUW),recovery:Math.round(rec),
       vol,downside,var95,var99,es95,es99,
       maxDailyLoss,maxDailyGain,maxTradeLoss,maxTradeGain,
-      sharpe,sortino,MAR,PF,payoff,avgWin,avgLoss,maxWS,maxLS,avgHoldingMins,tradesPerMonth,rollSharpeMed };
+      sharpe,sortino,MAR,PF,payoff,avgWin,avgLoss,maxWS,maxLS,avgHoldingMins,tradesPerMonth,rollSharpeMed,
+      // 進階/重要
+      avgDD, medDD, ulcer, pain, burke, recFactor, skew, kurt
+    };
   }
 
-  // ---------- Risk-Return 表格渲染（含〈建議調整〉） ----------
+  // ---------- Risk-Return 表格渲染（含〈建議調整〉、核心→重要→進階） ----------
   function renderRR6Cats(k){
     const NAV=DEFAULT_NAV;
     const money=n=>(Number(n)||0).toLocaleString("zh-TW");
@@ -148,10 +166,12 @@
 
     // 分級器：回傳 [grade, comment, bench]
     const g={
+      // 報酬
       cagr:v=> v>=0.30?['good','年化極佳','≥30%'] : v>=0.15?['good','年化穩健','≥15%'] : v>=0.05?['ok','尚可','≥5%'] : ['bad','偏低','—'],
       ann :v=> v>=0.25?['good','年化報酬優秀','≥25%'] : v>=0.10?['ok','尚可','≥10%'] : ['bad','偏低','—'],
       exp :v=> v>0?['good','每筆期望為正','>0'] : ['bad','未覆蓋交易成本','>0'],
       hit :(v,po)=> v>=0.45?['good','勝率偏高','≥45%'] : (v<0.30&&po<1.5?['bad','低勝率且盈虧比偏低','—'] : ['ok','需與盈虧比搭配','—']),
+      // 風險
       mdd :v=> (Math.abs(v)/NAV)<=0.15?['good','回撤控制良好','≤15%NAV']:(Math.abs(v)/NAV)<=0.25?['ok','可接受','≤25%NAV']:['bad','偏大','—'],
       tuw :v=> v<=60?['good','水下短','≤60天']:v<=120?['ok','可接受','≤120天']:['bad','偏長','—'],
       rec :v=> v<=45?['good','回本快','≤45天']:v<=90?['ok','可接受','≤90天']:['bad','偏慢','—'],
@@ -162,13 +182,22 @@
       var99:v=> (v/NAV)<=0.05?['good','≤5%NAV','≤5%NAV'] : (v/NAV)<=0.08?['ok','5–8%','≤8%NAV'] : ['bad','>8%','—'],
       es99 :v=> (v/NAV)<=0.035?['good','≤3.5%NAV','≤3.5%NAV'] : (v/NAV)<=0.06?['ok','3.5–6%','≤6%NAV'] : ['bad','>6%','—'],
       maxDayLoss:v=> (v/NAV)<=0.04?['good','尾部可控','≤4%NAV'] : (v/NAV)<=0.06?['ok','尚可','≤6%NAV'] : ['bad','偏高','—'],
+      // 風險調整
       sharpe:v=> v>=2?['good','>2 佳','≥2'] : v>=1.5?['good','>1.5 穩健','≥1.5'] : v>=1?['ok','>1 可接受','≥1'] : ['bad','需提升','—'],
       sortino:v=> v>=2?['good','>2 佳','≥2'] : v>=1.5?['good','>1.5 穩健','≥1.5'] : v>=1?['ok','>1 可接受','≥1'] : ['bad','需提升','—'],
       mar :v=> v>=2?['good','>2 佳','≥2'] : v>=1.5?['good','>1.5 穩健','≥1.5'] : v>=1?['ok','>1 可接受','≥1'] : ['bad','需提升','—'],
       pf  :v=> v>=2?['good','>2 很好','≥2'] : v>=1.5?['ok','>1.5 尚可','≥1.5'] : ['bad','偏低','—'],
       payoff:v=> v>=2?['good','盈虧比高','≥2'] : v>=1.5?['ok','尚可','≥1.5'] : ['bad','偏低','—'],
-      maxLS:v=> v<=8?['good','連敗可承受','≤8'] : v<=12?['ok','需資金/心理控管','≤12'] : ['bad','偏長，建議加 MAE 快停','—'],
-      roll:v=> v>=1.5?['good','時間穩定性佳','≥1.5'] : v>=1?['ok','可接受','≥1'] : ['bad','穩健性不足','—'],
+      // 重要/進階
+      ulcer:v=> v<=0.10?['good','Ulcer 低','≤10%'] : v<=0.15?['ok','尚可','≤15%'] : ['bad','Ulcer 偏高','—'],
+      avgDD:v=> (v/DEFAULT_NAV)<=0.08?['good','平均回撤低','≤8%NAV'] : (v/DEFAULT_NAV)<=0.15?['ok','尚可','≤15%NAV'] : ['bad','偏高','—'],
+      medDD:v=> (v/DEFAULT_NAV)<=0.08?['good','中位回撤低','≤8%NAV'] : (v/DEFAULT_NAV)<=0.15?['ok','尚可','≤15%NAV'] : ['bad','偏高','—'],
+      pain:v=> v>=1.5?['good','Pain 高','≥1.5'] : v>=1?['ok','可接受','≥1'] : ['bad','偏低','—'],
+      burke:v=> v>=2?['good','Burke 高','≥2'] : v>=1?['ok','可接受','≥1'] : ['bad','偏低','—'],
+      recF:v=> v>=3?['good','Recovery Factor 高','≥3'] : v>=1.5?['ok','尚可','≥1.5'] : ['bad','偏低','—'],
+      skew:v=> v>0?['good','右偏','>0'] : v===0?['ok','近常態','≈0'] : ['bad','左尾重','>0'],
+      kurt:v=> v<=4?['ok','峰度正常','≤4'] : v<=5?['ok','略高','≤5'] : ['bad','尾端肥厚','—'],
+      roll:v=> v>=1.5?['good','時間穩定性佳','≥1.5'] : v>=1?['ok','可接受','≥1'] : ['bad','穩健性不足','—']
     };
 
     // 建立表格容器
@@ -181,114 +210,133 @@
       </table>`;
     const tbody = $("#rrTable2 tbody");
 
-    // 加章節標題、子欄名
-    const addHeader = (label, type="section") => {
+    const addHeader = (label, cls="section") => {
       const tr = document.createElement("tr");
-      tr.className = type==="improve" ? "rr-improve-title" : "rr-section-header";
+      tr.className = cls==="improve" ? "rr-improve-title" : "rr-section-header";
       tr.innerHTML = `<td colspan="5">${label}</td>`;
       tbody.appendChild(tr);
       const sub = document.createElement("tr");
-      sub.className = (type==="improve") ? "rr-improve-head" : "rr-subhead";
-      sub.innerHTML = `<td>指標</td><td>數值</td><td>${type==="improve"?'建議':'說明'}</td><td>機構評語</td><td>參考區間</td>`;
+      sub.className = cls==="improve" ? "rr-improve-head" : "rr-subhead";
+      sub.innerHTML = `<td>指標</td><td>數值</td><td>${cls==="improve"?'建議':'說明'}</td><td>機構評語</td><td>參考區間</td>`;
       tbody.appendChild(sub);
     };
 
     const improvs = [];
-    const addRow = (title, val, desc, tuple, improveMode=false) => {
+    const addRow = (tier, title, val, desc, tuple, improveMode=false) => {
       const [grade, comment, bench] = tuple;
       const tr = document.createElement("tr");
       if (improveMode || grade==='bad') tr.className = "rr-improve-row rr-bad-row";
       else tr.className = grade==='good' ? 'rr-good-row' : '';
-      const evalText = `${labelGrade(grade)}${comment ? '，'+comment : ''}`; // 簡短格式
+      const shortEval = `${labelGrade(grade)}${comment ? '，'+comment : ''}`;
       tr.innerHTML = `
-        <td>${(improveMode?'• ':'')+title}</td>
+        <td>${title} ${tier?`<span class="rr-tier">(${tier})</span>`:''}</td>
         <td>${val}</td>
         <td>${desc}</td>
-        <td>${evalText}</td>
+        <td>${shortEval}</td>
         <td>${bench || '—'}</td>`;
       tbody.appendChild(tr);
-      if (grade==='bad' && !improveMode) improvs.push([title, '建議優化', `${labelGrade(grade)}，${comment||'需改善'}`, bench||'—']);
+      if (grade==='bad' && !improveMode) improvs.push([title, '建議優化', `${labelGrade(grade)}${comment? '，'+comment : ''}`, bench||'—']);
     };
 
-    // 〈建議調整指標〉（先佔位 → 最後補）
+    // 〈建議調整指標〉區
     addHeader("〈建議調整指標〉（Improve 彙總）","improve");
-    const improveAnchor = tbody.lastChild; // 子欄名列
-    const improveEndMark = document.createElement("tr"); // 佔位：插在這之後
-    improveEndMark.innerHTML = `<td colspan="5" id="improveEnd"></td>`;
-    tbody.appendChild(improveEndMark);
+    const improveEnd = document.createElement("tr");
+    improveEnd.innerHTML = `<td colspan="5" id="improveEnd"></td>`;
+    tbody.appendChild(improveEnd);
 
-    // 一、報酬
+    // 一、報酬（Core -> Important -> Advanced）
     addHeader("一、報酬（Return）");
-    addRow("總報酬（Total Return）", money(k.totalPnL), "回測累積淨損益（含手續費/稅/滑價）",
+    addRow('Core', "總報酬（Total Return）", money(k.totalPnL), "回測累積淨損益（含手續費/稅/滑價）",
       k.totalPnL>0?['good','報酬為正','—']:['bad','淨損益為負','—']);
-    addRow("CAGR（年化複利）",        pct2(k.cagr),     "以 NAV 為分母，依實際天數年化",        g.cagr(k.cagr));
-    addRow("平均每筆（Expectancy）",  money(k.expectancy),"每筆平均淨損益（含滑價）",            g.exp(k.expectancy));
-    addRow("年化報酬（Arithmetic）",  pct2(k.annRet),    "日均報酬 × 252",                      g.ann(k.annRet));
-    addRow("勝率（Hit Ratio）",       pct2(k.winRate),   "獲利筆數 ÷ 總筆數",                   g.hit(k.winRate,k.payoff));
+    addRow('Core', "CAGR（年化複利）",        pct2(k.cagr),     "以 NAV 為分母，依實際天數年化",        g.cagr(k.cagr));
+    addRow('Core', "平均每筆（Expectancy）",  money(k.expectancy),"每筆平均淨損益（含滑價）",            g.exp(k.expectancy));
+    addRow('Core', "年化報酬（Arithmetic）",  pct2(k.annRet),    "日均報酬 × 252",                      g.ann(k.annRet));
+    addRow('Core', "勝率（Hit Ratio）",       pct2(k.winRate),   "獲利筆數 ÷ 總筆數",                   g.hit(k.winRate,k.payoff));
+    // 補充：Top-N 貢獻（目前無數據，佔位）
+    addRow('Adv.', "Top-N 貢獻集中度",         "—",               "前 N 筆/天對總報酬貢獻",               ['ok','—','—']);
 
     // 二、風險
     addHeader("二、風險（Risk）");
-    addRow("最大回撤（MaxDD）",       pmoney(-k.maxDD),  "峰值到谷值最大跌幅（以金額）",        g.mdd(k.maxDD));
-    addRow("水下時間（TUW）",         String(k.maxTUW),  "在水下的最長天數",                    g.tuw(k.maxTUW));
-    addRow("回本時間（Recovery）",     String(k.recovery),"自 MDD 末端至再創新高的天數",          g.rec(k.recovery));
-    addRow("波動率（Volatility）",     pct2(k.vol),       "日報酬標準差 × √252",                 g.vol(k.vol));
-    addRow("下行波動（Downside Dev）", pct2(k.downside),  "只計下行（供 Sortino）",              g.ddev(k.downside));
-    addRow("VaR 95%",                  pmoney(-k.var95),  "單日 95% 置信最大虧損（金額）",        g.var95(k.var95));
-    addRow("ES 95%（CVaR）",            pmoney(-k.es95),   "落於 VaR95 之後的平均虧損",           g.es95(k.es95));
-    addRow("VaR 99%",                  pmoney(-k.var99),  "單日 99% 置信最大虧損（金額）",        g.var99(k.var99));
-    addRow("ES 99%（CVaR）",            pmoney(-k.es99),   "落於 VaR99 之後的平均虧損",           g.es99(k.es99));
-    addRow("單日最大虧損",              pmoney(-k.maxDailyLoss),"樣本期間最糟的一天",             g.maxDayLoss(k.maxDailyLoss));
-    addRow("單日最大獲利",              money(k.maxDailyGain),  "樣本期間最佳的一天",              ['ok','—','—']);
-    addRow("單筆最大虧損",              pmoney(-k.maxTradeLoss),"樣本期間最糟的一筆交易",         ['ok','—','—']);
-    addRow("單筆最大獲利",              money(k.maxTradeGain),  "樣本期間最佳的一筆交易",         ['ok','—','—']);
+    addRow('Core', "最大回撤（MaxDD）",       pmoney(-k.maxDD),  "峰值到谷值最大跌幅（以金額）",        g.mdd(k.maxDD));
+    addRow('Core', "水下時間（TUW）",         String(k.maxTUW),  "在水下的最長天數",                    g.tuw(k.maxTUW));
+    addRow('Core', "回本時間（Recovery）",     String(k.recovery),"自 MDD 末端至再創新高的天數",          g.rec(k.recovery));
+    addRow('Core', "波動率（Volatility）",     pct2(k.vol),       "日報酬標準差 × √252",                 g.vol(k.vol));
+    addRow('Core', "下行波動（Downside Dev）", pct2(k.downside),  "只計下行（供 Sortino）",              g.ddev(k.downside));
+    addRow('Core', "VaR 95%",                  pmoney(-k.var95),  "單日 95% 置信最大虧損（金額）",        g.var95(k.var95));
+    addRow('Core', "ES 95%（CVaR）",            pmoney(-k.es95),   "落於 VaR95 之後的平均虧損",           g.es95(k.es95));
+    addRow('Core', "VaR 99%",                  pmoney(-k.var99),  "單日 99% 置信最大虧損（金額）",        g.var99(k.var99));
+    addRow('Core', "ES 99%（CVaR）",            pmoney(-k.es99),   "落於 VaR99 之後的平均虧損",           g.es99(k.es99));
+    addRow('Core', "單日最大虧損",              pmoney(-k.maxDailyLoss),"樣本期間最糟的一天",           g.maxDayLoss(k.maxDailyLoss));
+    addRow('Imp.', "Ulcer Index",               pct2(k.ulcer),     "回撤平方均值開根（以比例）",          g.ulcer(k.ulcer));
+    addRow('Imp.', "平均回撤（Average DD）",    pmoney(-k.avgDD),  "回撤段落深度的平均值（以金額）",      g.avgDD(k.avgDD));
+    addRow('Imp.', "中位回撤（Median DD）",     pmoney(-k.medDD),  "回撤段落深度的中位數（以金額）",      g.medDD(k.medDD));
+    addRow('Adv.', "Skew（偏度）",              fix2(k.skew),      "分佈偏度，>0 右尾（較佳）",            g.skew(k.skew));
+    addRow('Adv.', "Kurtosis（峰度）",          fix2(k.kurt),      "分佈峰度（total），過高＝尾部肥厚",    g.kurt(k.kurt));
 
     // 三、風險調整
     addHeader("三、風險調整報酬（Risk-Adjusted Return）");
-    addRow("Sharpe（夏普）",           fix2(k.sharpe),  "（年化報酬 − rf）／年化波動",           g.sharpe(k.sharpe));
-    addRow("Sortino（索提諾）",         fix2(k.sortino), "只懲罰下行波動",                       g.sortino(k.sortino));
-    addRow("MAR",                      fix2(k.MAR),     "CAGR ÷ |MDD|（CTA 常用）",              g.mar(k.MAR));
-    addRow("PF（獲利因子）",            fix2(k.PF),      "總獲利 ÷ 總虧損（含成本/滑價）",        g.pf(k.PF));
+    addRow('Core', "Sharpe（夏普）",           fix2(k.sharpe),    "（年化報酬 − rf）／年化波動",          g.sharpe(k.sharpe));
+    addRow('Core', "Sortino（索提諾）",         fix2(k.sortino),   "只懲罰下行波動",                      g.sortino(k.sortino));
+    addRow('Core', "MAR",                      fix2(k.MAR),       "CAGR ÷ |MDD|（CTA 常用）",             g.mar(k.MAR));
+    addRow('Core', "PF（獲利因子）",            fix2(k.PF),        "總獲利 ÷ 總虧損（含成本/滑價）",       g.pf(k.PF));
+    addRow('Imp.', "Payoff（盈虧比）",          fix2(k.payoff),    "平均獲利 ÷ 平均虧損",                 g.payoff(k.payoff));
+    addRow('Imp.', "Pain Ratio",               fix2(k.pain),      "年化報酬 ÷ Ulcer（近似）",             g.pain(k.pain));
+    addRow('Imp.', "Burke Ratio",              fix2(k.burke),     "年化報酬 ÷ 回撤平方和開根（近似 Ulcer）",g.burke(k.burke));
+    addRow('Imp.', "Recovery Factor",          fix2(k.recFactor), "累積報酬 ÷ |MDD|",                     g.recF(k.recFactor));
 
-    // 四、交易結構
+    // 四、交易結構與執行品質
     addHeader("四、交易結構與執行品質（Trade-Level & Execution）");
-    addRow("盈虧比（Payoff）",          fix2(k.payoff),    "平均獲利 ÷ 平均虧損",               g.payoff(k.payoff));
-    addRow("平均獲利單",                money(k.avgWin),   "含滑價的平均獲利金額",               ['ok','—','≥平均虧損單']);
-    addRow("平均虧損單",                pmoney(-k.avgLoss),"含滑價的平均虧損金額",               ['ok','—','—']);
-    addRow("最大連勝",                 String(k.maxWS),    "連續獲利筆數",                       ['ok','—','—']);
-    addRow("最大連敗",                 String(k.maxLS),    "連續虧損筆數",                       g.maxLS(k.maxLS));
-    addRow("平均持倉時間",              `${k.avgHoldingMins.toFixed(2)} 分`, "tsIn→tsOut 的平均分鐘數", ['ok','—','—']);
-    addRow("交易頻率",                  `${k.tradesPerMonth.toFixed(2)} 筆/月`, "以回測期間月份估算", ['ok','—','—']);
+    addRow('Core', "盈虧比（Payoff）",          fix2(k.payoff),    "平均獲利 ÷ 平均虧損",                 g.payoff(k.payoff));
+    addRow('Core', "平均獲利單",                money(k.avgWin),   "含滑價的平均獲利金額",                 ['ok','—','≥平均虧損單']);
+    addRow('Core', "平均虧損單",                pmoney(-k.avgLoss),"含滑價的平均虧損金額",                 ['ok','—','—']);
+    addRow('Core', "最大連勝",                  String(k.maxWS),   "連續獲利筆數",                         ['ok','—','—']);
+    addRow('Core', "最大連敗",                  String(k.maxLS),   "連續虧損筆數",                         g.maxLS(k.maxLS));
+    addRow('Core', "平均持倉時間",              `${k.avgHoldingMins.toFixed(2)} 分`, "tsIn→tsOut 的平均分鐘數", ['ok','—','—']);
+    addRow('Core', "交易頻率",                  `${k.tradesPerMonth.toFixed(2)} 筆/月`, "以回測期間月份估算", ['ok','—','—']);
+    // 重要/進階：沒有逐筆委託資料，僅佔位
+    addRow('Imp.', "Slippage（滑價）",           "—",               "滑價影響（委託型態/參與率）",         ['ok','—','—']);
+    addRow('Imp.', "Implementation Shortfall",   "—",               "決策價 vs 成交價差（含費用）",         ['ok','—','—']);
+    addRow('Imp.', "Fill Rate / Queue Loss",     "—",               "成交率 / 排隊損失",                   ['ok','—','—']);
+    addRow('Adv.', "Adverse Selection",          "—",               "成交後短窗報酬為負的比例",             ['ok','—','—']);
+    addRow('Adv.', "時段 Edge 熱力圖",           "—",               "各時段勝率/期望差異",                 ['ok','—','—']);
 
     // 五、穩健性
     addHeader("五、穩健性與可複製性（Robustness & Statistical Soundness）");
-    addRow("滾動 Sharpe（6個月中位）",  fix2(k.rollSharpeMed), "126 交易日窗的 Sharpe 中位數",   g.roll(k.rollSharpeMed));
-    addRow("樣本外（OOS）",             "—", "需提供 OOS 資料後評估",                          ['ok','—','—']);
-    addRow("參數敏感度",                "—", "需做 ±10~20% 擾動測試",                          ['ok','—','—']);
-    addRow("Regime 分析",               "—", "需標註趨勢/震盪、高/低波動區間",                  ['ok','—','—']);
+    addRow('Core', "滾動 Sharpe（6個月中位）",  fix2(k.rollSharpeMed), "126 交易日窗的 Sharpe 中位數", g.roll(k.rollSharpeMed));
+    addRow('Core', "WFA（Walk-Forward）",        "—",               "滾動調參/驗證",                       ['ok','—','—']);
+    addRow('Core', "OOS（樣本外）",              "—",               "樣本外表現",                           ['ok','—','—']);
+    addRow('Imp.', "參數敏感度（±10~20%）",      "—",               "熱圖檢查過擬合",                       ['ok','—','—']);
+    addRow('Imp.', "Prob./Deflated Sharpe",      "—",               "修正多測偏誤之 Sharpe",                ['ok','—','—']);
+    addRow('Adv.', "Regime 分析",                "—",               "趨勢/震盪 × 高/低波動",                ['ok','—','—']);
+    addRow('Adv.', "Alpha/Concept Decay",        "—",               "邊際優勢衰退速度",                     ['ok','—','—']);
 
     // 六、風險用量與容量
     addHeader("六、風險用量、槓桿與容量（Risk Usage, Leverage & Capacity）");
-    addRow("槓桿（Leverage）",          "—", "需名目曝險/權益資料",                            ['ok','—','—']);
-    addRow("風險貢獻（Risk Contribution）", "—", "需多資產/子策略分解",                         ['ok','—','—']);
-    addRow("容量/流動性（Capacity）",    "—", "需市場量與參與率/衝擊估計",                      ['ok','—','—']);
+    addRow('Core', "Leverage（槓桿）",           "—",               "名目曝險 / 權益 或 Margin-to-Equity", ['ok','—','—']);
+    addRow('Core', "Gross / Net Exposure",       "—",               "總/淨曝險",                           ['ok','—','—']);
+    addRow('Core', "Risk Contribution（mVaR）",  "—",               "子策略/商品風險貢獻",                  ['ok','—','—']);
+    addRow('Imp.', "Diversification Ratio",      "—",               "分散度指標",                           ['ok','—','—']);
+    addRow('Imp.', "Concentration (HHI)",        "—",               "集中度指標（權重或風險）",             ['ok','—','—']);
+    addRow('Adv.', "Capacity / Participation",   "—",               "容量/參與率壓測",                       ['ok','—','—']);
+    addRow('Adv.', "Impact per 100口",           "—",               "單位下單的價格衝擊",                   ['ok','—','—']);
+    addRow('Adv.', "Kyle’s λ / Amihud",          "—",               "衝擊係數/流動性稀薄度",                ['ok','—','—']);
+    addRow('Adv.', "Stress Scenarios",           "—",               "情境/沖擊測試",                         ['ok','—','—']);
 
-    // 把 Improve 條目放回頂部 Improve 區塊
+    // 〈建議調整指標〉：把所有 Improve 條目放到頂部區塊
     const endMark = $("#improveEnd");
     if (endMark){
       const parent = endMark.parentElement.parentElement; // tbody
       if (improvs.length===0){
         endMark.parentElement.innerHTML = `<td colspan="5" class="rr-improve-row">（目前無紅色指標）</td>`;
       }else{
-        // 先刪掉佔位
         endMark.parentElement.remove();
-        // 逐條插回（在 improve 子欄列之後）
-        let insertAfter = parent.querySelector(".rr-improve-head");
-        improvs.forEach(([n, adv, evalText, bench])=>{
+        let after = parent.querySelector(".rr-improve-head");
+        improvs.forEach(([n,adv,eval,bench])=>{
           const tr=document.createElement("tr");
           tr.className="rr-improve-row rr-bad-row";
-          tr.innerHTML=`<td>• ${n}</td><td>—</td><td>${adv}</td><td>${evalText}</td><td>${bench}</td>`;
-          insertAfter.insertAdjacentElement("afterend", tr);
-          insertAfter = tr;
+          tr.innerHTML=`<td>• ${n}</td><td>—</td><td>${adv}</td><td>${eval}</td><td>${bench}</td>`;
+          after.insertAdjacentElement("afterend", tr);
+          after = tr;
         });
       }
     }
@@ -349,5 +397,26 @@
   function rollingSharpe(ret, win=126, rfDaily=0){
     const out=[]; for(let i=win;i<=ret.length;i++){ const seg=ret.slice(i-win,i); const m=avg(seg)-rfDaily; const v=stdev(seg); out.push(v>0?(m/v)*Math.sqrt(252):0); }
     return out;
+  }
+  function mean0(a){ return a.length? (a.reduce((x,y)=>x+y,0)/a.length) : 0; }
+  function drawdownStats(eq){
+    // 用權益序列計算每段回撤深度（金額）
+    const depths=[]; let peak=-Infinity, trough=Infinity;
+    for(const p of eq){
+      if(p.nav>peak){ if(peak!==-Infinity && trough<peak) depths.push(peak-trough); peak=p.nav; trough=p.nav; }
+      else{ trough=Math.min(trough,p.nav); }
+    }
+    if(peak!==-Infinity && trough<peak) depths.push(peak-trough);
+    return { avgDD: depths.length? avg(depths):0, medDD: depths.length? median(depths):0 };
+  }
+  function momentSkewKurt(x){
+    if(!x.length) return {skew:0,kurt:0};
+    const m=avg(x); const n=x.length;
+    let m2=0,m3=0,m4=0;
+    for(const v of x){ const d=v-m; const d2=d*d; m2+=d2; m3+=d2*d; m4+=d2*d2; }
+    m2/=n; m3/=n; m4/=n;
+    const skew = m2>0 ? (m3/Math.pow(m2,1.5)) : 0;
+    const kurt = m2>0 ? (m4/(m2*m2)) : 0; // total kurtosis
+    return {skew,kurt};
   }
 })();
