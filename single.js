@@ -3,6 +3,7 @@
   const $ = s => document.querySelector(s);
   const DEFAULT_NAV = Number(new URLSearchParams(location.search).get("nav")) || 1_000_000;
   const DEFAULT_RF  = Number(new URLSearchParams(location.search).get("rf"))  || 0.00;
+  console.log("[RR] single.js version full-table-v4");
 
   // ---------- 樣式（只注入一次） ----------
   (function injectStyle(){
@@ -155,7 +156,7 @@
     const pct2=x=>(Number.isFinite(x)?(x*100).toFixed(2):"0.00")+"%";
     const fix2=x=>Number(x).toFixed(2);
 
-    // ←←← 這裡改名：原先 g → RULES，避免任何外部覆蓋
+    // **評分規則物件：RULES（替代舊的 g，避免衝突）**
     const RULES = {
       // 報酬
       cagr:v=> v>=0.30?['good','年化極佳','≥30%'] : v>=0.15?['good','年化穩健','≥15%'] : v>=0.05?['ok','尚可','≥5%'] : ['bad','偏低','—'],
@@ -191,19 +192,17 @@
       roll:v=> v>=1.5?['good','時間穩定性佳','≥1.5'] : v>=1?['ok','可接受','≥1'] : ['bad','穩健性不足','—']
     };
 
-    // 組資料（以 sections 收集，最後一次性輸出）
-    const sections = [];  // [{title, rows:[{grade,cells:[...]}]}]
-    const improvs  = [];  // [[name, 建議, 評語, 參考]]
-
+    const sections = [];
+    const improvs  = [];
     const pushHeader = (title) => sections.push({title, rows: []});
     const pushRow = (title, value, desc, tuple, tierLabel, sec=sections[sections.length-1]) => {
       const [grade, comment, bench] = tuple;
-      const evalText = `${labelGrade(grade)}${comment? '，'+comment : ''}`; // 簡潔評語
+      const evalText = `${labelGrade(grade)}${comment? '，'+comment : ''}`;
       sec.rows.push({ grade, cells:[`${title}${tierLabel?` <span class="rr-tier">(${tierLabel})</span>`:''}`, value, desc, evalText, bench||'—'] });
       if (grade==='bad') improvs.push([title, '建議優化', evalText, bench||'—']);
     };
 
-    // 〈建議調整〉（先準備空節）
+    // 〈建議調整〉
     pushHeader("〈建議調整指標〉（Improve 彙總）");
 
     // 一、報酬
@@ -214,7 +213,6 @@
     pushRow("平均每筆（Expectancy）",  money(k.expectancy),"每筆平均淨損益（含滑價）",           RULES.exp(k.expectancy), "Core");
     pushRow("年化報酬（Arithmetic）",  pct2(k.annRet),    "日均報酬 × 252",                      RULES.ann(k.annRet), "Core");
     pushRow("勝率（Hit Ratio）",       pct2(k.winRate),   "獲利筆數 ÷ 總筆數",                   RULES.hit(k.winRate,k.payoff), "Core");
-    pushRow("Top-N 貢獻集中度",        "—",               "前 N 筆/天對總報酬貢獻",               ['ok','—','—'], "Adv.");
 
     // 二、風險
     pushHeader("二、風險（Risk）");
@@ -251,10 +249,9 @@
     pushRow("平均獲利單",                money(k.avgWin),   "含滑價的平均獲利金額",                 ['ok','—','≥平均虧損單'], "Core");
     pushRow("平均虧損單",                pmoney(-k.avgLoss),"含滑價的平均虧損金額",                 ['ok','—','—'], "Core");
     pushRow("最大連勝",                  String(k.maxWS),   "連續獲利筆數",                         ['ok','—','—'], "Core");
-    pushRow("最大連敗",                  String(k.maxLS),   "連續虧損筆數",                         RULES.maxLS(k.maxLS), "Core");
+    pushRow("最大連敗",                  String(k.maxLS),   "連續虧損筆數",                         RULES.maxLS ? RULES.maxLS(k.maxLS) : ['ok','—','≤12'], "Core");
     pushRow("平均持倉時間",              `${k.avgHoldingMins.toFixed(2)} 分`, "tsIn→tsOut 的平均分鐘數", ['ok','—','—'], "Core");
     pushRow("交易頻率",                  `${k.tradesPerMonth.toFixed(2)} 筆/月`, "以回測期間月份估算", ['ok','—','—'], "Core");
-    // 重要/進階：佔位（待日後接委託/撮合資料）
     pushRow("Slippage（滑價）",           "—",               "滑價影響（委託型態/參與率）",         ['ok','—','—'], "Imp.");
     pushRow("Implementation Shortfall",  "—",               "決策價 vs 成交價差（含費用）",         ['ok','—','—'], "Imp.");
     pushRow("Fill Rate / Queue Loss",    "—",               "成交率 / 排隊損失",                   ['ok','—','—'], "Imp.");
@@ -268,8 +265,8 @@
     pushRow("OOS（樣本外）",              "—",               "樣本外表現",                           ['ok','—','—'], "Core");
     pushRow("參數敏感度（±10~20%）",      "—",               "熱圖檢查過擬合",                       ['ok','—','—'], "Imp.");
     pushRow("Prob./Deflated Sharpe",      "—",               "修正多測偏誤之 Sharpe",                ['ok','—','—'], "Imp.");
-    pushRow("Regime 分析",               "—",               "趨勢/震盪 × 高/低波動",                ['ok','—','—'], "Adv.");
-    pushRow("Alpha/Concept Decay",       "—",               "邊際優勢衰退速度",                     ['ok','—','—'], "Adv.");
+    pushRow("Regime 分析",                "—",               "趨勢/震盪 × 高/低波動",                ['ok','—','—'], "Adv.");
+    pushRow("Alpha/Concept Decay",        "—",               "邊際優勢衰退速度",                     ['ok','—','—'], "Adv.");
 
     // 六、風險用量與容量
     pushHeader("六、風險用量、槓桿與容量（Risk Usage, Leverage & Capacity）");
@@ -394,7 +391,7 @@
   const stdev=a=>{ if(a.length<2) return 0; const m=avg(a); return Math.sqrt(a.reduce((s,x)=>s+(x-m)*(x-m),0)/(a.length-1)); };
   const median=a=>{ if(!a.length) return 0; const b=[...a].sort((x,y)=>x-y); const m=Math.floor(b.length/2); return b.length%2? b[m] : (b[m-1]+b[m])/2; };
   function rollingSharpe(ret, win=126, rfDaily=0){
-    const out=[]; for(let i=win;i<=ret.length;i++){ const seg=ret.slice(i-win,i); const m=avg(seg)-rfDaily; const v=stdev(seg); out.push(v>0?(m/v)*Math.sqrt(252):0); }
+    const out=[]; for(let i=win;i<=ret.length;i++){ const seg = ret.slice(i-win,i); const m = avg(seg)-rfDaily; const v = stdev(seg); out.push(v>0 ? (m/v)*Math.sqrt(252) : 0); }
     return out;
   }
   function mean0(a){ return a.length? (a.reduce((x,y)=>x+y,0)/a.length) : 0; }
@@ -413,7 +410,7 @@
     for(const v of x){ const d=v-m; const d2=d*d; m2+=d2; m3+=d2*d; m4+=d2*d2; }
     m2/=n; m3/=n; m4/=n;
     const skew = m2>0 ? (m3/Math.pow(m2,1.5)) : 0;
-    const kurt = m2>0 ? (m4/(m2*m2)) : 0; // total kurtosis
+    const kurt = m2>0 ? (m4/(m2*m2)) : 0; // total (非 excess)
     return {skew,kurt};
   }
 })();
