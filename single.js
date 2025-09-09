@@ -1,4 +1,4 @@
-/* 單檔頁面（6 線圖 + 三行KPI + Risk-Return 六大類：中文｜數值｜說明） */
+/* 單檔頁面（6 線圖 + 三行KPI + Risk-Return 六大類：中文｜數值｜說明＋機構參考） */
 (function () {
   const $ = s => document.querySelector(s);
 
@@ -163,21 +163,34 @@
     };
   }
 
-  // =============== 六大類輸出 + 機構參考標準 ===============
+  // =============== 六大類輸出：中文｜數值｜說明（尾端附「機構參考」） ===============
   function renderRR6Cats(k){
     const money  = n => (Number(n)||0).toLocaleString("zh-TW");
     const pmoney = n => (Number(n)>0? "" : "-") + money(Math.abs(Number(n)||0));
     const pct2   = x => (Number.isFinite(x)? (x*100).toFixed(2) : "0.00") + "%";
     const fix2   = x => Number(x).toFixed(2);
+
+    // 常見機構參考門檻
+    const BM = {
+      sharpe : "機構參考：>1 可接受｜>1.5 穩健｜>2 佳",
+      sortino: "機構參考：通常高於 Sharpe；>1.5 穩健｜>2 佳",
+      mar    : "機構參考：>1 佳｜>2 很佳（CTA）",
+      pf     : "機構參考：>1.5 穩健｜>2 很好",
+      win    : "機構參考：無硬性門檻，需與盈虧比搭配",
+      varEs  : "機構參考：依風控額度與日損熄火規則設定",
+      vol    : "機構參考：依基金目標年化波動（常見 8%~15%）",
+      exp    : "機構參考：>0 並能覆蓋交易成本/滑價",
+    };
+
     const L = [];
 
     // 1 報酬
     L.push("一、報酬（Return）");
     L.push(`總報酬（Total Return）｜${money(k.totalPnL)}｜回測累積淨損益（含手續費/稅/滑價）。`);
     L.push(`CAGR（年化複利）｜${pct2(k.cagr)}｜以 NAV 為分母，依實際天數年化。`);
-    L.push(`平均每筆（Expectancy）｜${money(k.expectancy)}｜每筆平均淨損益（含滑價）。`);
+    L.push(`平均每筆（Expectancy）｜${money(k.expectancy)}｜每筆平均淨損益（含滑價）。｜${BM.exp}`);
     L.push(`年化報酬（Arithmetic）｜${pct2(k.annRet)}｜日均報酬 × 252。`);
-    L.push(`勝率（Hit Ratio）｜${pct2(k.winRate)}｜獲利筆數 ÷ 總筆數。`);
+    L.push(`勝率（Hit Ratio）｜${pct2(k.winRate)}｜獲利筆數 ÷ 總筆數。｜${BM.win}`);
     L.push("");
 
     // 2 風險
@@ -185,12 +198,12 @@
     L.push(`最大回撤（MaxDD）｜${pmoney(-k.maxDD)}｜峰值到谷值最大跌幅（以金額）。`);
     L.push(`水下時間（TUW）｜${k.maxTUW}｜在水下的最長天數。`);
     L.push(`回本時間（Recovery）｜${k.recovery}｜自 MDD 末端至再創新高的天數。`);
-    L.push(`波動率（Volatility）｜${pct2(k.vol)}｜日報酬標準差 × √252。`);
+    L.push(`波動率（Volatility）｜${pct2(k.vol)}｜日報酬標準差 × √252。｜${BM.vol}`);
     L.push(`下行波動（Downside Dev）｜${pct2(k.downside)}｜只計下行（供 Sortino）。`);
-    L.push(`VaR 95%｜${pmoney(-k.var95)}｜單日 95% 置信最大虧損（歷史模擬，金額）。`);
-    L.push(`ES 95%（CVaR）｜${pmoney(-k.es95)}｜落於 VaR95 之後的平均虧損。`);
-    L.push(`VaR 99%｜${pmoney(-k.var99)}｜單日 99% 置信最大虧損。`);
-    L.push(`ES 99%｜${pmoney(-k.es99)}｜落於 VaR99 之後的平均虧損。`);
+    L.push(`VaR 95%｜${pmoney(-k.var95)}｜單日 95% 置信最大虧損（歷史模擬，金額）。｜${BM.varEs}`);
+    L.push(`ES 95%（CVaR）｜${pmoney(-k.es95)}｜落於 VaR95 之後的平均虧損。｜${BM.varEs}`);
+    L.push(`VaR 99%｜${pmoney(-k.var99)}｜單日 99% 置信最大虧損。｜${BM.varEs}`);
+    L.push(`ES 99%｜${pmoney(-k.es99)}｜落於 VaR99 之後的平均虧損。｜${BM.varEs}`);
     L.push(`單日最大虧損｜${pmoney(-k.maxDailyLoss)}｜樣本期間最糟的一天。`);
     L.push(`單日最大獲利｜${money(k.maxDailyGain)}｜樣本期間最佳的一天。`);
     L.push(`單筆最大虧損｜${pmoney(-k.maxTradeLoss)}｜樣本期間最糟的一筆交易。`);
@@ -199,10 +212,10 @@
 
     // 3 風險調整
     L.push("三、風險調整報酬（Risk-Adjusted Return）");
-    L.push(`Sharpe（夏普）｜${fix2(k.sharpe)}｜（年化報酬 − rf）／年化波動。`);
-    L.push(`Sortino（索提諾）｜${fix2(k.sortino)}｜只懲罰下行波動。`);
-    L.push(`MAR｜${fix2(k.MAR)}｜CAGR ÷ |MDD|（CTA 常用）。`);
-    L.push(`PF（獲利因子）｜${fix2(k.PF)}｜總獲利 ÷ 總虧損（含成本/滑價）。`);
+    L.push(`Sharpe（夏普）｜${fix2(k.sharpe)}｜（年化報酬 − rf）／年化波動。｜${BM.sharpe}`);
+    L.push(`Sortino（索提諾）｜${fix2(k.sortino)}｜只懲罰下行波動。｜${BM.sortino}`);
+    L.push(`MAR｜${fix2(k.MAR)}｜CAGR ÷ |MDD|（CTA 常用）。｜${BM.mar}`);
+    L.push(`PF（獲利因子）｜${fix2(k.PF)}｜總獲利 ÷ 總虧損（含成本/滑價）。｜${BM.pf}`);
     L.push("");
 
     // 4 交易結構與執行品質
@@ -218,7 +231,7 @@
 
     // 5 穩健性
     L.push("五、穩健性與可複製性（Robustness & Statistical Soundness）");
-    L.push(`滾動 Sharpe（6個月中位）｜${fix2(k.rollSharpeMed)}｜126 交易日窗的 Sharpe 中位數。`);
+    L.push(`滾動 Sharpe（6個月中位）｜${fix2(k.rollSharpeMed)}｜126 交易日窗的 Sharpe 中位數。｜${BM.sharpe}`);
     L.push(`樣本外（OOS）｜—｜需提供 OOS 資料後評估。`);
     L.push(`參數敏感度｜—｜需做 ±10~20% 擾動測試。`);
     L.push(`Regime 分析｜—｜需標註趨勢/震盪、高/低波動區間。`);
@@ -229,19 +242,8 @@
     L.push(`槓桿（Leverage）｜—｜需名目曝險/權益資料。`);
     L.push(`風險貢獻（Risk Contribution）｜—｜需多資產/子策略分解。`);
     L.push(`容量/流動性（Capacity）｜—｜需市場量與參與率/衝擊估計。`);
-    L.push("");
 
-    // 7 機構參考標準（對照）
-    L.push("七、機構參考標準（Benchmark, 僅供對照）");
-    L.push(`Sharpe：> 1 可接受｜> 1.5 穩健｜> 2 佳。`);
-    L.push(`Sortino：通常高於 Sharpe；> 1.5 為穩健。`);
-    L.push(`MAR（CAGR/|MDD|）：> 1 佳｜> 2 很佳（CTA 常用）。`);
-    L.push(`PF（獲利因子）：> 1.5 穩健｜> 2 很好。`);
-    L.push(`勝率：無絕對門檻，須與 Payoff 搭配（低勝率也能靠高盈虧比獲勝）。`);
-    L.push(`VaR/ES：依風控額度設定，日內通常會設夜間關閉或日損熄火。`);
-
-    const el = $("#rrLines");
-    el.textContent = L.join("\n");
+    $("#rrLines").textContent = L.join("\n");
   }
 
   // =============== 主流程 ===============
@@ -269,7 +271,7 @@
     $("#kpiL").textContent  = lineL;
     $("#kpiS").textContent  = lineS;
 
-    // ====== 以『含滑價 gainSlip 的出場日』聚合成日損益（修正：不用 Date() 解析） ======
+    // 以『含滑價 gainSlip 的出場日』聚合成日損益（字串切片，不用 Date 解析）
     const dailyMap = new Map();
     for (const t of report.trades) {
       const key = keyFromTs(t.tsOut);             // "YYYY-MM-DD"
