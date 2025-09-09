@@ -1,4 +1,4 @@
-/* 單檔頁面：6 線圖 + 三行KPI + Risk-Return 六大類（表格版：5欄｜強調著色｜建議調整） */
+/* 單檔頁面：6 線圖 + 三行KPI + Risk-Return 六大類（表格｜五欄｜紅綠著色｜建議調整） */
 (function () {
   const $ = s => document.querySelector(s);
   const DEFAULT_NAV = Number(new URLSearchParams(location.search).get("nav")) || 1_000_000;
@@ -147,7 +147,9 @@
     const pmoney=n=>(Number(n)>0?"":"-")+money(Math.abs(Number(n)||0));
     const pct2=x=>(Number.isFinite(x)?(x*100).toFixed(2):"0.00")+"%";
     const fix2=x=>Number(x).toFixed(2);
-    const gradeWord=x=>x==='good'?'→ Strong':(x==='bad'?'→ Improve':'→ Adequate');
+
+    // 單一標籤函式（避免重複宣告）
+    const gwLabel = level => (level==='good'?'→ Strong':(level==='bad'?'→ Improve':'→ Adequate'));
 
     // 分級器：回傳 [grade, comment, bench]
     const g={
@@ -174,21 +176,18 @@
       roll:v=> v>=1.5?['good','時間穩定性佳','≥1.5'] : v>=1?['ok','可接受','≥1'] : ['bad','穩健性不足','—'],
     };
 
-    // 組表格 DOM
+    // 建立表格
     const wrap = $("#rrLines");
     wrap.innerHTML = `
       <table id="rrTable2" class="rr-table">
-        <thead>
-          <tr>
-            <th>指標</th><th>數值</th><th>說明</th><th>機構評語</th><th>參考區間</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
+        <thead><tr>
+          <th>指標</th><th>數值</th><th>說明</th><th>機構評語</th><th>參考區間</th>
+        </tr></thead><tbody></tbody>
       </table>`;
     const tbody = $("#rrTable2 tbody");
 
-    // 收集需改進
-    const bads = [];
+    // 收集 Improve 條目
+    const improvs = [];
     const addRow = (title, val, desc, tuple) => {
       const [grade, comment, bench] = tuple;
       const tr = document.createElement("tr");
@@ -197,10 +196,10 @@
         <td>${title}</td>
         <td>${val}</td>
         <td>${desc}</td>
-        <td>機構評語：${gradeWord(grade)}${comment ? '，'+comment : ''}</td>
+        <td>機構評語：${gwLabel(grade)}${comment ? '，'+comment : ''}</td>
         <td>${bench || '—'}</td>`;
       tbody.appendChild(tr);
-      if (grade==='bad') bads.push([title, comment || '需改善', bench || '—']);
+      if (grade==='bad') improvs.push([title, comment || '需改善', bench || '—']);
     };
     const addHeader = (label) => {
       const tr = document.createElement("tr");
@@ -209,11 +208,11 @@
       tbody.appendChild(tr);
     };
 
-    // 〈建議調整指標〉（先顯示，稍後填內容）
+    // 〈建議調整指標〉（先佔位）
     addHeader("〈建議調整指標〉（Improve 彙總）");
-    const improveAnchor = document.createElement("tr");
-    improveAnchor.innerHTML = `<td colspan="5" id="improveSlot">（目前無紅色指標）</td>`;
-    tbody.appendChild(improveAnchor);
+    const improveSlot = document.createElement("tr");
+    improveSlot.innerHTML = `<td colspan="5" id="improveSlot">（目前無紅色指標）</td>`;
+    tbody.appendChild(improveSlot);
 
     // 一、報酬
     addHeader("一、報酬（Return）");
@@ -269,24 +268,26 @@
     addRow("風險貢獻（Risk Contribution）", "—", "需多資產/子策略分解",                         ['ok','—','—']);
     addRow("容量/流動性（Capacity）",    "—", "需市場量與參與率/衝擊估計",                      ['ok','—','—']);
 
-    // 產生建議調整
-    if (bads.length){
-      $("#improveSlot").parentElement.remove();
-      const h = document.createElement("tr");
-      h.className="rr-section-header";
-      h.innerHTML = `<td>指標</td><td>數值</td><td>建議</td><td>機構評語</td><td>參考區間</td>`;
-      const idx = $("#rrTable2 tbody");
-      idx.insertBefore(h, idx.children[1]); // 插在 Improve header 後
-      bads.forEach(([n,why,bench])=>{
-        const tr=document.createElement("tr");
-        tr.className="rr-bad-row";
-        tr.innerHTML=`<td>• ${n}</td><td>—</td><td>建議優化</td><td>機構評語：${gradeWord('bad')}，${why}</td><td>${bench}</td>`;
-        idx.insertBefore(tr, idx.children[2]);
-      });
+    // 產生〈建議調整指標〉
+    const slot = $("#improveSlot");
+    if (slot){
+      if (improvs.length===0){
+        slot.textContent = "（目前無紅色指標）";
+      }else{
+        // 替換為表頭列 + 每個 Improve 條目
+        const parent = slot.parentElement.parentElement; // tbody
+        const header = document.createElement("tr");
+        header.className = "rr-section-header";
+        header.innerHTML = `<td>指標</td><td>數值</td><td>建議</td><td>機構評語</td><td>參考區間</td>`;
+        parent.replaceChild(header, slot.parentElement);
+        improvs.forEach(([n,why,bench])=>{
+          const tr = document.createElement("tr");
+          tr.className = "rr-bad-row";
+          tr.innerHTML = `<td>• ${n}</td><td>—</td><td>建議優化</td><td>${gwLabel('bad')}，${why}</td><td>${bench}</td>`;
+          parent.insertBefore(tr, header.nextSibling);
+        });
+      }
     }
-
-    // helpers
-    function gradeWord(x){ return x==='good'?'→ Strong':(x==='bad'?'→ Improve':'→ Adequate'); }
   }
 
   // ===== 主流程 =====
@@ -328,6 +329,7 @@
   });
 
   // ===== 工具 =====
+  function gwLabel(level){ return level==='good'?'→ Strong':(level==='bad'?'→ Improve':'→ Adequate'); }
   function keyFromTs(ts){ const s=String(ts); return `${s.slice(0,4)}-${s.slice(4,6)}-${s.slice(6,8)}`; }
   function daysBetween(isoA, isoB){ const a=new Date(isoA+"T00:00:00"), b=new Date(isoB+"T00:00:00"); return Math.round((b-a)/86400000)+1; }
   function monthsBetween(isoA, isoB){ if(!isoA||!isoB) return 1; const a=new Date(isoA+"T00:00:00"), b=new Date(isoB+"T00:00:00"); return Math.max(1,(b.getFullYear()-a.getFullYear())*12 + (b.getMonth()-a.getMonth()) + 1); }
