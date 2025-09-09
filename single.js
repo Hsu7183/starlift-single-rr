@@ -1,4 +1,4 @@
-/* 單檔頁面（6 線圖 + 三行KPI + Risk-Return 六大類：中文｜數值｜說明＋機構參考） */
+/* 單檔頁面（6 線圖 + 三行KPI + Risk-Return 六大類：中文｜數值｜說明＋機構參考，不含第七段） */
 (function () {
   const $ = s => document.querySelector(s);
 
@@ -96,8 +96,8 @@
 
     // 年化與期望值
     const startDate = dailySlip.length ? dailySlip[0].date : null;
-    const endDate   = dailySlip.length ? dailySlip[dailySlip.length-1].date : null;
-    const dayCnt    = (startDate && endDate) ? Math.max(1, daysBetween(startDate, endDate)) : 252;
+    theEndDate  = dailySlip.length ? dailySlip[dailySlip.length-1].date : null;
+    const dayCnt    = (startDate && theEndDate) ? Math.max(1, daysBetween(startDate, theEndDate)) : 252;
     const years     = Math.max(dayCnt/365, 1/365);
 
     const totalPnL  = sum(dailySlip.map(d => d.pnl));
@@ -140,7 +140,7 @@
 
     const holdMinsArr    = trades.map(t => tsDiffMin(t.pos.tsIn, t.tsOut)).filter(Number.isFinite);
     const avgHoldingMins = holdMinsArr.length ? avg(holdMinsArr) : 0;
-    const months         = Math.max(1, monthsBetween(startDate, endDate));
+    const months         = Math.max(1, monthsBetween(startDate, theEndDate));
     const tradesPerMonth = trades.length / months;
 
     // 滾動 Sharpe（6M ≈ 126 交易日）中位數
@@ -170,7 +170,7 @@
     const pct2   = x => (Number.isFinite(x)? (x*100).toFixed(2) : "0.00") + "%";
     const fix2   = x => Number(x).toFixed(2);
 
-    // 常見機構參考門檻
+    // 機構門檻（已合併到每行，不會再獨立成第七段）
     const BM = {
       sharpe : "機構參考：>1 可接受｜>1.5 穩健｜>2 佳",
       sortino: "機構參考：通常高於 Sharpe；>1.5 穩健｜>2 佳",
