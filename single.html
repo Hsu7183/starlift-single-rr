@@ -8,12 +8,11 @@
   <!-- 圖表 -->
   <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0"></script>
-  <!-- 共用工具（一定要先載入） -->
-  <script defer src="./shared.js?v=rr-align-1"></script>
-  <!-- 本頁腳本（本次修正） -->
-  <script defer src="./single.js?v=rr-align-1"></script>
+  <!-- 共用工具 -->
+  <script defer src="./shared.js?v=rr-align-2"></script>
+  <!-- 單檔腳本 -->
+  <script defer src="./single.js?v=rr-align-2"></script>
   <style>
-    /* Risk-Return 容器（保持原站風格） */
     .rr-wrap.card-panel{padding:12px}
     .rr-pre{
       background:#fff;border:1px solid var(--line);border-radius:10px;
@@ -33,7 +32,6 @@
 
     <div class="card-panel">
       <div class="chart-wrap">
-        <!-- KPI 區（單行 + 對齊）：ID 與 single.js 對應 -->
         <div class="kpi-box">
           <div><span class="tag">參數</span><span id="paramChip">尚未載入</span></div>
           <pre id="kpiAll" class="kpi-pre">—</pre>
@@ -44,7 +42,7 @@
       </div>
     </div>
 
-    <!-- ★ Risk-Return：中文｜數值｜說明｜機構評語（在圖表與交易明細之間） -->
+    <!-- Risk-Return -->
     <h3>Risk-Return 指標</h3>
     <div class="rr-wrap card-panel">
       <div id="rrLines" class="rr-pre">（載入 TXT 後顯示）</div>
