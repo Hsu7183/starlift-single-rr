@@ -1,4 +1,4 @@
-/* 單檔頁面（6線圖 + 三行KPI + Risk-Return 六大類：中文｜數值｜說明） */
+/* 單檔頁面（6 線圖 + 三行KPI + Risk-Return 六大類：中文｜數值｜說明） */
 (function () {
   const $ = s => document.querySelector(s);
 
@@ -8,7 +8,7 @@
 
   let chart;
 
-  // ================= 圖表 =================
+  // =============== 圖表 ===============
   function drawChart(ser) {
     if (chart) chart.destroy();
     const { tsArr, total, slipTotal, long, longSlip, short, shortSlip } = ser;
@@ -34,27 +34,19 @@
   function buildKpiLines(statAll, statL, statS) {
     const { fmtMoney, pct } = window.SHARED;
     const mk = s => ([
-      ["交易數", String(s.count)],
-      ["勝率",   pct(s.winRate)],
-      ["敗率",   pct(s.loseRate)],
-      ["單日最大獲利", fmtMoney(s.dayMax)],
-      ["單日最大虧損", fmtMoney(s.dayMin)],
-      ["區間最大獲利", fmtMoney(s.up)],
-      ["區間最大回撤", fmtMoney(s.dd)],
-      ["累積獲利",     fmtMoney(s.gain)],
+      ["交易數", String(s.count)], ["勝率", pct(s.winRate)], ["敗率", pct(s.loseRate)],
+      ["單日最大獲利", fmtMoney(s.dayMax)], ["單日最大虧損", fmtMoney(s.dayMin)],
+      ["區間最大獲利", fmtMoney(s.up)], ["區間最大回撤", fmtMoney(s.dd)],
+      ["累積獲利", fmtMoney(s.gain)],
     ]);
     const rows = [mk(statAll), mk(statL), mk(statS)];
     const maxW = rows[0].map((_, i) => Math.max(...rows.map(r => r[i][1].length)));
     const padL = (s, w) => s.padStart(w, " ");
     const join = (label, cols) => `${label}： ` + cols.map((c, i) => `${c[0]} ${padL(c[1], maxW[i])}`).join(" ｜ ");
-    return [
-      join("全部（含滑價）", rows[0]),
-      join("多單（含滑價）", rows[1]),
-      join("空單（含滑價）", rows[2]),
-    ];
+    return [ join("全部（含滑價）", rows[0]), join("多單（含滑價）", rows[1]), join("空單（含滑價）", rows[2]) ];
   }
 
-  // ================= 明細表 =================
+  // =============== 明細表 ===============
   function renderTable(report) {
     const { fmtTs, fmtMoney, MULT, FEE, TAX } = window.SHARED;
     const tb = document.querySelector("#tradeTable tbody");
@@ -78,7 +70,7 @@
     });
   }
 
-  // ================= RR 計算（全部用『含滑價 gainSlip』） =================
+  // =============== RR 計算（全部用『含滑價 gainSlip』） ===============
   function computeRR(dailySlip, trades, nav = DEFAULT_NAV, rf = DEFAULT_RF) {
     // 權益曲線 & MDD/TUW/Recovery
     let cum = 0;
@@ -105,7 +97,7 @@
     // 年化與期望值
     const startDate = dailySlip.length ? dailySlip[0].date : null;
     const endDate   = dailySlip.length ? dailySlip[dailySlip.length-1].date : null;
-    const dayCnt    = (startDate && endDate) ? Math.max(1, Math.round((new Date(endDate) - new Date(startDate))/86400000) + 1) : 252;
+    const dayCnt    = (startDate && endDate) ? Math.max(1, daysBetween(startDate, endDate)) : 252;
     const years     = Math.max(dayCnt/365, 1/365);
 
     const totalPnL  = sum(dailySlip.map(d => d.pnl));
@@ -122,15 +114,15 @@
     const es95  = Math.abs(ES(dailyRet,0.95)),    es99  = Math.abs(ES(dailyRet,0.99));
 
     // 交易層（含滑價）
-    const wins   = trades.filter(t => t.gainSlip > 0);
-    const losses = trades.filter(t => t.gainSlip < 0);
-    const winPnL = sum(wins.map(t => t.gainSlip));
-    const losePnL= sum(losses.map(t => t.gainSlip));
-    const PF     = Math.abs(losePnL) > 0 ? (winPnL / Math.abs(losePnL)) : 0;
-    const avgWin = wins.length   ? (winPnL / wins.length)                   : 0;
-    const avgLoss= losses.length ? Math.abs(losePnL / losses.length)        : 0;
-    const payoff = avgLoss>0 ? (avgWin/avgLoss) : 0;
-    const winRate= trades.length ? (wins.length / trades.length) : 0;
+    const wins    = trades.filter(t => t.gainSlip > 0);
+    const losses  = trades.filter(t => t.gainSlip < 0);
+    const winPnL  = sum(wins.map(t => t.gainSlip));
+    const losePnL = sum(losses.map(t => t.gainSlip));
+    const PF      = Math.abs(losePnL) > 0 ? (winPnL / Math.abs(losePnL)) : 0;
+    const avgWin  = wins.length ? (winPnL / wins.length) : 0;
+    const avgLoss = losses.length ? Math.abs(losePnL / losses.length) : 0;
+    const payoff  = avgLoss>0 ? (avgWin/avgLoss) : 0;
+    const winRate = trades.length ? (wins.length / trades.length) : 0;
     const expectancy = trades.length ? (totalPnL / trades.length) : 0;
 
     // 連勝/連敗、單日/單筆極值、持倉/頻率
@@ -140,20 +132,20 @@
       else if (t.gainSlip<0) { curL++; maxLS=Math.max(maxLS,curL); curW=0; }
       else { curW=0; curL=0; }
     }
-    const byDaySlip = (()=>{ const m=new Map(); for(const t of trades){ const d=ymd(new Date(t.tsOut)); m.set(d,(m.get(d)||0)+t.gainSlip); } return [...m.values()]; })();
+    const byDaySlip = (()=>{ const m=new Map(); for(const t of trades){ const d=keyFromTs(t.tsOut); m.set(d,(m.get(d)||0)+t.gainSlip); } return [...m.values()]; })();
     const maxDailyLoss  = Math.abs(Math.min(0, ...byDaySlip));
     const maxDailyGain  = Math.max(0, ...byDaySlip, 0);
     const maxTradeLoss  = Math.abs(Math.min(0, ...trades.map(t=>t.gainSlip)));
     const maxTradeGain  = Math.max(0, ...trades.map(t=>t.gainSlip), 0);
 
-    const holdMinsArr   = trades.map(t => tsDiffMin(t.pos.tsIn, t.tsOut)).filter(Number.isFinite);
-    const avgHoldingMins= holdMinsArr.length ? avg(holdMinsArr) : 0;
-    const months        = Math.max(1, monthsBetween(startDate, endDate));
-    const tradesPerMonth= trades.length / months;
+    const holdMinsArr    = trades.map(t => tsDiffMin(t.pos.tsIn, t.tsOut)).filter(Number.isFinite);
+    const avgHoldingMins = holdMinsArr.length ? avg(holdMinsArr) : 0;
+    const months         = Math.max(1, monthsBetween(startDate, endDate));
+    const tradesPerMonth = trades.length / months;
 
     // 滾動 Sharpe（6M ≈ 126 交易日）中位數
-    const rollSharpe    = rollingSharpe(dailyRet, 126, DEFAULT_RF/252);
-    const rollSharpeMed = rollSharpe.length ? median(rollSharpe) : 0;
+    const rollSharpe     = rollingSharpe(dailyRet, 126, DEFAULT_RF/252);
+    const rollSharpeMed  = rollSharpe.length ? median(rollSharpe) : 0;
 
     return {
       // 報酬
@@ -171,8 +163,8 @@
     };
   }
 
-  // ============== 六大類輸出：中文｜數值｜說明 ==============
-  function renderRR(k) {
+  // =============== 六大類輸出 + 機構參考標準 ===============
+  function renderRR6Cats(k){
     const money  = n => (Number(n)||0).toLocaleString("zh-TW");
     const pmoney = n => (Number(n)>0? "" : "-") + money(Math.abs(Number(n)||0));
     const pct2   = x => (Number.isFinite(x)? (x*100).toFixed(2) : "0.00") + "%";
@@ -205,7 +197,7 @@
     L.push(`單筆最大獲利｜${money(k.maxTradeGain)}｜樣本期間最佳的一筆交易。`);
     L.push("");
 
-    // 3 風險調整報酬
+    // 3 風險調整
     L.push("三、風險調整報酬（Risk-Adjusted Return）");
     L.push(`Sharpe（夏普）｜${fix2(k.sharpe)}｜（年化報酬 − rf）／年化波動。`);
     L.push(`Sortino（索提諾）｜${fix2(k.sortino)}｜只懲罰下行波動。`);
@@ -237,59 +229,62 @@
     L.push(`槓桿（Leverage）｜—｜需名目曝險/權益資料。`);
     L.push(`風險貢獻（Risk Contribution）｜—｜需多資產/子策略分解。`);
     L.push(`容量/流動性（Capacity）｜—｜需市場量與參與率/衝擊估計。`);
+    L.push("");
+
+    // 7 機構參考標準（對照）
+    L.push("七、機構參考標準（Benchmark, 僅供對照）");
+    L.push(`Sharpe：> 1 可接受｜> 1.5 穩健｜> 2 佳。`);
+    L.push(`Sortino：通常高於 Sharpe；> 1.5 為穩健。`);
+    L.push(`MAR（CAGR/|MDD|）：> 1 佳｜> 2 很佳（CTA 常用）。`);
+    L.push(`PF（獲利因子）：> 1.5 穩健｜> 2 很好。`);
+    L.push(`勝率：無絕對門檻，須與 Payoff 搭配（低勝率也能靠高盈虧比獲勝）。`);
+    L.push(`VaR/ES：依風控額度設定，日內通常會設夜間關閉或日損熄火。`);
 
     const el = $("#rrLines");
-    if (!el) { alert("找不到 #rrLines 元素，請確認 single.html 是否包含 <pre id='rrLines'>"); return; }
     el.textContent = L.join("\n");
-    el.innerText   = L.join("\n"); // 部分瀏覽器 fallback
   }
 
-  // ================= 主流程 =================
+  // =============== 主流程 ===============
   async function handleRaw(raw) {
-    try {
-      if (!window.SHARED) throw new Error("shared.js 未載入");
-      const { parseTXT, buildReport, paramsLabel } = window.SHARED;
-      const parsed = parseTXT(raw);
-      const report = buildReport(parsed.rows);
-      if (report.trades.length === 0) throw new Error("沒有成功配對的交易");
+    const { parseTXT, buildReport, paramsLabel } = window.SHARED;
+    const parsed = parseTXT(raw);
+    const report = buildReport(parsed.rows);
+    if (report.trades.length === 0) { alert("沒有成功配對的交易"); return; }
 
-      // 圖
-      drawChart({
-        tsArr: report.tsArr,
-        total: report.total,
-        slipTotal: report.slipCum,
-        long: report.longCum,
-        longSlip: report.longSlipCum,
-        short: report.shortCum,
-        shortSlip: report.shortSlipCum,
-      });
+    // 圖
+    drawChart({
+      tsArr: report.tsArr,
+      total: report.total,
+      slipTotal: report.slipCum,
+      long: report.longCum,
+      longSlip: report.longSlipCum,
+      short: report.shortCum,
+      shortSlip: report.shortSlipCum,
+    });
 
-      // 舊版三行 KPI
-      const [lineAll, lineL, lineS] = buildKpiLines(report.statAll, report.statL, report.statS);
-      $("#paramChip").textContent = paramsLabel(parsed.params);
-      $("#kpiAll").textContent = lineAll;
-      $("#kpiL").textContent  = lineL;
-      $("#kpiS").textContent  = lineS;
+    // 舊版三行 KPI
+    const [lineAll, lineL, lineS] = buildKpiLines(report.statAll, report.statL, report.statS);
+    $("#paramChip").textContent = paramsLabel(parsed.params);
+    $("#kpiAll").textContent = lineAll;
+    $("#kpiL").textContent  = lineL;
+    $("#kpiS").textContent  = lineS;
 
-      // 含滑價的日損益（用出場日）
-      const dailyMap = new Map();
-      for (const t of report.trades) {
-        const d = ymd(new Date(t.tsOut));
-        dailyMap.set(d, (dailyMap.get(d) || 0) + t.gainSlip);
-      }
-      const dailySlip = [...dailyMap.entries()].sort((a,b)=>a[0].localeCompare(b[0]))
-                          .map(([date,pnl]) => ({ date, pnl }));
-
-      // 六大類 KPI
-      const k = computeRR(dailySlip, report.trades, DEFAULT_NAV, DEFAULT_RF);
-      renderRR(k);
-
-      // 明細
-      renderTable(report);
-    } catch (err) {
-      console.error("[RR] handleRaw error:", err);
-      alert("Risk-Return 計算/顯示失敗：" + (err.message || err));
+    // ====== 以『含滑價 gainSlip 的出場日』聚合成日損益（修正：不用 Date() 解析） ======
+    const dailyMap = new Map();
+    for (const t of report.trades) {
+      const key = keyFromTs(t.tsOut);             // "YYYY-MM-DD"
+      dailyMap.set(key, (dailyMap.get(key)||0) + t.gainSlip);
     }
+    const dailySlip = [...dailyMap.entries()]
+      .sort((a,b)=>a[0].localeCompare(b[0]))
+      .map(([date,pnl]) => ({ date, pnl }));
+
+    // 六大類 KPI
+    const k = computeRR(dailySlip, report.trades, DEFAULT_NAV, DEFAULT_RF);
+    renderRR6Cats(k);
+
+    // 明細
+    renderTable(report);
   }
 
   // 事件
@@ -304,18 +299,31 @@
   });
 
   // ===== 工具 =====
+  function keyFromTs(ts){           // ts: "YYYYMMDD..." → "YYYY-MM-DD"
+    const s = String(ts);
+    return `${s.slice(0,4)}-${s.slice(4,6)}-${s.slice(6,8)}`;
+  }
+  function daysBetween(isoA, isoB){
+    const a = new Date(isoA + "T00:00:00");
+    const b = new Date(isoB + "T00:00:00");
+    return Math.round((b - a)/86400000) + 1;
+  }
+  function monthsBetween(isoA, isoB){
+    if(!isoA || !isoB) return 1;
+    const a = new Date(isoA + "T00:00:00");
+    const b = new Date(isoB + "T00:00:00");
+    return Math.max(1,(b.getFullYear()-a.getFullYear())*12 + (b.getMonth()-a.getMonth()) + 1);
+  }
+  function tsDiffMin(tsIn, tsOut){
+    if(!tsIn||!tsOut) return NaN;
+    const d1 = new Date(`${tsIn.slice(0,4)}-${tsIn.slice(4,6)}-${tsIn.slice(6,8)}T${tsIn.slice(8,10)}:${tsIn.slice(10,12)}:${tsIn.slice(12,14)||"00"}`);
+    const d2 = new Date(`${tsOut.slice(0,4)}-${tsOut.slice(4,6)}-${tsOut.slice(6,8)}T${tsOut.slice(8,10)}:${tsOut.slice(10,12)}:${tsOut.slice(12,14)||"00"}`);
+    return Math.max(0, (d2-d1)/60000);
+  }
   function sum(a){ return a.reduce((x,y)=>x+y,0); }
   function avg(a){ return a.length ? sum(a)/a.length : 0; }
   function stdev(a){ if(a.length<2) return 0; const m=avg(a); return Math.sqrt(a.reduce((s,x)=>s+(x-m)*(x-m),0)/(a.length-1)); }
   function median(a){ if(!a.length) return 0; const b=[...a].sort((x,y)=>x-y); const m=Math.floor(b.length/2); return b.length%2? b[m] : (b[m-1]+b[m])/2; }
-  function ymd(d){ const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,"0"), dd=String(d.getDate()).padStart(2,"0"); return `${y}-${m}-${dd}`; }
-  function monthsBetween(start, end){ if(!start||!end) return 1; const s=new Date(start), e=new Date(end); return Math.max(1,(e.getFullYear()-s.getFullYear())*12 + (e.getMonth()-s.getMonth()) + 1); }
-  function tsDiffMin(tsIn, tsOut){
-    if(!tsIn||!tsOut) return NaN;
-    const d1 = new Date(tsIn.slice(0,4), tsIn.slice(4,6)-1, tsIn.slice(6,8), tsIn.slice(8,10), tsIn.slice(10,12), tsIn.slice(12,14)||0);
-    const d2 = new Date(tsOut.slice(0,4), tsOut.slice(4,6)-1, tsOut.slice(6,8), tsOut.slice(8,10), tsOut.slice(10,12), tsOut.slice(12,14)||0);
-    return Math.max(0, (d2-d1)/60000);
-  }
   function rollingSharpe(ret, win=126, rfDaily=0){
     const out=[];
     for(let i=win;i<=ret.length;i++){
