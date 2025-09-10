@@ -10,38 +10,37 @@
   <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0"></script>
 
-  <!-- 共用工具（你現有的 shared.js） -->
-  <script defer src="./shared.js?v=full-table-print1"></script>
+  <!-- 共用工具 -->
+  <script defer src="./shared.js?v=full-report-v1"></script>
 
-  <!-- 本頁腳本（下面會提供） -->
-  <script defer src="./single.js?v=full-table-print1"></script>
+  <!-- 本頁腳本 -->
+  <script defer src="./single.js?v=full-report-v1"></script>
 
-  <!-- 針對 PDF 輸出的印表樣式 -->
+  <!-- 列印樣式（PDF 匯出用） -->
   <style>
-    /* ---- 螢幕用微調 ---- */
     .rr-wrap.card-panel{padding:12px}
     #rrLines{margin-top:6px}
 
-    /* ---- 印表設定 ---- */
+    /* 報告：封面＋月別章節 */
+    .report-card{background:#fff;border:1px solid var(--line,#e5e7eb);border-radius:12px;padding:14px;margin:14px 0}
+    .report-title{font-weight:800;margin:0 0 8px 0}
+    .report-sub{color:#6b7280;margin:0 0 12px 0}
+    .report-meta{display:flex;gap:16px;color:#374151;margin:8px 0 12px 0;flex-wrap:wrap}
+    .report-kpi{display:flex;gap:10px;flex-wrap:wrap}
+    .kchip{border:1px solid var(--line,#e5e7eb);border-radius:10px;padding:6px 10px;background:#fafafa;font:14px ui-monospace,Consolas,Menlo,monospace}
+    .month-header{font-weight:800;margin:6px 0 12px 0}
+    .month-card{page-break-inside:avoid}
+
+    /* 印表設定 */
     @media print {
-      :root { --line:#e5e7eb; }
-      body {
-        -webkit-print-color-adjust: exact !important;
-        print-color-adjust: exact !important;
-        background: #fff;
-      }
-      .toolbar, .note, #btn-clip, #file, #btn-print { display:none !important; }
-      .page { max-width: 100%; margin: 0; padding: 0; }
-      .card-panel, .table, .rr-wrap { box-shadow: none !important; }
-      canvas { page-break-inside: avoid; }
-      /* 讓每個章節在列印時更清楚分頁 */
-      .rr-section-header { page-break-before: always; }
-      .rr-improve-title { page-break-before: always; }
-      /* 表頭重複 */
-      table.rr-table thead { display: table-header-group; }
-      table.rr-table tr { page-break-inside: avoid; }
-      /* 減小左右邊界 */
-      @page { size: A4 portrait; margin: 12mm; }
+      body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; background:#fff; }
+      .toolbar, .note, #btn-clip, #file, #btn-print, #btn-build { display:none !important; }
+      .page { max-width:100%; margin:0; padding:0; }
+      .card-panel, .table, .rr-wrap, .report-card { box-shadow:none !important; }
+      canvas { page-break-inside:avoid; }
+      .report-card, .rr-wrap, .table { page-break-after:always; }
+      .month-card { page-break-after:always; }
+      @page { size:A4 portrait; margin:12mm; }
     }
   </style>
 </head>
@@ -52,6 +51,7 @@
     <div class="toolbar">
       <button id="btn-clip" class="btn">貼上內容</button>
       <label class="btn"><input id="file" type="file" accept=".txt,.TF" hidden>選擇檔案</label>
+      <button id="btn-build" class="btn">生成報告</button>
       <button id="btn-print" class="btn">匯出 PDF</button>
     </div>
 
@@ -68,12 +68,23 @@
       </div>
     </div>
 
-    <!-- Risk-Return 表格（機構版） -->
+    <!-- Risk-Return 機構表格 -->
     <h3 id="rrTitle">Risk-Return 指標（風險－報酬指標）</h3>
     <div class="rr-wrap card-panel">
       <div id="rrLines">（載入 TXT 後顯示）</div>
       <div class="rr-hint">※ 指標以「日損益（含滑價）/ NAV」為日報酬；VaR/ES 為歷史模擬法（金額）。</div>
     </div>
+
+    <!-- 報告封面 -->
+    <div id="reportCover" class="report-card" style="display:none">
+      <h3 class="report-title">策略報告（封面）</h3>
+      <p class="report-sub">三劍客台指期策略分析（機構級）</p>
+      <div class="report-meta" id="coverMeta"></div>
+      <div class="report-kpi" id="coverKPI"></div>
+    </div>
+
+    <!-- 月別圖表＋明細 -->
+    <div id="reportMonthly"></div>
 
     <h3>交易明細</h3>
     <div class="table">
