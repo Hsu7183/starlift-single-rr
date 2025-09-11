@@ -10,13 +10,13 @@
   <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0"></script>
 
-  <!-- 共用工具（你現有） -->
-  <script defer src="./shared.js?v=report-v1"></script>
+  <!-- 共用工具 -->
+  <script defer src="./shared.js?v=report-v2"></script>
 
   <!-- 本頁腳本 -->
-  <script defer src="./single.js?v=report-v1"></script>
+  <script defer src="./single.js?v=report-v2"></script>
 
-  <!-- 列印用樣式 -->
+  <!-- 列印用樣式（不動你的全站樣式） -->
   <style>
     .rr-wrap.card-panel{padding:12px}
     #rrLines{margin-top:6px}
@@ -26,7 +26,6 @@
     .month-table{width:100%;border-collapse:collapse;margin-top:8px}
     .month-table th,.month-table td{padding:6px 8px;border-bottom:1px solid var(--line,#e5e7eb);white-space:nowrap;text-align:center;font:13px ui-monospace,Consolas,Menlo,monospace}
     .month-table thead th{background:#fafafa}
-    .kchip{border:1px solid var(--line,#e5e7eb);border-radius:10px;padding:6px 10px;background:#fafafa;font:14px ui-monospace,Consolas,Menlo,monospace;margin-right:6px}
 
     @media print {
       body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; background:#fff; }
@@ -86,7 +85,7 @@
       </table>
     </div>
 
-    <!-- 月別章節（自動生成；放在交易明細下面） -->
+    <!-- 月別章節（放在交易明細下面） -->
     <h3>月別報告</h3>
     <div id="monthlyRoot"></div>
 
