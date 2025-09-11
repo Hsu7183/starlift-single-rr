@@ -1,11 +1,11 @@
-/* 主圖（含月份分隔線） + 三行KPI + Risk-Return 機構表格（完整六大類） + 全域明細（雙列） + 月別報告（每月一圖＋雙列明細） + PDF */
+/* 主圖（含月份分隔線） + 三行KPI + Risk-Return（六大類完整） + 全域明細（雙列） + 月別報告（每月一圖＋雙列明細） + PDF */
 (function(){
   const $ = s => document.querySelector(s);
   const DEFAULT_NAV = Number(new URLSearchParams(location.search).get("nav")) || 1_000_000;
   const DEFAULT_RF  = Number(new URLSearchParams(location.search).get("rf"))  || 0.00;
-  console.log("[Report] single.js report-v6");
+  console.log("[Report] single.js report-v7");
 
-  // ========= 通用工具 =========
+  // ========= 共用工具 =========
   const sum=a=>a.reduce((x,y)=>x+y,0);
   const avg=a=>a.length? sum(a)/a.length : 0;
   const stdev=a=>{ if(a.length<2) return 0; const m=avg(a); return Math.sqrt(a.reduce((s,v)=>s+(v-m)*(v-m),0)/(a.length-1)); };
@@ -27,34 +27,34 @@
 
   // ========= 主圖（含月份分隔線） =========
   let chart;
-  function drawChart(ser, labelsByDate, monthTicks){
+  function drawChart(ser, labelsByIndex, monthLabels){
     if(chart) chart.destroy();
     const {total,slipTotal,long,longSlip,short,shortSlip} = ser;
 
     chart = new Chart($("#chart"),{
       type:"line",
-      data:{labels:labelsByDate,datasets:[
+      data:{labels:labelsByIndex,datasets:[
         {data:slipTotal,stepped:true,borderColor:"#111",borderWidth:3,pointRadius:0,label:"含滑價"},
         {data:total,stepped:true,borderColor:"#999",borderWidth:2,pointRadius:0,borderDash:[6,4],label:"未含滑價"},
         {data:longSlip,stepped:true,borderColor:"#d32",borderWidth:2.5,pointRadius:0,label:"多(滑)"},
         {data:long,stepped:true,borderColor:"#f99",borderWidth:1.5,pointRadius:0,borderDash:[6,4],label:"多"},
         {data:shortSlip,stepped:true,borderColor:"#2a3",borderWidth:2.5,pointRadius:0,label:"空(滑)"},
-        {data:short,stepped:true,borderColor:"#9d9",borderWidth:1.5,pointRadius:0,borderDash:[6,4],label:"空"},
+        {data:short,stepped:true,borderColor:"#9d9",borderWidth:1.5,pointRadius:0,borderDash:[6,4],label:"空"}
       ]},
       options:{
         responsive:true,maintainAspectRatio:false,
         plugins:{legend:{labels:{color:"#333",font:{size:12,weight:"bold"}}}},
         scales:{
           y:{ticks:{color:"#222",font:{size:12,weight:"bold"},callback:v=>fmtMoney(v)}},
-          x:{ticks:{color:"#222",font:{size:11},autoSkip:true,maxRotation:0,callback:(v,i)=>monthTicks[i]||""},
+          x:{ticks:{color:"#222",font:{size:11},autoSkip:true,maxRotation:0,callback:(v,i)=>monthLabels[i]||""},
              grid:{display:true,drawTicks:false,
-               color:(ctx)=>{ return monthTicks[ctx.index] ? "#d1d5db" : "#f3f4f6"; }}}
+               color:(ctx)=> monthLabels[ctx.index] ? "#d1d5db" : "#f3f4f6"}}
         }
       }
     });
   }
 
-  // ========= 三行 KPI（沿用你舊邏輯） =========
+  // ========= 三行 KPI（沿用你原本） =========
   function buildKpiLines(statAll, statL, statS){
     const { fmtMoney, pct } = window.SHARED;
     const mk = s => ([
@@ -96,22 +96,19 @@
     });
   }
 
-  // ========= KPI 計算（含滑價；同你穩定版） =========
+  // ========= KPI 計算（含滑價） =========
   function computeRR(dailySlip,trades,nav=DEFAULT_NAV,rf=DEFAULT_RF){
-    // 權益曲線、回撤序列
     let cum=0; const eq=dailySlip.map(d=>({date:d.date,nav:(cum+=d.pnl,nav+cum)}));
     let peak=-Infinity,maxDD=0,curTUW=0,maxTUW=0,inDraw=false,rec=0,curRec=0;
     const ddPct=[];
     for (const p of eq){
-      if (p.nav>peak){ peak=p.nav; if(inDraw){rec=Math.max(rec,curRec);inDraw=false;} curTUW=0; curRec=0; ddPct.push(0); }
+      if (p.nav>peak){ peak=p.nav; if(inDraw){ rec=Math.max(rec,curRec); inDraw=false; } curTUW=0; curRec=0; ddPct.push(0); }
       else { const dd=peak-p.nav; if(dd>maxDD){maxDD=dd;inDraw=true;curRec=0;} curTUW++; curRec++; maxTUW=Math.max(maxTUW,curTUW); ddPct.push(-(dd/peak)); }
     }
-    // 報酬序列
     const dailyRet=dailySlip.map(d=>d.pnl/nav);
     const mean=avg(dailyRet), vol=stdev(dailyRet)*Math.sqrt(252);
     const downside=stdev(dailyRet.filter(x=>x<(rf/252)))*Math.sqrt(252);
 
-    // 年化
     const start=dailySlip[0]?.date, end=dailySlip[dailySlip.length-1]?.date;
     const dayCnt=start&&end? daysBetween(start,end) : 252;
     const years=Math.max(dayCnt/365,1/365);
@@ -119,18 +116,15 @@
     const cagr=Math.pow((nav+totalPnL)/nav,1/years)-1;
     const annRet=mean*252;
 
-    // 風險調整
     const sharpe=vol?((annRet-DEFAULT_RF)/vol):0;
     const sortino=downside?((annRet-DEFAULT_RF)/downside):0;
     const MAR=maxDD? cagr/(maxDD/nav):0;
 
-    // VaR / ES
     const q=(arr,p)=>{ const a=[...arr].sort((x,y)=>x-y); const i=Math.floor((1-p)*a.length); return a[Math.max(0,Math.min(i,a.length-1))]||0; };
     const histES=(arr,p)=>{ const a=[...arr].sort((x,y)=>x-y); const cut=Math.floor((1-p)*a.length); const sl=a.slice(0,cut); return sl.length? (sl.reduce((x,y)=>x+y,0)/sl.length) : 0; };
     const var95=Math.abs(q(dailyRet,0.95))*nav, var99=Math.abs(q(dailyRet,0.99))*nav;
     const es95=Math.abs(histES(dailyRet,0.95))*nav, es99=Math.abs(histES(dailyRet,0.99))*nav;
 
-    // 交易層
     const wins=trades.filter(t=>t.gainSlip>0), losses=trades.filter(t=>t.gainSlip<0);
     const winPnL=wins.reduce((a,b)=>a+b.gainSlip,0), losePnL=losses.reduce((a,b)=>a+b.gainSlip,0);
     const PF=Math.abs(losePnL)? winPnL/Math.abs(losePnL) : 0;
@@ -138,50 +132,36 @@
     const payoff=avgLoss? avgWin/avgLoss : 0, winRate=trades.length? (wins.length/trades.length*100) : 0;
     const expectancy=trades.length? (totalPnL/trades.length) : 0;
 
-    // 連勝/連敗、單筆極值、持倉、頻率
     let maxWS=0,maxLS=0,curW=0,curL=0;
     for (const t of trades){
       if (t.gainSlip>0){ curW++; maxWS=Math.max(maxWS,curW); curL=0; }
       else if (t.gainSlip<0){ curL++; maxLS=Math.max(maxLS,curL); curW=0; }
       else { curW=0; curL=0; }
     }
-    const maxDailyLoss=Math.abs(Math.min(0, ...dailySlip.map(d=>d.pnl)));
-    const maxDailyGain=Math.max(0, ...dailySlip.map(d=>d.pnl), 0);
-    const maxTradeLoss=Math.abs(Math.min(0, ...trades.map(t=>t.gainSlip)));
-    const maxTradeGain=Math.max(0, ...trades.map(t=>t.gainSlip), 0);
+    const maxDailyLoss=Math.abs(Math.min(0,...dailySlip.map(d=>d.pnl)));
+    const maxDailyGain=Math.max(0,...dailySlip.map(d=>d.pnl),0);
+    const maxTradeLoss=Math.abs(Math.min(0,...trades.map(t=>t.gainSlip)));
+    const maxTradeGain=Math.max(0,...trades.map(t=>t.gainSlip),0);
     const holdMinsArr=trades.map(t=>tsDiffMin(t.pos.tsIn,t.tsOut)).filter(Number.isFinite);
     const avgHoldingMins=holdMinsArr.length? avg(holdMinsArr) : 0;
     const months=Math.max(1, monthsBetween(start,end));
     const tradesPerMonth=trades.length/months;
 
-    // 進階（Ulcer/AvgDD/MedDD/Pain/Burke/RecoveryFactor/Skew/Kurt）
-    const ulcer=Math.sqrt(mean0(ddPct.map(x=>x*x)));                // 以比例
+    const ulcer=Math.sqrt(mean0(ddPct.map(x=>x*x)));
     const pain = ulcer>0 ? (annRet/ulcer) : 0;
     const burke=pain;
     const recFactor=maxDD? (totalPnL/Math.abs(maxDD)) : 0;
-    const skewKurt = (function(x){
-      if(!x.length) return {skew:0,kurt:0};
-      const m=avg(x), n=x.length; let m2=0,m3=0,m4=0;
-      for(const v of x){ const d=v-m; const d2=d*d; m2+=d2; m3+=d2*d; m4+=d2*d2; }
-      m2/=n; m3/=n; m4/=n; return {skew: m2>0? (m3/Math.pow(m2,1.5)) : 0, kurt: m2>0? (m4/(m2*m2)) : 0};
-    })(dailyRet);
-
-    // 滾動 Sharpe
+    const skewKurt=(function(x){ if(!x.length) return {skew:0,kurt:0}; const m=avg(x),n=x.length; let m2=0,m3=0,m4=0; for(const v of x){ const d=v-m; const d2=d*d; m2+=d2; m3+=d2*d; m4+=d2*d2; } m2/=n; m3/=n; m4/=n; return {skew:m2>0?(m3/Math.pow(m2,1.5)):0,kurt:m2>0?(m4/(m2*m2)):0}; })(dailyRet);
     const roll=rollingSharpe(dailyRet,126,DEFAULT_RF/252), rollSharpeMed=roll.length? median(roll) : 0;
 
     return {
-      // 一、報酬
       totalPnL, cagr:cagr*100, annRet:annRet*100, expectancy, winRate,
-      // 二、風險
       maxDD, maxTUW, recovery:rec, vol:vol*100, downside:downside*100,
       var95, var99, es95, es99, maxDailyLoss, maxDailyGain, maxTradeLoss, maxTradeGain,
-      ulcer:ulcer*100, avgDD:avg(dailySlip.map(d=>d.pnl<0? -d.pnl:0)), medDD:median(dailySlip.map(d=>d.pnl<0? -d.pnl:0)),
+      ulcer:ulcer*100, avgDD:avg(dailySlip.map(d=>d.pnl<0?-d.pnl:0)), medDD:median(dailySlip.map(d=>d.pnl<0?-d.pnl:0)),
       skew:skewKurt.skew, kurt:skewKurt.kurt,
-      // 三、風險調整
       sharpe, sortino, MAR, PF, payoff, pain, burke, recFactor,
-      // 四、交易結構
       avgWin, avgLoss, maxWS, maxLS, avgHoldingMins, tradesPerMonth,
-      // 五、穩健性
       rollSharpeMed
     };
 
@@ -193,7 +173,7 @@
     }
   }
 
-  // ========= Risk-Return 機構表格（六大類完整） =========
+  // ========= Risk-Return 表格（六大類完整） =========
   function renderRR6Cats(k){
     const wrap=$("#rrLines");
     const money=n=>fmtMoney(n);
@@ -201,21 +181,20 @@
     const row=(a,b,c,d,e)=>`<tr><td>${a}</td><td>${b}</td><td>${c}</td><td>${d}</td><td>${e}</td></tr>`;
     const sec=t=>`<tr class="rr-section-header"><td colspan="5">${t}</td></tr>`;
     const head=`<tr class="rr-subhead"><td>指標</td><td>數值</td><td>說明</td><td>機構評語</td><td>參考區間</td></tr>`;
-    const label = v => v; // 評語已直接給中文
 
     let html="<table class='rr-table'>";
 
-    // 建議優化（依你門檻）
+    // 建議優化
     html+=sec("建議優化指標");
     html+=`<tr class="rr-improve-head"><td>指標</td><td>數值</td><td>建議</td><td>機構評語</td><td>參考區間</td></tr>`;
-    const bads=[];
-    if (k.vol/100 > 0.25) bads.push(row("波動率（Volatility）",pct(k.vol),"建議優化","Improve（優化），偏高，建議降槓桿","—"));
-    if (k.PF   < 1.5 )   bads.push(row("PF（獲利因子）",k.PF.toFixed(2),"建議優化","Improve（優化），偏低","≥1.5"));
-    html+= bads.length? bads.join("") : `<tr class="rr-improve-row"><td colspan="5">（目前無紅色指標）</td></tr>`;
+    const improvs=[];
+    if (k.vol/100>0.25) improvs.push(row("波動率（Volatility）",pct(k.vol),"建議優化","Improve（優化），偏高，建議降槓桿","—"));
+    if (k.PF<1.5)      improvs.push(row("PF（獲利因子）",k.PF.toFixed(2),"建議優化","Improve（優化），偏低","≥1.5"));
+    html+= improvs.length? improvs.join("") : `<tr class="rr-improve-row"><td colspan="5">（目前無紅色指標）</td></tr>`;
 
     // 一、報酬
     html+=sec("一、報酬（Return）")+head;
-    html+=row("總報酬",money(k.totalPnL),"回測累積淨損益（含滑價/稅/費）","Strong（強），報酬為正","—");
+    html+=row("總報酬（Total Return）",money(k.totalPnL),"回測累積淨損益（含滑價/稅/費）","Strong（強），報酬為正","—");
     html+=row("CAGR（年化複利）",pct(k.cagr),"以 NAV 為分母，依實際天數年化","Strong（強），年化穩健","≥15%");
     html+=row("Arithmetic 年化",pct(k.annRet),"日均報酬 × 252","Strong（強），年化優秀","≥25%");
     html+=row("Expectancy（平均每筆）",money(k.expectancy),"每筆平均淨損益（含滑價）","Strong（強），每筆期望為正",">0");
@@ -223,22 +202,22 @@
 
     // 二、風險
     html+=sec("二、風險（Risk）")+head;
-    html+=row("Max Drawdown（最大回撤）","-"+money(k.maxDD),"峰值到谷值最大跌幅（以金額）","Strong（強），控制良好","≤15%NAV");
+    html+=row("Max Drawdown（最大回撤）","-"+money(k.maxDD),"峰值到谷值","Strong（強），控制良好","≤15%NAV");
     html+=row("Time Under Water（水下時間）",k.maxTUW,"在水下的最長天數","Adequate（可接受）","≤120天");
-    html+=row("Recovery Time（回本時間）",k.recovery,"自 MDD 末端至再創新高的天數","Strong（強）","≤45天");
+    html+=row("Recovery Time（回本時間）",k.recovery,"MDD 底到再創高","Strong（強）","≤45天");
     html+=row("Volatility（波動率）",pct(k.vol),"日報酬標準差 × √252",""+(k.vol/100>0.25?"Improve（優化），偏高":"Strong（強）"),"8%~15%");
-    html+=row("Downside Dev（下行波動）",pct(k.downside),"只計下行","Strong（強）","≤10%");
-    html+=row("VaR 95%","-"+money(k.var95),"單日 95% 置信最大虧損（金額）","Adequate（可接受）","≤5%NAV");
+    html+=row("Downside Deviation（下行波動）",pct(k.downside),"只計下行（供 Sortino）","Strong（強）","≤10%");
+    html+=row("VaR 95%","-"+money(k.var95),"單日 95% 最大虧損（金額）","Adequate（可接受）","≤5%NAV");
     html+=row("ES 95%（CVaR）","-"+money(k.es95),"落於 VaR95 之後的平均虧損","Strong（強）","≤2.5%NAV");
-    html+=row("VaR 99%","-"+money(k.var99),"單日 99% 置信最大虧損（金額）","Adequate（可接受）","≤8%NAV");
+    html+=row("VaR 99%","-"+money(k.var99),"單日 99% 最大虧損（金額）","Adequate（可接受）","≤8%NAV");
     html+=row("ES 99%（CVaR）","-"+money(k.es99),"落於 VaR99 之後的平均虧損","Strong（強）","≤3.5%NAV");
-    html+=row("Max Daily Loss（單日最大虧損）","-"+money(k.maxDailyLoss),"樣本期間最糟的一天","Strong（強）","≤4%NAV");
-    html+=row("Max Daily Gain（單日最大獲利）",money(k.maxDailyGain),"樣本期間最佳的一天","Adequate（可接受）","—");
-    html+=row("Max Single Trade Loss（單筆最大虧損）","-"+money(k.maxTradeLoss),"樣本期間最糟的一筆","Adequate（可接受）","—");
-    html+=row("Max Single Trade Gain（單筆最大獲利）",money(k.maxTradeGain),"樣本期間最佳的一筆","Adequate（可接受）","—");
-    html+=row("Ulcer Index（潰瘍指數）",pct(k.ulcer),"回撤平方均值開根（比例）",""+(k.ulcer/100<=10?"Strong（強）":"Adequate"),"≤10%");
-    html+=row("Average Drawdown（平均回撤）","-"+money(k.avgDD),"回撤段落深度平均（以金額）","Adequate（可接受）","≤8%NAV");
-    html+=row("Median Drawdown（中位回撤）","-"+money(k.medDD),"回撤段落深度中位（以金額）","Adequate（可接受）","≤8%NAV");
+    html+=row("Max Daily Loss（單日最大虧損）","-"+money(k.maxDailyLoss),"樣本最糟一天","Strong（強）","≤4%NAV");
+    html+=row("Max Daily Gain（單日最大獲利）",money(k.maxDailyGain),"樣本最佳一天","Adequate（可接受）","—");
+    html+=row("Max Single Trade Loss（單筆最大虧損）","-"+money(k.maxTradeLoss),"樣本最糟一筆","Adequate（可接受）","—");
+    html+=row("Max Single Trade Gain（單筆最大獲利）",money(k.maxTradeGain),"樣本最佳一筆","Adequate（可接受）","—");
+    html+=row("Ulcer Index（潰瘍指數）",pct(k.ulcer),"回撤平方均值開根",""+(k.ulcer<=10?"Strong（強）":"Adequate"),"≤10%");
+    html+=row("Average Drawdown（平均回撤）","-"+money(k.avgDD),"回撤段落平均深度","Adequate（可接受）","≤8%NAV");
+    html+=row("Median Drawdown（中位回撤）","-"+money(k.medDD),"回撤段落中位深度","Adequate（可接受）","≤8%NAV");
     html+=row("Skew（偏度）",k.skew.toFixed(2),">0 右尾較佳",""+(k.skew>0?"Strong（強）":"Adequate"),">0");
     html+=row("Kurtosis（峰度）",k.kurt.toFixed(2),"分布峰度（total）","Adequate（可接受）","≤4");
 
@@ -249,7 +228,7 @@
     html+=row("MAR",k.MAR.toFixed(2),"CAGR ÷ |MDD|（CTA 常用）",""+(k.MAR>=2?"Strong（強）":"Adequate"),"≥2");
     html+=row("PF（獲利因子）",k.PF.toFixed(2),"總獲利 ÷ 總虧損（含成本/滑價）",""+(k.PF>=1.5?"Adequate":"Improve（優化）"),"≥1.5");
     html+=row("Payoff（盈虧比）",k.payoff.toFixed(2),"平均獲利 ÷ 平均虧損",""+(k.payoff>=2?"Strong（強）":"Adequate"),"≥2");
-    html+=row("Pain Ratio", (k.pain??0).toFixed(2),"年化報酬 ÷ Ulcer（近似）","—","≥1.5");
+    html+=row("Pain Ratio",(k.pain??0).toFixed(2),"年化報酬 ÷ Ulcer（近似）","—","≥1.5");
     html+=row("Burke Ratio",(k.burke??0).toFixed(2),"年化報酬 ÷ 回撤平方根（近似）","—","≥2");
     html+=row("Recovery Factor",(k.recFactor??0).toFixed(2),"累積報酬 ÷ |MDD|","—","≥3");
 
@@ -292,7 +271,7 @@
     wrap.innerHTML=html;
   }
 
-  // ========= 月別報告（每月一圖＋雙列明細） =========
+  // ========= 月別報告（每月一圖＋雙列明細；Y 軸千分位、X 軸抽樣） =========
   function buildMonthlyReport(allTrades){
     const dailyMap=new Map();
     for(const t of allTrades){ const d=keyFromTs(t.tsOut); dailyMap.set(d,(dailyMap.get(d)||0)+t.gainSlip); }
@@ -306,6 +285,7 @@
 
     months.forEach(m=>{
       const roc=toROC(m); const mDaily=byM[m]; const mTrades=tByM[m]||[];
+
       let cum=0; const labels=[],vals=[];
       mDaily.forEach(d=>{ cum+=d.pnl; labels.push(d.date.slice(5)); vals.push(cum); });
 
@@ -367,40 +347,26 @@
     const report=window.SHARED.buildReport(parsed.rows);
     if(report.trades.length===0){ alert("沒有交易"); return; }
 
-    // X 軸月份分隔：用出場日標記每月第一天的索引
+    // X 軸月份標籤：用出場日找每月第一筆索引
     const labelsByIndex = report.tsArr.map((_,i)=>i);
-    const monthTicks = new Array(labelsByIndex.length).fill("");
+    const monthLabels = new Array(labelsByIndex.length).fill("");
     (function markMonths(){
       const seen=new Set();
       report.trades.forEach((t,idx)=>{
         const m = keyFromTs(t.tsOut).slice(0,7);
-        if(!seen.has(m)){ seen.add(m); monthTicks[idx] = m.replace(/^\d{4}-/,""); }
+        if(!seen.has(m)){ seen.add(m); monthLabels[idx] = m.replace(/^\d{4}-/,""); }
       });
     })();
 
-    // 主圖
+    // 主圖（含月份分隔）
     drawChart({
       total:report.total, slipTotal:report.slipCum,
       long:report.longCum, longSlip:report.longSlipCum,
       short:report.shortCum, shortSlip:report.shortSlipCum
-    }, labelsByIndex, monthTicks);
+    }, labelsByIndex, monthLabels);
 
     // 三行 KPI
-    const [lineAll,lineL,lineS] = (function(){
-      const { fmtMoney, pct } = window.SHARED;
-      const mk = s => ([
-        ["交易數", String(s.count)], ["勝率", s.winRate.toFixed? s.winRate.toFixed(1)+"%": s.winRate],
-        ["敗率", (100 - (s.winRate||0)).toFixed? (100-(s.winRate||0)).toFixed(1)+"%":"—"],
-        ["單日最大獲利", fmtMoney(s.dayMax)], ["單日最大虧損", fmtMoney(s.dayMin)],
-        ["區間最大獲利", fmtMoney(s.up)], ["區間最大回撤", fmtMoney(s.dd)],
-        ["累積獲利", fmtMoney(s.gain)],
-      ]);
-      const rows=[mk(report.statAll),mk(report.statL),mk(report.statS)];
-      const maxW=rows[0].map((_,i)=>Math.max(...rows.map(r=>r[i][1].length)));
-      const padL=(s,w)=>s.padStart(w," ");
-      const join=(label,cols)=>`${label}： `+cols.map((c,i)=>`${c[0]} ${padL(c[1],maxW[i])}`).join(" ｜ ");
-      return [join("全部（含滑價）",rows[0]),join("多單（含滑價）",rows[1]),join("空單（含滑價）",rows[2])];
-    })();
+    const [lineAll,lineL,lineS]=buildKpiLines(report.statAll, report.statL, report.statS);
     $("#paramChip").textContent = window.SHARED.paramsLabel(parsed.params);
     $("#kpiAll").textContent = lineAll; $("#kpiL").textContent = lineL; $("#kpiS").textContent = lineS;
 
@@ -410,25 +376,23 @@
     const dailySlip=[...dailyMap.entries()].sort((a,b)=>a[0].localeCompare(b[0])).map(([date,pnl])=>({date,pnl}));
 
     // KPI
-    const k = computeRR(dailySlip, report.trades, DEFAULT_NAV, DEFAULT_RF);
-    renderRR6Cats(k);        // 完整六大類
-    renderTable(report);     // 全域雙列
+    const k=computeRR(dailySlip, report.trades, DEFAULT_NAV, DEFAULT_RF);
+    renderRR6Cats(k);       // 六大類
+    renderTable(report);    // 全域雙列
     buildMonthlyReport(report.trades); // 月別
   }
 
   // ========= 事件 =========
-  $("#btn-clip").addEventListener("click",async()=>{
+  $("#btn-clip").addEventListener("click", async ()=>{
     try{ const txt=await navigator.clipboard.readText(); await handleRaw(txt); }
     catch{ alert("無法讀取剪貼簿，請改用『選擇檔案』"); }
   });
-  $("#file").addEventListener("change",async e=>{
+  $("#file").addEventListener("change", async e=>{
     const f=e.target.files[0]; if(!f) return;
     try{ const txt=await window.SHARED.readAsTextAuto(f); await handleRaw(txt); }
     catch(err){ alert(err.message||"讀檔失敗"); }
   });
-  $("#btn-print").addEventListener("click",()=>window.print());
-  $("#btn-build").addEventListener("click",()=>{ alert("月別報告已生成（交易明細下方）。"); });
+  $("#btn-print").addEventListener("click", ()=> window.print());
+  $("#btn-build").addEventListener("click", ()=>{ alert("月別報告已生成（位於交易明細下方）。"); });
 
-  // 暴露必需的內部函式
-  window.renderRR6Cats = renderRR6Cats;
 })();
