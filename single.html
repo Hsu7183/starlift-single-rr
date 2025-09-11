@@ -10,12 +10,13 @@
   <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0"></script>
 
-  <!-- 共用工具 -->
-  <script defer src="./shared.js?v=report-v4"></script>
+  <!-- 共用工具（沿用你現有的 shared.js） -->
+  <script defer src="./shared.js?v=report-v5"></script>
 
   <!-- 本頁腳本 -->
-  <script defer src="./single.js?v=report-v4"></script>
+  <script defer src="./single.js?v=report-v5"></script>
 
+  <!-- 列印用樣式（不動你的全站樣式） -->
   <style>
     .rr-wrap.card-panel{padding:12px}
     #rrLines{margin-top:6px}
@@ -62,12 +63,14 @@
       </div>
     </div>
 
+    <!-- Risk-Return：機構表格 -->
     <h3 id="rrTitle">Risk-Return 指標（風險－報酬指標）</h3>
     <div class="rr-wrap card-panel">
       <div id="rrLines">（載入 TXT 後顯示）</div>
       <div class="rr-hint">※ 指標以「日損益（含滑價）/ NAV」為日報酬；VaR/ES 為歷史模擬法（金額）。</div>
     </div>
 
+    <!-- 交易明細 -->
     <h3>交易明細</h3>
     <div class="table">
       <table id="tradeTable">
@@ -83,6 +86,7 @@
       </table>
     </div>
 
+    <!-- 月別章節（放在交易明細下面） -->
     <h3>月別報告</h3>
     <div id="monthlyRoot"></div>
 
