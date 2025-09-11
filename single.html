@@ -9,13 +9,13 @@
   <!-- 圖表 -->
   <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 
-  <!-- 共用工具（你現有的 shared.js）-->
-  <script defer src="./shared.js?v=report-v6"></script>
+  <!-- 共用工具（你的 shared.js 保持不動） -->
+  <script defer src="./shared.js?v=report-v7"></script>
 
   <!-- 本頁腳本 -->
-  <script defer src="./single.js?v=report-v6"></script>
+  <script defer src="./single.js?v=report-v7"></script>
 
-  <!-- 列印用樣式 -->
+  <!-- 列印用樣式（不動你全站樣式） -->
   <style>
     .rr-wrap.card-panel{padding:12px}
     #rrLines{margin-top:6px}
@@ -26,7 +26,6 @@
     .month-table{width:100%;border-collapse:collapse;margin-top:8px}
     .month-table th,.month-table td{padding:6px 8px;border-bottom:1px solid var(--line,#e5e7eb);white-space:nowrap;text-align:center;font:13px ui-monospace,Consolas,Menlo,monospace}
     .month-table thead th{background:#fafafa}
-    canvas{background:#fff}
 
     @media print {
       body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; background:#fff; }
@@ -51,7 +50,7 @@
       <button id="btn-print" class="btn">匯出 PDF</button>
     </div>
 
-    <!-- 主圖與三行 KPI -->
+    <!-- 主圖 + 三行 KPI -->
     <div class="card-panel">
       <div class="chart-wrap">
         <div class="kpi-box">
@@ -64,14 +63,14 @@
       </div>
     </div>
 
-    <!-- Risk-Return：機構表格 -->
+    <!-- Risk-Return 表格 -->
     <h3 id="rrTitle">Risk-Return 指標（風險－報酬指標）</h3>
     <div class="rr-wrap card-panel">
       <div id="rrLines">（載入 TXT 後顯示）</div>
       <div class="rr-hint">※ 指標以「日損益（含滑價）/ NAV」為日報酬；VaR/ES 為歷史模擬法（金額）。</div>
     </div>
 
-    <!-- 交易明細（全域） -->
+    <!-- 全域交易明細（雙列） -->
     <h3>交易明細</h3>
     <div class="table">
       <table id="tradeTable">
@@ -87,7 +86,7 @@
       </table>
     </div>
 
-    <!-- 月別章節 -->
+    <!-- 月別報告（每月一張圖 + 雙列明細） -->
     <h3>月別報告</h3>
     <div id="monthlyRoot"></div>
 
