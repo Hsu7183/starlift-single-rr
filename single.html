@@ -9,32 +9,33 @@
   <!-- 圖表 -->
   <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 
-  <!-- 共用工具（保持你現有的 shared.js） -->
+  <!-- 共用工具（你的 shared.js 保持不動） -->
   <script defer src="./shared.js?v=report-v8"></script>
 
   <!-- 本頁腳本 -->
   <script defer src="./single.js?v=report-v8"></script>
 
-  <!-- 列印樣式 -->
+  <!-- 列印用樣式（不動你全站樣式） -->
   <style>
-    .rr-wrap.card-panel{padding:12px}
-    #rrLines{margin-top:6px}
-    .report-card{background:#fff;border:1px solid var(--line,#e5e7eb);border-radius:12px;padding:14px;margin:14px 0}
-    .month-header{font-weight:800;margin:6px 0 12px 0}
-    .month-card{page-break-inside:avoid}
-    .month-table{width:100%;border-collapse:collapse;margin-top:8px}
-    .month-table th,.month-table td{padding:6px 8px;border-bottom:1px solid var(--line,#e5e7eb);white-space:nowrap;text-align:center;font:13px ui-monospace,Consolas,Menlo,monospace}
-    .month-table thead th{background:#fafafa}
+    .rr-wrap.card-panel { padding: 12px; }
+    #rrLines { margin-top: 6px; }
+    .report-card { background: #fff; border: 1px solid var(--line,#e5e7eb); border-radius: 12px; padding: 14px; margin: 14px 0; }
+    .month-header { font-weight: 800; margin: 6px 0 12px 0; }
+    .month-card { page-break-inside: avoid; }
+    .month-table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+    .month-table th, .month-table td { padding: 6px 8px; border-bottom: 1px solid var(--line,#e5e7eb); white-space: nowrap; text-align: center; font: 13px ui-monospace,Consolas,Menlo,monospace; }
+    .month-table thead th { background: #fafafa; }
+    canvas { background: #fff; }
 
     @media print {
       body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; background:#fff; }
       .toolbar, .note, #btn-clip, #file, #btn-print, #btn-build { display:none !important; }
-      .page { max-width:100%; margin:0; padding:0; }
-      .card-panel, .table, .rr-wrap, .report-card { box-shadow:none !important; }
-      canvas { page-break-inside:avoid; }
-      .report-card, .rr-wrap, .table { page-break-after:always; }
-      .month-card { page-break-after:always; }
-      @page { size:A4 portrait; margin:12mm; }
+      .page { max-width: 100%; margin: 0; padding: 0; }
+      .card-panel, .table, .rr-wrap, .report-card { box-shadow: none !important; }
+      canvas { page-break-inside: avoid; }
+      .report-card, .rr-wrap, .table { page-break-after: always; }
+      .month-card { page-break-after: always; }
+      @page { size: A4 portrait; margin: 12mm; }
     }
   </style>
 </head>
@@ -62,7 +63,7 @@
       </div>
     </div>
 
-    <!-- Risk-Return：機構表格 -->
+    <!-- Risk-Return 表格 -->
     <h3 id="rrTitle">Risk-Return 指標（風險－報酬指標）</h3>
     <div class="rr-wrap card-panel">
       <div id="rrLines">（載入 TXT 後顯示）</div>
@@ -85,7 +86,7 @@
       </table>
     </div>
 
-    <!-- 月別報告（每月一圖＋雙列明細） -->
+    <!-- 月別報告（每月一張圖 + 該月雙列明細） -->
     <h3>月別報告</h3>
     <div id="monthlyRoot"></div>
 
