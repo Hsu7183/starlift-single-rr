@@ -4,22 +4,44 @@
   <meta charset="utf-8" />
   <title>三劍客台指期策略分析｜首頁</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <link rel="stylesheet" href="./style.css?v=20250815" />
+  <link rel="stylesheet" href="./style.css" />
+  <style>
+    /* 簡潔首頁樣式，不動你的全站 style.css */
+    .home-wrap{max-width:980px;margin:48px auto;padding:0 16px}
+    h1{font-size:28px;margin:0 0 8px}
+    .sub{margin:0 0 20px;color:#6b7280}
+    .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
+    .card{display:block;background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:18px;
+          text-decoration:none;color:#111;box-shadow:0 1px 2px rgba(0,0,0,.04)}
+    .card:hover{border-color:#2563eb}
+    .card h3{margin:0 0 6px;font-size:18px}
+    .card p{margin:0;color:#6b7280;line-height:1.6}
+    .foot{margin-top:26px;color:#9ca3af;font-size:12px}
+  </style>
 </head>
-<body class="home">
+<body>
   <div class="home-wrap">
     <h1>三劍客台指期策略分析</h1>
     <p class="sub">請選擇模式</p>
-    <div class="home-cards">
+
+    <div class="cards">
       <a class="card" href="./single.html">
-        <div class="card-title">單檔分析</div>
-        <div class="card-desc">貼上或載入 1 份 TXT，查看收益曲線、KPI 與交易明細</div>
+        <h3>單檔分析（機構級）</h3>
+        <p>主圖、Risk-Return 六大類、交易明細、列印 PDF</p>
       </a>
+
       <a class="card" href="./multi.html">
-        <div class="card-title">批量分析</div>
-        <div class="card-desc">一次載入多份 TXT，彙總成表，點選任一列看圖與明細</div>
+        <h3>多檔分析</h3>
+        <p>一次載入多份 TXT，彙總 KPI 並可切換個別檔案</p>
+      </a>
+
+      <a class="card" href="./monthly.html">
+        <h3>分月報告</h3>
+        <p>每月一張圖＋該月交易明細（適合列印與追蹤）</p>
       </a>
     </div>
+
+    <p class="foot">提示：若連結的頁面尚未建立，先建立空檔（例如 monthly.html）再補功能。</p>
   </div>
 </body>
 </html>
