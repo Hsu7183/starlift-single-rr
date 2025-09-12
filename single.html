@@ -6,48 +6,34 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <link rel="stylesheet" href="./style.css" />
 
-  <!-- 圖表 -->
+  <!-- 圖表（主圖與月別用） -->
   <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 
-  <!-- 共用工具（你的 shared.js；保持不動） -->
-  <script defer src="./shared.js?v=report-final"></script>
+  <!-- 你的共用工具（保持不動） -->
+  <script defer src="./shared.js?v=stable"></script>
 
-  <!-- 本頁腳本 -->
-  <script defer src="./single.js?v=report-final"></script>
+  <!-- 機構級頁面的 JS（保持你現有檔名；後續我們再逐步調整內容） -->
+  <script defer src="./single.js?v=stable"></script>
 
-  <!-- 列印用樣式（不動你全站樣式） -->
   <style>
-    .rr-wrap.card-panel{padding:12px}
-    #rrLines{margin-top:6px}
-
-    .report-card{background:#fff;border:1px solid var(--line,#e5e7eb);border-radius:12px;padding:14px;margin:14px 0}
-    .month-header{font-weight:800;margin:6px 0 12px 0}
-    .month-card{page-break-inside:avoid}
-    .month-table{width:100%;border-collapse:collapse;margin-top:8px}
-    .month-table th,.month-table td{padding:6px 8px;border-bottom:1px solid var(--line,#e5e7eb);white-space:nowrap;text-align:center;font:13px ui-monospace,Consolas,Menlo,monospace}
-    .month-table thead th{background:#fafafa}
-    canvas{background:#fff}
-
-    @media print {
-      body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; background:#fff; }
-      .toolbar, .note, #btn-clip, #file, #btn-print, #btn-build { display:none !important; }
-      .page { max-width:100%; margin:0; padding:0; }
-      .card-panel, .table, .rr-wrap, .report-card { box-shadow:none !important; }
-      canvas { page-break-inside:avoid; }
-      .report-card, .rr-wrap, .table { page-break-after:always; }
-      .month-card { page-break-after:always; }
-      @page { size:A4 portrait; margin:12mm; }
-    }
+    /* 只加一點點頁首返回按鈕樣式，不動全站樣式 */
+    .topbar{display:flex;justify-content:space-between;align-items:center;margin:8px 0 12px}
+    .topbar .back a{padding:6px 10px;border:1px solid #e5e7eb;border-radius:8px;background:#fff;text-decoration:none;color:#111}
   </style>
 </head>
 <body>
   <div class="page">
-    <h1 class="page-title">三劍客台指期策略分析（機構級）</h1>
 
+    <!-- 返回首頁 -->
+    <div class="topbar">
+      <h1 class="page-title" style="margin:0">三劍客台指期策略分析（機構級）</h1>
+      <div class="back"><a href="./index.html">回首頁</a></div>
+    </div>
+
+    <!-- 工具列 -->
     <div class="toolbar">
       <button id="btn-clip" class="btn">貼上內容</button>
       <label class="btn"><input id="file" type="file" accept=".txt,.TF" hidden>選擇檔案</label>
-      <button id="btn-build" class="btn">生成報告</button>
       <button id="btn-print" class="btn">匯出 PDF</button>
     </div>
 
@@ -64,14 +50,14 @@
       </div>
     </div>
 
-    <!-- Risk-Return 表格 -->
-    <h3 id="rrTitle">Risk-Return 指標（風險－報酬指標）</h3>
+    <!-- Risk-Return 機構級表格 -->
+    <h3>Risk-Return 指標（風險－報酬指標）</h3>
     <div class="rr-wrap card-panel">
       <div id="rrLines">（載入 TXT 後顯示）</div>
       <div class="rr-hint">※ 指標以「日損益（含滑價）/ NAV」為日報酬；VaR/ES 為歷史模擬法（金額）。</div>
     </div>
 
-    <!-- 全域交易明細（雙列） -->
+    <!-- 交易明細（雙列） -->
     <h3>交易明細</h3>
     <div class="table">
       <table id="tradeTable">
@@ -87,11 +73,14 @@
       </table>
     </div>
 
-    <!-- 月別報告（每月一張圖 + 該月雙列明細） -->
-    <h3>月別報告</h3>
-    <div id="monthlyRoot"></div>
-
-    <p class="note">提示：第一行若為參數會自動辨識；顯示參數僅取整數。</p>
   </div>
+
+  <script>
+    // 匯出 PDF（維持簡單，先確定頁面架構）
+    document.addEventListener('DOMContentLoaded', function(){
+      const btn = document.getElementById('btn-print');
+      if (btn) btn.addEventListener('click', () => window.print());
+    });
+  </script>
 </body>
 </html>
