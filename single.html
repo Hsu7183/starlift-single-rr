@@ -9,17 +9,16 @@
   <!-- 圖表 -->
   <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 
-  <!-- 共用工具（你的 shared.js 保持不動） -->
-  <script defer src="./shared.js?v=report-v7"></script>
+  <!-- 共用工具（保持你現有的 shared.js） -->
+  <script defer src="./shared.js?v=report-v8"></script>
 
   <!-- 本頁腳本 -->
-  <script defer src="./single.js?v=report-v7"></script>
+  <script defer src="./single.js?v=report-v8"></script>
 
-  <!-- 列印用樣式（不動你全站樣式） -->
+  <!-- 列印樣式 -->
   <style>
     .rr-wrap.card-panel{padding:12px}
     #rrLines{margin-top:6px}
-
     .report-card{background:#fff;border:1px solid var(--line,#e5e7eb);border-radius:12px;padding:14px;margin:14px 0}
     .month-header{font-weight:800;margin:6px 0 12px 0}
     .month-card{page-break-inside:avoid}
@@ -63,7 +62,7 @@
       </div>
     </div>
 
-    <!-- Risk-Return 表格 -->
+    <!-- Risk-Return：機構表格 -->
     <h3 id="rrTitle">Risk-Return 指標（風險－報酬指標）</h3>
     <div class="rr-wrap card-panel">
       <div id="rrLines">（載入 TXT 後顯示）</div>
@@ -86,7 +85,7 @@
       </table>
     </div>
 
-    <!-- 月別報告（每月一張圖 + 雙列明細） -->
+    <!-- 月別報告（每月一圖＋雙列明細） -->
     <h3>月別報告</h3>
     <div id="monthlyRoot"></div>
 
