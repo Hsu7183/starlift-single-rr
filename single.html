@@ -2,85 +2,58 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="utf-8" />
-  <title>三劍客台指期策略分析（機構級）</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <link rel="stylesheet" href="./style.css" />
-
-  <!-- 圖表（主圖與月別用） -->
-  <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-
-  <!-- 你的共用工具（保持不動） -->
-  <script defer src="./shared.js?v=stable"></script>
-
-  <!-- 機構級頁面的 JS（保持你現有檔名；後續我們再逐步調整內容） -->
-  <script defer src="./single.js?v=stable"></script>
-
+  <title>單檔分析（機構級）</title>
   <style>
-    /* 只加一點點頁首返回按鈕樣式，不動全站樣式 */
-    .topbar{display:flex;justify-content:space-between;align-items:center;margin:8px 0 12px}
-    .topbar .back a{padding:6px 10px;border:1px solid #e5e7eb;border-radius:8px;background:#fff;text-decoration:none;color:#111}
+    body{font-family:ui-sans-serif,system-ui;-webkit-font-smoothing:antialiased;margin:0;padding:16px;background:#f7f7fb}
+    .wrap{max-width:1200px;margin:0 auto}
+    .row{display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+    .chip{display:inline-block;background:#eef;padding:6px 10px;border-radius:999px;font-size:12px}
+    .card{background:#fff;border:1px solid #e5e7eb;border-radius:12px;box-shadow:0 2px 10px rgba(0,0,0,.03);padding:12px}
+    #chartBox{height:360px}
+    table{width:100%}
+    .back-link{margin-bottom:12px;display:inline-block}
   </style>
+  <!-- 依賴：Chart 與你的共享工具集（請確保 shared.js 內含 window.SHARED） -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="shared.js?v=full-table-v5"></script>
 </head>
 <body>
-  <div class="page">
+  <div class="wrap">
+    <a class="back-link" href="index.html">← 返回首頁</a>
+    <h1>單檔分析（機構級）</h1>
 
-    <!-- 返回首頁 -->
-    <div class="topbar">
-      <h1 class="page-title" style="margin:0">三劍客台指期策略分析（機構級）</h1>
-      <div class="back"><a href="./index.html">回首頁</a></div>
-    </div>
-
-    <!-- 工具列 -->
-    <div class="toolbar">
-      <button id="btn-clip" class="btn">貼上內容</button>
-      <label class="btn"><input id="file" type="file" accept=".txt,.TF" hidden>選擇檔案</label>
-      <button id="btn-print" class="btn">匯出 PDF</button>
-    </div>
-
-    <!-- 主圖 + 三行 KPI -->
-    <div class="card-panel">
-      <div class="chart-wrap">
-        <div class="kpi-box">
-          <div><span class="tag">參數</span><span id="paramChip">尚未載入</span></div>
-          <pre id="kpiAll" class="kpi-pre">—</pre>
-          <pre id="kpiL"   class="kpi-pre">—</pre>
-          <pre id="kpiS"   class="kpi-pre">—</pre>
-        </div>
-        <canvas id="chart"></canvas>
+    <!-- 控制列 -->
+    <div class="row card">
+      <div>
+        <button id="btn-clip">從剪貼簿貼上 TXT</button>
+        <input id="file" type="file" accept=".txt" />
       </div>
+      <div class="chip">參數：<span id="paramChip">—</span></div>
     </div>
 
-    <!-- Risk-Return 機構級表格 -->
-    <h3>Risk-Return 指標（風險－報酬指標）</h3>
-    <div class="rr-wrap card-panel">
-      <div id="rrLines">（載入 TXT 後顯示）</div>
-      <div class="rr-hint">※ 指標以「日損益（含滑價）/ NAV」為日報酬；VaR/ES 為歷史模擬法（金額）。</div>
+    <!-- 6 線圖 -->
+    <div id="chartBox" class="card"><canvas id="chart"></canvas></div>
+
+    <!-- 三行 KPI -->
+    <div class="card">
+      <div id="kpiAll">全部（含滑價）：—</div>
+      <div id="kpiL">多單（含滑價）：—</div>
+      <div id="kpiS">空單（含滑價）：—</div>
     </div>
 
-    <!-- 交易明細（雙列） -->
-    <h3>交易明細</h3>
-    <div class="table">
+    <!-- Risk-Return 表（含建議優化指標） -->
+    <div id="rrLines" class="card"></div>
+
+    <!-- 交易明細表 -->
+    <div class="card">
       <table id="tradeTable">
-        <thead>
-          <tr>
-            <th>筆數</th><th>進場時間</th><th>進場價</th><th>類型</th>
-            <th>點數</th><th>手續費</th><th>期交稅</th>
-            <th>獲利</th><th>累積獲利</th>
-            <th>滑價獲利</th><th>累積滑價獲利</th>
-          </tr>
-        </thead>
         <tbody></tbody>
       </table>
     </div>
-
   </div>
 
-  <script>
-    // 匯出 PDF（維持簡單，先確定頁面架構）
-    document.addEventListener('DOMContentLoaded', function(){
-      const btn = document.getElementById('btn-print');
-      if (btn) btn.addEventListener('click', () => window.print());
-    });
-  </script>
+  <!-- 主檔（帶版本號） -->
+  <script src="single.js?v=full-table-v5"></script>
 </body>
 </html>
