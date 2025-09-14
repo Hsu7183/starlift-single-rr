@@ -1,29 +1,46 @@
-/* 6 線圖 + KPI表格化 + Risk-Return（五欄）+ 交易明細表頭 */
+/* 6 線圖 + KPI合併表 + Risk-Return（五欄）+ 交易明細表頭與對齊 + 黑線(含滑價) Max/Min/Last 標註 */
 (function () {
   const $ = s => document.querySelector(s);
   const DEFAULT_NAV = Number(new URLSearchParams(location.search).get("nav")) || 1_000_000;
   const DEFAULT_RF  = Number(new URLSearchParams(location.search).get("rf"))  || 0.00;
-  console.log("[RR] single.js version full-table-v6");
+  console.log("[RR] single.js version full-table-v7");
 
   // ---------- 樣式（只注入一次） ----------
   (function injectStyle(){
     if (document.getElementById("rr-style")) return;
     const css = `
+      /* 基礎 */
       .p-red{color:#ef4444;font-weight:700}
       .p-green{color:#10b981;font-weight:700}
+      .num{text-align:right}
       .rr-good-row td{font-weight:800;color:#111}
       .rr-bad-row  td{font-weight:800;color:#ef4444}
       .rr-table{width:100%;border-collapse:collapse;background:#fff}
-      .rr-table th,.rr-table td{padding:8px 10px;border-bottom:1px solid var(--line,#e5e7eb);white-space:nowrap;text-align:left;font:14px/1.8 ui-monospace,Consolas,Menlo,monospace}
+      .rr-table th,.rr-table td{
+        padding:8px 10px;border-bottom:1px solid var(--line,#e5e7eb);
+        white-space:nowrap;text-align:left;
+        font:14px/1.8 ui-monospace,Consolas,Menlo,monospace
+      }
       .rr-section-header td{background:#f6f7fb;font-weight:800;border-top:1px solid var(--line,#e5e7eb)}
       .rr-subhead td{background:#fafafa;font-weight:700}
       .rr-tier{opacity:.7;font-weight:600}
+
       /* 建議優化區塊 */
       .rr-improve-title td{background:#fff1f2;border-top:2px solid #fecdd3;border-bottom:1px solid #fecdd3;font-weight:800;color:#be123c}
       .rr-improve-head td{background:#ffe4e6;color:#be123c;font-weight:700}
       .rr-improve-row td{background:#fff5f5;color:#b91c1c}
-      /* KPI 區塊外框 */
-      .kpi-card{padding:0;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden}
+
+      /* KPI 合併表（整欄底色） */
+      .kpi-combined .col-all  {background:#fff}
+      .kpi-combined .col-long {background:#fff1f2}
+      .kpi-combined .col-short{background:#ecfdf5}
+
+      /* 交易明細表：右對齊欄位 */
+      #tradeTable td.num{ text-align:right }
+      #tradeTable thead td{ position:sticky; top:0; background:#fafafa; z-index:1 }
+
+      /* 放大圖表區塊高度（覆蓋 single.html 的預設） */
+      #chartBox{height:460px}
     `;
     const style = document.createElement("style");
     style.id = "rr-style"; style.textContent = css;
@@ -32,13 +49,75 @@
 
   let chart;
 
-  // ---------- 圖表 ----------
+  // 工具：格式化
+  const fmtComma = n => (Number(n)||0).toLocaleString("zh-TW");
+  const tsToDate = ts => {
+    const s = String(ts||"");
+    const y = s.slice(0,4), m = s.slice(4,6), d = s.slice(6,8);
+    if (y && m && d) return `${y}/${Number(m)}/${Number(d)}`;
+    return s; // fallback
+  };
+
+  // ---------- 圖表（加 Max/Min/Last 標註） ----------
   function drawChart(ser) {
     if (chart) chart.destroy();
     const { tsArr, total, slipTotal, long, longSlip, short, shortSlip } = ser;
     const labels = tsArr.map((_, i) => i);
     const mkSolid=(data,col,w)=>({data,stepped:true,borderColor:col,borderWidth:w,pointRadius:0});
     const mkDash =(data,col,w)=>({data,stepped:true,borderColor:col,borderWidth:w,pointRadius:0,borderDash:[6,4]});
+
+    // 計算黑線標註（含滑價）
+    const arr = slipTotal || [];
+    const idxLast = Math.max(0, arr.length-1);
+    const idxMax  = arr.reduce((imax, v, i)=> v>(arr[imax]??-Infinity)? i:imax, 0);
+    const idxMin  = arr.reduce((imin, v, i)=> v<(arr[imin]?? Infinity)? i:imin, 0);
+    const annos = [
+      {i:idxMax,  val:arr[idxMax],  label: `${fmtComma(Math.round(arr[idxMax]))}(${tsToDate(tsArr[idxMax])})`, align:"top"},
+      {i:idxMin,  val:arr[idxMin],  label: `${fmtComma(Math.round(arr[idxMin]))}(${tsToDate(tsArr[idxMin])})`, align:"bottom"},
+      {i:idxLast, val:arr[idxLast], label: `${fmtComma(Math.round(arr[idxLast]))}(${tsToDate(tsArr[idxLast])})`, align:"left"},
+    ];
+
+    // 自訂插件：在圖上畫標註框
+    const annoPlugin = {
+      id:"rr-anno",
+      afterDatasetsDraw(c){
+        const {ctx, scales:{x,y}} = c;
+        ctx.save();
+        ctx.font = "12px ui-sans-serif, system-ui";
+        ctx.textBaseline = "middle";
+        ctx.strokeStyle = "#111";
+        ctx.lineWidth = 1;
+
+        annos.forEach(a=>{
+          if (!Number.isFinite(a.val)) return;
+          const px = x.getPixelForValue(a.i);
+          const py = y.getPixelForValue(a.val);
+          const text = a.label;
+          const pad = 6, h = 20;
+          const w = ctx.measureText(text).width + pad*2;
+
+          // 對齊偏移
+          let dx = 8, dy = 0;
+          if (a.align === "top")    dy = -16;
+          if (a.align === "bottom") dy = 16;
+          if (a.align === "left")   dx = 8;
+
+          const bx = px + dx;
+          const by = py + dy - h/2;
+
+          // 白底邊框
+          ctx.fillStyle = "rgba(255,255,255,0.95)";
+          ctx.beginPath(); roundRect(ctx, bx, by, w, h, 6); ctx.fill();
+          ctx.strokeStyle = "#111"; ctx.stroke();
+
+          // 文字
+          ctx.fillStyle = "#111";
+          ctx.fillText(text, bx + pad, by + h/2);
+        });
+        ctx.restore();
+      }
+    };
+
     chart = new Chart($("#chart"), {
       type:"line",
       data:{labels,datasets:[
@@ -46,63 +125,76 @@
         mkSolid(longSlip,"#d32f2f",3),   mkDash(long,"#ef9a9a",2),
         mkSolid(shortSlip,"#2e7d32",3),  mkDash(short,"#a5d6a7",2)
       ]},
-      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}}}
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}}},
+      plugins:[annoPlugin]
     });
   }
 
-  // ---------- KPI（表格化；三塊：全部/多/空） ----------
-  function renderKpiTables(statAll, statL, statS) {
-    const { fmtMoney, pct } = window.SHARED;
-    const mkRows = s => ([
-      ["交易數", String(s.count)],
-      ["勝率", pct(s.winRate)],
-      ["敗率", pct(s.loseRate)],
-      ["單日最大獲利", fmtMoney(s.dayMax)],
-      ["單日最大虧損", fmtMoney(s.dayMin)],
-      ["區間最大獲利", fmtMoney(s.up)],
-      ["區間最大回撤", fmtMoney(s.dd)],
-      ["累積獲利", fmtMoney(s.gain)],
-    ]);
-
-    const sectionTable = (title, rows) => {
-      const wrap = document.createElement("div");
-      wrap.className = "kpi-card rr-table";
-      const tbl = document.createElement("table");
-      tbl.className = "rr-table";
-      const tb = document.createElement("tbody");
-
-      // 小節標題 + 欄名（指標 / 數值）
-      const head = document.createElement("tr");
-      head.className = "rr-section-header";
-      head.innerHTML = `<td colspan="2">${title}</td>`;
-      const sub = document.createElement("tr");
-      sub.className = "rr-subhead";
-      sub.innerHTML = `<td>指標</td><td>數值</td>`;
-      tb.appendChild(head);
-      tb.appendChild(sub);
-
-      rows.forEach(([k,v])=>{
-        const tr=document.createElement("tr");
-        tr.innerHTML = `<td>${k}</td><td>${v}</td>`;
-        tb.appendChild(tr);
-      });
-
-      tbl.appendChild(tb);
-      wrap.appendChild(tbl);
-      return wrap;
-    };
-
-    // 依你的 single.html：#kpiAll / #kpiL / #kpiS
-    $("#kpiAll").innerHTML = "";
-    $("#kpiL").innerHTML   = "";
-    $("#kpiS").innerHTML   = "";
-
-    $("#kpiAll").appendChild(sectionTable("全部（含滑價）", mkRows(statAll)));
-    $("#kpiL").appendChild(sectionTable("多單（含滑價）", mkRows(statL)));
-    $("#kpiS").appendChild(sectionTable("空單（含滑價）", mkRows(statS)));
+  // 畫圓角矩形
+  function roundRect(ctx, x, y, w, h, r){
+    const rr = Math.min(r, w/2, h/2);
+    ctx.moveTo(x+rr, y);
+    ctx.arcTo(x+w, y,   x+w, y+h, rr);
+    ctx.arcTo(x+w, y+h, x,   y+h, rr);
+    ctx.arcTo(x,   y+h, x,   y,   rr);
+    ctx.arcTo(x,   y,   x+w, y,   rr);
+    ctx.closePath();
   }
 
-  // ---------- 交易明細（加表頭：理論/實際（含滑價）等） ----------
+  // ---------- KPI（合併為單一表格：全部/多/空 三欄） ----------
+  function renderKpiCombined(statAll, statL, statS) {
+    const { fmtMoney, pct } = window.SHARED;
+    const mk = s => ({
+      "交易數": String(s.count),
+      "勝率": pct(s.winRate),
+      "敗率": pct(s.loseRate),
+      "單日最大獲利": fmtMoney(s.dayMax),
+      "單日最大虧損": fmtMoney(s.dayMin),
+      "區間最大獲利": fmtMoney(s.up),
+      "區間最大回撤": fmtMoney(s.dd),
+      "累積獲利": fmtMoney(s.gain),
+    });
+    const A = mk(statAll), L = mk(statL), S = mk(statS);
+    const keys = Object.keys(A);
+
+    const host = $("#kpiAll");     // 只用這一格放合併表
+    const kill = id => { const el=$(id); if(el) el.innerHTML=""; };
+    kill("#kpiL"); kill("#kpiS");
+    host.innerHTML = "";
+
+    const tbl = document.createElement("table");
+    tbl.className = "rr-table kpi-combined";
+    const tb = document.createElement("tbody");
+
+    // 小節標題
+    const h = document.createElement("tr");
+    h.className = "rr-section-header";
+    h.innerHTML = `<td colspan="4">KPI（含滑價）</td>`;
+    tb.appendChild(h);
+
+    // 欄名
+    const sub = document.createElement("tr");
+    sub.className = "rr-subhead";
+    sub.innerHTML = `<td>指標</td><td>全部（含滑價）</td><td>多單（含滑價）</td><td>空單（含滑價）</td>`;
+    tb.appendChild(sub);
+
+    // 各行
+    keys.forEach(k=>{
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${k}</td>
+        <td class="col-all">${A[k]}</td>
+        <td class="col-long">${L[k]}</td>
+        <td class="col-short">${S[k]}</td>
+      `;
+      tb.appendChild(tr);
+    });
+
+    tbl.appendChild(tb);
+    host.appendChild(tbl);
+  }
+
+  // ---------- 交易明細（單列一筆 + 表頭修正 + 對齊） ----------
   function renderTable(report) {
     const { fmtTs, fmtMoney, MULT, FEE, TAX } = window.SHARED;
     const table = $("#tradeTable");
@@ -114,10 +206,16 @@
       tr.className = "rr-subhead";
       tr.innerHTML = `
         <td>#</td>
-        <td>進場時間</td><td>進場價</td><td>方向</td>
-        <td>點數</td><td>手續費</td><td>交易稅</td>
-        <td>理論獲利</td><td>累積理論</td>
-        <td>實際獲利(含滑價)</td><td>累積實際</td>
+        <td>日期時間</td>
+        <td class="num">成交點位</td>
+        <td>類別</td>
+        <td class="num">點數</td>
+        <td class="num">手續費</td>
+        <td class="num">交易稅</td>
+        <td class="num">理論淨損益</td>
+        <td class="num">累積理論淨損益</td>
+        <td class="num">實際淨損益(含滑價)</td>
+        <td class="num">累積實際淨損益(含滑價)</td>
       `;
       thead.appendChild(tr);
       table.appendChild(thead);
@@ -129,24 +227,28 @@
 
     let cum=0, cumSlip=0;
     const cls = v => v>0 ? "p-red" : (v<0 ? "p-green" : "");
+
     report.trades.forEach((t,i)=>{
       cum     += t.gain;
       cumSlip += t.gainSlip;
+      const fee = window.SHARED.FEE * 2;
+      const tax = Math.round(t.priceOut * MULT * TAX);
 
-      const tr1=document.createElement("tr");
-      tr1.innerHTML=`
-        <td rowspan="2">${i+1}</td>
-        <td>${fmtTs(t.pos.tsIn)}</td><td>${t.pos.pIn}</td><td>${t.pos.side==='L'?'新買':'新賣'}</td>
-        <td class="${cls(t.pts)}">—</td><td>—</td><td>—</td>
-        <td class="${cls(t.gain)}">—</td><td class="${cls(cum)}">—</td>
-        <td class="${cls(t.gainSlip)}">—</td><td class="${cls(cumSlip)}">—</td>`;
-      const tr2=document.createElement("tr");
-      tr2.innerHTML=`
-        <td>${fmtTs(t.tsOut)}</td><td>${t.priceOut}</td><td>${t.pos.side==='L'?'平賣':'平買'}</td>
-        <td class="${cls(t.pts)}">${t.pts}</td><td>${FEE*2}</td><td>${Math.round(t.priceOut*MULT*TAX)}</td>
-        <td class="${cls(t.gain)}">${fmtMoney(t.gain)}</td><td class="${cls(cum)}">${fmtMoney(cum)}</td>
-        <td class="${cls(t.gainSlip)}">${fmtMoney(t.gainSlip)}</td><td class="${cls(cumSlip)}">${fmtMoney(cumSlip)}</td>`;
-      tb.appendChild(tr1); tb.appendChild(tr2);
+      const tr=document.createElement("tr");
+      tr.innerHTML=`
+        <td>${i+1}</td>
+        <td>${fmtTs(t.tsOut)}</td>
+        <td class="num">${t.priceOut}</td>
+        <td>${t.pos.side==='L'?'平賣':'平買'}</td>
+        <td class="num ${cls(t.pts)}">${t.pts}</td>
+        <td class="num">${fee}</td>
+        <td class="num">${tax}</td>
+        <td class="num ${cls(t.gain)}">${fmtMoney(t.gain)}</td>
+        <td class="num ${cls(cum)}">${fmtMoney(cum)}</td>
+        <td class="num ${cls(t.gainSlip)}">${fmtMoney(t.gainSlip)}</td>
+        <td class="num ${cls(cumSlip)}">${fmtMoney(cumSlip)}</td>
+      `;
+      tb.appendChild(tr);
     });
   }
 
@@ -169,7 +271,6 @@
     const cagr=Math.pow((nav+totalPnL)/nav,1/years)-1;
     const annRet=mean*252;
 
-    // Sharpe/Sortino 使用參數 rf（對應網址 ?rf=）
     const sharpe = vol      ? ((annRet - rf) / vol)      : 0;
     const sortino= downside ? ((annRet - rf) / downside) : 0;
 
@@ -406,9 +507,9 @@
       long:report.longCum, longSlip:report.longSlipCum, short:report.shortCum, shortSlip:report.shortSlipCum
     });
 
-    // KPI 表格化
+    // KPI 合併表
     $("#paramChip").textContent=paramsLabel(parsed.params);
-    renderKpiTables(report.statAll, report.statL, report.statS);
+    renderKpiCombined(report.statAll, report.statL, report.statS);
 
     // 以出場日聚合（含滑價）
     const dailyMap=new Map();
