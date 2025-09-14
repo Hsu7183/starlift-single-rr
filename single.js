@@ -1,9 +1,9 @@
-/* 6 線圖 + 三行KPI + Risk-Return（表格｜五欄｜紅綠著色｜建議優化｜核心→重要→進階） */
+/* 6 線圖 + KPI表格化 + Risk-Return（五欄）+ 交易明細表頭 */
 (function () {
   const $ = s => document.querySelector(s);
   const DEFAULT_NAV = Number(new URLSearchParams(location.search).get("nav")) || 1_000_000;
   const DEFAULT_RF  = Number(new URLSearchParams(location.search).get("rf"))  || 0.00;
-  console.log("[RR] single.js version full-table-v5");
+  console.log("[RR] single.js version full-table-v6");
 
   // ---------- 樣式（只注入一次） ----------
   (function injectStyle(){
@@ -22,6 +22,8 @@
       .rr-improve-title td{background:#fff1f2;border-top:2px solid #fecdd3;border-bottom:1px solid #fecdd3;font-weight:800;color:#be123c}
       .rr-improve-head td{background:#ffe4e6;color:#be123c;font-weight:700}
       .rr-improve-row td{background:#fff5f5;color:#b91c1c}
+      /* KPI 區塊外框 */
+      .kpi-card{padding:0;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden}
     `;
     const style = document.createElement("style");
     style.id = "rr-style"; style.textContent = css;
@@ -48,31 +50,89 @@
     });
   }
 
-  // ---------- 三行 KPI（保留原樣） ----------
-  function buildKpiLines(statAll, statL, statS) {
+  // ---------- KPI（表格化；三塊：全部/多/空） ----------
+  function renderKpiTables(statAll, statL, statS) {
     const { fmtMoney, pct } = window.SHARED;
-    const mk = s => ([
-      ["交易數", String(s.count)], ["勝率", pct(s.winRate)], ["敗率", pct(s.loseRate)],
-      ["單日最大獲利", fmtMoney(s.dayMax)], ["單日最大虧損", fmtMoney(s.dayMin)],
-      ["區間最大獲利", fmtMoney(s.up)], ["區間最大回撤", fmtMoney(s.dd)],
+    const mkRows = s => ([
+      ["交易數", String(s.count)],
+      ["勝率", pct(s.winRate)],
+      ["敗率", pct(s.loseRate)],
+      ["單日最大獲利", fmtMoney(s.dayMax)],
+      ["單日最大虧損", fmtMoney(s.dayMin)],
+      ["區間最大獲利", fmtMoney(s.up)],
+      ["區間最大回撤", fmtMoney(s.dd)],
       ["累積獲利", fmtMoney(s.gain)],
     ]);
-    const rows=[mk(statAll),mk(statL),mk(statS)];
-    const maxW=rows[0].map((_,i)=>Math.max(...rows.map(r=>r[i][1].length)));
-    const padL=(s,w)=>s.padStart(w," ");
-    const join=(label,cols)=>`${label}： `+cols.map((c,i)=>`${c[0]} ${padL(c[1],maxW[i])}`).join(" ｜ ");
-    return [join("全部（含滑價）",rows[0]),join("多單（含滑價）",rows[1]),join("空單（含滑價）",rows[2])];
+
+    const sectionTable = (title, rows) => {
+      const wrap = document.createElement("div");
+      wrap.className = "kpi-card rr-table";
+      const tbl = document.createElement("table");
+      tbl.className = "rr-table";
+      const tb = document.createElement("tbody");
+
+      // 小節標題 + 欄名（指標 / 數值）
+      const head = document.createElement("tr");
+      head.className = "rr-section-header";
+      head.innerHTML = `<td colspan="2">${title}</td>`;
+      const sub = document.createElement("tr");
+      sub.className = "rr-subhead";
+      sub.innerHTML = `<td>指標</td><td>數值</td>`;
+      tb.appendChild(head);
+      tb.appendChild(sub);
+
+      rows.forEach(([k,v])=>{
+        const tr=document.createElement("tr");
+        tr.innerHTML = `<td>${k}</td><td>${v}</td>`;
+        tb.appendChild(tr);
+      });
+
+      tbl.appendChild(tb);
+      wrap.appendChild(tbl);
+      return wrap;
+    };
+
+    // 依你的 single.html：#kpiAll / #kpiL / #kpiS
+    $("#kpiAll").innerHTML = "";
+    $("#kpiL").innerHTML   = "";
+    $("#kpiS").innerHTML   = "";
+
+    $("#kpiAll").appendChild(sectionTable("全部（含滑價）", mkRows(statAll)));
+    $("#kpiL").appendChild(sectionTable("多單（含滑價）", mkRows(statL)));
+    $("#kpiS").appendChild(sectionTable("空單（含滑價）", mkRows(statS)));
   }
 
-  // ---------- 交易明細（點數/獲利/累積紅綠顯示） ----------
+  // ---------- 交易明細（加表頭：理論/實際（含滑價）等） ----------
   function renderTable(report) {
     const { fmtTs, fmtMoney, MULT, FEE, TAX } = window.SHARED;
-    const tb = $("#tradeTable tbody"); tb.innerHTML = "";
+    const table = $("#tradeTable");
+
+    // thead（只建一次）
+    if (!table.querySelector("thead")) {
+      const thead = document.createElement("thead");
+      const tr = document.createElement("tr");
+      tr.className = "rr-subhead";
+      tr.innerHTML = `
+        <td>#</td>
+        <td>進場時間</td><td>進場價</td><td>方向</td>
+        <td>點數</td><td>手續費</td><td>交易稅</td>
+        <td>理論獲利</td><td>累積理論</td>
+        <td>實際獲利(含滑價)</td><td>累積實際</td>
+      `;
+      thead.appendChild(tr);
+      table.appendChild(thead);
+    }
+
+    // tbody
+    const tb = table.querySelector("tbody"); 
+    tb.innerHTML = "";
+
     let cum=0, cumSlip=0;
     const cls = v => v>0 ? "p-red" : (v<0 ? "p-green" : "");
     report.trades.forEach((t,i)=>{
       cum     += t.gain;
       cumSlip += t.gainSlip;
+
       const tr1=document.createElement("tr");
       tr1.innerHTML=`
         <td rowspan="2">${i+1}</td>
@@ -109,7 +169,7 @@
     const cagr=Math.pow((nav+totalPnL)/nav,1/years)-1;
     const annRet=mean*252;
 
-    // ✅ 修正：Sharpe/Sortino 使用函式參數 rf（對應網址 ?rf=）
+    // Sharpe/Sortino 使用參數 rf（對應網址 ?rf=）
     const sharpe = vol      ? ((annRet - rf) / vol)      : 0;
     const sortino= downside ? ((annRet - rf) / downside) : 0;
 
@@ -151,7 +211,7 @@
       avgDD,medDD,ulcer,pain,burke,recFactor,skew,kurt };
   }
 
-  // ---------- Risk-Return 表格渲染（一次性組 HTML；核心→重要→進階；含建議優化指標） ----------
+  // ---------- Risk-Return（含建議優化指標） ----------
   function renderRR6Cats(k){
     const NAV=DEFAULT_NAV;
     const money=n=>(Number(n)||0).toLocaleString("zh-TW");
@@ -160,7 +220,6 @@
     const fix2=x=>Number(x).toFixed(2);
     const labelGrade = lvl => lvl==='good'?'Strong（強）':(lvl==='bad'?'Improve（優化）':'Adequate（可接受）');
 
-    // 評分規則（RULES）
     const RULES = {
       cagr:v=> v>=0.30?['good','年化極佳','≥30%'] : v>=0.15?['good','年化穩健','≥15%'] : v>=0.05?['ok','尚可','≥5%'] : ['bad','偏低','—'],
       ann :v=> v>=0.25?['good','年化報酬優秀','≥25%'] : v>=0.10?['ok','尚可','≥10%'] : ['bad','偏低','—'],
@@ -190,14 +249,9 @@
       skew:v=> v>0?['good','右偏','>0'] : v===0?['ok','近常態','≈0'] : ['bad','左尾重','>0'],
       kurt:v=> v<=4?['ok','峰度正常','≤4'] : v<=5?['ok','略高','≤5'] : ['bad','尾端肥厚','—'],
       roll:v=> v>=1.5?['good','時間穩定性佳','≥1.5'] : v>=1?['ok','可接受','≥1'] : ['bad','穩健性不足','—'],
-
-      // ✅ 新增：最大連敗評分
-      maxLS:v=> v<=8?['ok','控制得宜','≤8']
-            : v<=12?['ok','可接受','≤12']
-            : ['bad','過多連敗','—'],
+      maxLS:v=> v<=8?['ok','控制得宜','≤8'] : v<=12?['ok','可接受','≤12'] : ['bad','過多連敗','—'],
     };
 
-    // 組資料（sections：每節；improvs：紅字彙總）
     const sections = [];
     const improvs  = [];
     const pushHeader = (title) => sections.push({title, rows: []});
@@ -208,7 +262,7 @@
       if (grade==='bad') improvs.push([title, value || '—', '建議優化', evalText, bench||'—']);
     };
 
-    // ===== 建議優化指標（Improves） =====
+    // ===== 建議優化指標 =====
     pushHeader("建議優化指標");
 
     // ===== 一、報酬 =====
@@ -287,10 +341,10 @@
     pushRow("Kyle’s λ / Amihud",          "—",               "衝擊係數 / 流動性稀薄度",              ['ok','—','—'], "Adv.");
     pushRow("Stress Scenarios",           "—",               "情境/沖擊測試",                         ['ok','—','—'], "Adv.");
 
-    // ===== 一次性渲染（不使用 thead，避免建議上方多餘標題） =====
+    // ===== 渲染到頁面 =====
     const tbody = document.createElement('tbody');
 
-    // 建議優化（粉紅標題 + 專用欄名：指標/數值/建議/機構評語/參考區間）
+    // 建議優化（粉紅專區）
     tbody.appendChild(sectionRow("建議優化指標", true));
     tbody.appendChild(subHeadRow(true));
     if (improvs.length === 0) {
@@ -307,7 +361,7 @@
       });
     }
 
-    // 其餘各節（每節自帶小標與欄名：指標/數值/說明/機構評語/參考區間）
+    // 其餘各節
     for (let i=1;i<sections.length;i++){
       const sec = sections[i];
       tbody.appendChild(sectionRow(sec.title, false));
@@ -324,7 +378,6 @@
     wrap.innerHTML = `<table class="rr-table"></table>`;
     wrap.querySelector('table').appendChild(tbody);
 
-    // 小工具：節標題、子欄名列
     function sectionRow(title, isImprove){
       const tr = document.createElement('tr');
       tr.className = isImprove ? 'rr-improve-title' : 'rr-section-header';
@@ -353,9 +406,9 @@
       long:report.longCum, longSlip:report.longSlipCum, short:report.shortCum, shortSlip:report.shortSlipCum
     });
 
-    const [lineAll,lineL,lineS]=buildKpiLines(report.statAll,report.statL,report.statS);
+    // KPI 表格化
     $("#paramChip").textContent=paramsLabel(parsed.params);
-    $("#kpiAll").textContent=lineAll; $("#kpiL").textContent=lineL; $("#kpiS").textContent=lineS;
+    renderKpiTables(report.statAll, report.statL, report.statS);
 
     // 以出場日聚合（含滑價）
     const dailyMap=new Map();
