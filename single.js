@@ -1,14 +1,15 @@
-/* 單檔分析（機構級） full-table-v10
-   - 6線圖（含滑價黑線 Max/Min/Last 大點 + 日期標籤；右側留白避免最後一筆被擠）
-   - KPI 合併表（全部/多/空 三欄；多=淡紅底、空=淡綠底）
-   - Risk-Return 表（五欄、建議優化指標置頂粉紅區）
-   - 交易明細（表頭固定、數字右對齊、紅正綠負、條紋列）
+/* 單檔分析（機構級） full-table-v12
+   - 圖表：6 線、右側留白、黑線 Max/Min/Last 標註（Last 只顯示數值）
+   - KPI：合併表（全部/多/空 三欄；多=淡紅、空=淡綠）
+   - RR 表：五欄評語 + 置頂「建議優化指標」粉紅區
+   - 交易明細：表頭固定、數字右對齊、紅正綠負、條紋列
+   - 參數列：尾端顯示本次 TXT「匯入時間」
 */
 (function () {
   const $ = s => document.querySelector(s);
   const DEFAULT_NAV = Number(new URLSearchParams(location.search).get("nav")) || 1_000_000;
   const DEFAULT_RF  = Number(new URLSearchParams(location.search).get("rf"))  || 0.00;
-  console.log("[RR] single.js version full-table-v10");
+  console.log("[RR] single.js version full-table-v12");
 
   // ---------- 樣式（一次注入） ----------
   (function injectStyle(){
@@ -51,6 +52,11 @@
     if (y && m && d) return `${y}/${Number(m)}/${Number(d)}`;
     return s;
   };
+  const nowStr = ()=> {
+    const d=new Date();
+    const pad=n=>String(n).padStart(2,"0");
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  };
   function roundRect(ctx, x, y, w, h, r){
     const rr = Math.min(r, w/2, h/2);
     ctx.moveTo(x+rr, y);
@@ -61,7 +67,7 @@
     ctx.closePath();
   }
 
-  // ---------- 圖表（Max/Min/Last 標點＋標籤；右側留白） ----------
+  // ---------- 圖表（Max/Min/Last；Last 只顯示數值；右側留白） ----------
   function drawChart(ser) {
     if (chart) chart.destroy();
     const { tsArr, total, slipTotal, long, longSlip, short, shortSlip } = ser;
@@ -78,7 +84,7 @@
     const annos = [
       {i:idxMax,  val:arr[idxMax],  color:"#ef4444", label:`${fmtComma(Math.round(arr[idxMax]))}(${tsToDate(tsArr[idxMax])})`},
       {i:idxMin,  val:arr[idxMin],  color:"#10b981", label:`${fmtComma(Math.round(arr[idxMin]))}(${tsToDate(tsArr[idxMin])})`},
-      {i:idxLast, val:arr[idxLast], color:"#111",    label:`${fmtComma(Math.round(arr[idxLast]))}(${tsToDate(tsArr[idxLast])})`},
+      {i:idxLast, val:arr[idxLast], color:"#111",    label:fmtComma(Math.round(arr[idxLast]))}, // ← 只顯示數值
     ];
 
     const annoPlugin = {
@@ -113,7 +119,7 @@
       ]},
       options:{
         responsive:true, maintainAspectRatio:false,
-        layout:{padding:{right:72}},     // 右側留白，避免最後一筆貼邊
+        layout:{padding:{right:72}},    // 右邊留白，避免最後一筆被擠
         scales:{x:{ticks:{padding:18}}},
         plugins:{legend:{display:false}}
       },
@@ -136,8 +142,7 @@
     });
     const A = mk(statAll), L = mk(statL), S = mk(statS);
 
-    const host = $("#kpiAll"); // 只用這一格放合併表
-    $("#kpiL").innerHTML=""; $("#kpiS").innerHTML="";
+    const host = $("#kpiAll"); $("#kpiL").innerHTML=""; $("#kpiS").innerHTML="";
     host.innerHTML = "";
 
     const tbl = document.createElement("table"); tbl.className="rr-table kpi-combined";
@@ -159,7 +164,7 @@
     tbl.appendChild(tb); host.appendChild(tbl);
   }
 
-  // ---------- Risk-Return 計算 ----------
+  // ---------- RR 計算 ----------
   function computeRR(dailySlip,trades,nav=DEFAULT_NAV,rf=DEFAULT_RF){
     let cum=0; const eq=dailySlip.map(d=>({date:d.date,nav:(cum+=d.pnl,nav+cum)}));
     let peak=-Infinity,maxDD=0,curTUW=0,maxTUW=0,inDraw=false,rec=0,curRec=0;
@@ -219,7 +224,7 @@
       avgDD,medDD,ulcer,pain,burke,recFactor,skew,kurt };
   }
 
-  // ---------- Risk-Return 表（含建議優化指標） ----------
+  // ---------- RR 表（含建議優化指標） ----------
   function renderRR6Cats(k){
     const NAV=DEFAULT_NAV;
     const money=n=>(Number(n)||0).toLocaleString("zh-TW");
@@ -315,8 +320,8 @@
     pushRow("平均獲利單",                money(k.avgWin),   "含滑價的平均獲利金額",                 ['ok','—','≥平均虧損單'], "Core");
     pushRow("平均虧損單",                pmoney(-k.avgLoss),"含滑價的平均虧損金額",                 ['ok','—','—'], "Core");
     pushRow("最大連勝",                  String(k.maxWS),   "連續獲利筆數",                         ['ok','—','—'], "Core");
-    pushRow("最大連敗",                  String(k.maxLS),   "連續虧損筆數",                         RULES.maxLS(k.maxLS), "Core");
-    pushRow("平均持倉時間",              `${k.avgHoldingMins.toFixed(2)} 分`, "tsIn→tsOut 的平均分鐘數", ['ok','—','—'], "Core");
+    pushRow("最大連敗",                  String(k.maxLS),   "連續虧損筆數",                         ['ok','—','—'], "Core");
+    pushRow("平均持倉時間",              `${k.avgHoldingMins.toFixed(2)} 分`, "tsIn→tsOut 平均分鐘數", ['ok','—','—'], "Core");
     pushRow("交易頻率",                  `${k.tradesPerMonth.toFixed(2)} 筆/月`, "以回測期間月份估算", ['ok','—','—'], "Core");
     // 佔位（無委託/撮合資料時）
     pushRow("Slippage（滑價）",           "—",               "滑價影響（委託型態/參與率）",         ['ok','—','—'], "Imp.");
@@ -350,7 +355,7 @@
     // 渲染
     const tbody = document.createElement('tbody');
 
-    // 建議優化（粉紅標題 + 專屬欄名）
+    // 建議優化（粉紅專區）
     tbody.appendChild(sectionRow("建議優化指標", true));
     tbody.appendChild(subHeadRow(true));
     if (improvs.length === 0) {
@@ -400,12 +405,12 @@
     }
   }
 
-  // ---------- 交易明細（表頭固定、數字右對齊） ----------
+  // ---------- 交易明細（表頭固定、右對齊、紅正綠負） ----------
   function renderTable(report) {
     const { fmtTs, fmtMoney, MULT, FEE, TAX } = window.SHARED;
     const table = $("#tradeTable");
 
-    // 確保 thead 存在且不被覆蓋
+    // thead
     let thead = table.querySelector("thead");
     if (!thead){ thead=document.createElement("thead"); table.appendChild(thead); }
     thead.innerHTML = `
@@ -456,7 +461,10 @@
       long:report.longCum, longSlip:report.longSlipCum, short:report.shortCum, shortSlip:report.shortSlipCum
     });
 
-    $("#paramChip").textContent=paramsLabel(parsed.params);
+    // 參數列 + 匯入時間
+    $("#paramChip").textContent = paramsLabel(parsed.params) + " ｜ 匯入時間：" + nowStr();
+
+    // KPI
     renderKpiCombined(report.statAll, report.statL, report.statS);
 
     // 以出場日聚合（含滑價）
@@ -514,7 +522,7 @@
     for(const v of x){ const d=v-m; const d2=d*d; m2+=d2; m3+=d2*d; m4+=d2*d2; }
     m2/=n; m3/=n; m4/=n;
     const skew = m2>0 ? (m3/Math.pow(m2,1.5)) : 0;
-    const kurt = m2>0 ? (m4/(m2*m2)) : 0; // total
+    const kurt = m2>0 ? (m4/(m2*m2)) : 0;
     return {skew,kurt};
   }
 })();
