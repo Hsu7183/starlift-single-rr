@@ -6,17 +6,18 @@
   <title>單檔分析（機構級）</title>
   <style>
     body{font-family:ui-sans-serif,system-ui;-webkit-font-smoothing:antialiased;margin:0;padding:16px;background:#f7f7fb}
-    .wrap{max-width:1200px;margin:0 auto}
+    .wrap{max-width:1440px;margin:0 auto}
     .row{display:flex;gap:16px;align-items:center;flex-wrap:wrap}
     .chip{display:inline-block;background:#eef;padding:6px 10px;border-radius:999px;font-size:12px}
-    .card{background:#fff;border:1px solid #e5e7eb;border-radius:12px;box-shadow:0 2px 10px rgba(0,0,0,.03);padding:12px}
-    #chartBox{height:360px}
-    table{width:100%}
+    .card{background:#fff;border:1px solid #e5e7eb;border-radius:12px;box-shadow:0 2px 10px rgba(0,0,0,.03);padding:12px;margin-bottom:20px}
+    #chartBox{height:520px}
+    table{width:100%;border-collapse:collapse}
     .back-link{margin-bottom:12px;display:inline-block}
+    .scroll-x{overflow-x:auto}
   </style>
-  <!-- 依賴：Chart 與你的共享工具集（請確保 shared.js 內含 window.SHARED） -->
+  <!-- 依賴 -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="shared.js?v=full-table-v5"></script>
+  <script src="shared.js?v=full-table-v7"></script>
 </head>
 <body>
   <div class="wrap">
@@ -35,25 +36,23 @@
     <!-- 6 線圖 -->
     <div id="chartBox" class="card"><canvas id="chart"></canvas></div>
 
-    <!-- 三行 KPI -->
-    <div class="card">
-      <div id="kpiAll">全部（含滑價）：—</div>
-      <div id="kpiL">多單（含滑價）：—</div>
-      <div id="kpiS">空單（含滑價）：—</div>
-    </div>
+    <!-- KPI（合併表格） -->
+    <div id="kpiAll" class="card scroll-x"></div>
+    <div id="kpiL"></div><div id="kpiS"></div> <!-- 不再使用，但保留避免報錯 -->
 
-    <!-- Risk-Return 表（含建議優化指標） -->
-    <div id="rrLines" class="card"></div>
+    <!-- Risk-Return 表 -->
+    <div id="rrLines" class="card scroll-x"></div>
 
     <!-- 交易明細表 -->
-    <div class="card">
+    <div class="card scroll-x">
       <table id="tradeTable">
+        <thead></thead>
         <tbody></tbody>
       </table>
     </div>
   </div>
 
-  <!-- 主檔（帶版本號） -->
-  <script src="single.js?v=full-table-v5"></script>
+  <!-- 主檔 -->
+  <script src="single.js?v=full-table-v8"></script>
 </body>
 </html>
