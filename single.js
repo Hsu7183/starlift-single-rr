@@ -1,15 +1,15 @@
-/* 單檔分析（機構級） full-table-v12
+/* 單檔分析（機構級） full-table-v13
    - 圖表：6 線、右側留白、黑線 Max/Min/Last 標註（Last 只顯示數值）
    - KPI：合併表（全部/多/空 三欄；多=淡紅、空=淡綠）
    - RR 表：五欄評語 + 置頂「建議優化指標」粉紅區
-   - 交易明細：表頭固定、數字右對齊、紅正綠負、條紋列
+   - 交易明細：一筆＝兩列（進場列＋出場列），表頭固定、數字右對齊、紅正綠負、條紋列
    - 參數列：尾端顯示本次 TXT「匯入時間」
 */
 (function () {
   const $ = s => document.querySelector(s);
   const DEFAULT_NAV = Number(new URLSearchParams(location.search).get("nav")) || 1_000_000;
   const DEFAULT_RF  = Number(new URLSearchParams(location.search).get("rf"))  || 0.00;
-  console.log("[RR] single.js version full-table-v12");
+  console.log("[RR] single.js version full-table-v13");
 
   // ---------- 樣式（一次注入） ----------
   (function injectStyle(){
@@ -84,7 +84,7 @@
     const annos = [
       {i:idxMax,  val:arr[idxMax],  color:"#ef4444", label:`${fmtComma(Math.round(arr[idxMax]))}(${tsToDate(tsArr[idxMax])})`},
       {i:idxMin,  val:arr[idxMin],  color:"#10b981", label:`${fmtComma(Math.round(arr[idxMin]))}(${tsToDate(tsArr[idxMin])})`},
-      {i:idxLast, val:arr[idxLast], color:"#111",    label:fmtComma(Math.round(arr[idxLast]))}, // ← 只顯示數值
+      {i:idxLast, val:arr[idxLast], color:"#111",    label:fmtComma(Math.round(arr[idxLast]))}, // 只顯示數值
     ];
 
     const annoPlugin = {
@@ -96,9 +96,7 @@
           if (!Number.isFinite(a.val)) return;
           const px = x.getPixelForValue(a.i);
           const py = y.getPixelForValue(a.val);
-          // 大點
           ctx.beginPath(); ctx.arc(px,py,6,0,Math.PI*2); ctx.fillStyle=a.color; ctx.fill();
-          // 標籤泡泡
           const text=a.label, pad=6, h=20, w=ctx.measureText(text).width+pad*2;
           const bx=px+12, by=py-h/2;
           ctx.fillStyle="rgba(255,255,255,.96)";
@@ -119,7 +117,7 @@
       ]},
       options:{
         responsive:true, maintainAspectRatio:false,
-        layout:{padding:{right:72}},    // 右邊留白，避免最後一筆被擠
+        layout:{padding:{right:72}},
         scales:{x:{ticks:{padding:18}}},
         plugins:{legend:{display:false}}
       },
@@ -320,10 +318,9 @@
     pushRow("平均獲利單",                money(k.avgWin),   "含滑價的平均獲利金額",                 ['ok','—','≥平均虧損單'], "Core");
     pushRow("平均虧損單",                pmoney(-k.avgLoss),"含滑價的平均虧損金額",                 ['ok','—','—'], "Core");
     pushRow("最大連勝",                  String(k.maxWS),   "連續獲利筆數",                         ['ok','—','—'], "Core");
-    pushRow("最大連敗",                  String(k.maxLS),   "連續虧損筆數",                         ['ok','—','—'], "Core");
+    pushRow("最大連敗",                  String(k.maxLS),   "連續虧損筆數",                         RULES.maxLS(k.maxLS), "Core");
     pushRow("平均持倉時間",              `${k.avgHoldingMins.toFixed(2)} 分`, "tsIn→tsOut 平均分鐘數", ['ok','—','—'], "Core");
     pushRow("交易頻率",                  `${k.tradesPerMonth.toFixed(2)} 筆/月`, "以回測期間月份估算", ['ok','—','—'], "Core");
-    // 佔位（無委託/撮合資料時）
     pushRow("Slippage（滑價）",           "—",               "滑價影響（委託型態/參與率）",         ['ok','—','—'], "Imp.");
     pushRow("Implementation Shortfall",  "—",               "決策價 vs 成交價差（含費用）",         ['ok','—','—'], "Imp.");
     pushRow("Fill Rate / Queue Loss",    "—",               "成交率 / 排隊損失",                   ['ok','—','—'], "Imp.");
@@ -405,7 +402,7 @@
     }
   }
 
-  // ---------- 交易明細（表頭固定、右對齊、紅正綠負） ----------
+  // ---------- 交易明細（兩列顯示：進場＋出場） ----------
   function renderTable(report) {
     const { fmtTs, fmtMoney, MULT, FEE, TAX } = window.SHARED;
     const table = $("#tradeTable");
@@ -429,23 +426,48 @@
     const cls = v => v>0 ? "p-red" : (v<0 ? "p-green" : "");
 
     report.trades.forEach((t,i)=>{
-      cum += t.gain; cumSlip += t.gainSlip;
+      // 進場列：顯示進場時間/價與「新買/新賣」，其餘以 — 佔位
+      const entryRow = document.createElement("tr");
+      entryRow.innerHTML = `
+        <td rowspan="2">${i+1}</td>
+        <td>${fmtTs(t.pos.tsIn)}</td>
+        <td class="num">${t.pos.pIn}</td>
+        <td>${t.pos.side==='L' ? '新買' : '新賣'}</td>
+        <td class="num">—</td>
+        <td class="num">—</td>
+        <td class="num">—</td>
+        <td class="num">—</td>
+        <td class="num">—</td>
+        <td class="num">—</td>
+        <td class="num">—</td>
+      `;
+
+      // 出場列：顯示出場資料與點數/費用/稅/損益與累積
       const fee = FEE * 2;
       const tax = Math.round(t.priceOut * MULT * TAX);
-      const tr=document.createElement("tr");
-      tr.innerHTML=`
-        <td>${i+1}</td>
+      const newCum     = cum     + t.gain;
+      const newCumSlip = cumSlip + t.gainSlip;
+
+      const exitRow = document.createElement("tr");
+      exitRow.innerHTML = `
         <td>${fmtTs(t.tsOut)}</td>
         <td class="num">${t.priceOut}</td>
-        <td>${t.pos.side==='L'?'平賣':'平買'}</td>
+        <td>${t.pos.side==='L' ? '平賣' : '平買'}</td>
         <td class="num ${cls(t.pts)}">${t.pts}</td>
         <td class="num">${fee}</td>
         <td class="num">${tax}</td>
         <td class="num ${cls(t.gain)}">${fmtMoney(t.gain)}</td>
-        <td class="num ${cls(cum)}">${fmtMoney(cum)}</td>
+        <td class="num ${cls(newCum)}">${fmtMoney(newCum)}</td>
         <td class="num ${cls(t.gainSlip)}">${fmtMoney(t.gainSlip)}</td>
-        <td class="num ${cls(cumSlip)}">${fmtMoney(cumSlip)}</td>`;
-      tb.appendChild(tr);
+        <td class="num ${cls(newCumSlip)}">${fmtMoney(newCumSlip)}</td>
+      `;
+
+      tb.appendChild(entryRow);
+      tb.appendChild(exitRow);
+
+      // 更新累積
+      cum = newCum;
+      cumSlip = newCumSlip;
     });
   }
 
