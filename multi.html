@@ -15,12 +15,10 @@
     table{width:100%;border-collapse:collapse;background:#fff}
     th,td{padding:8px 10px;border-bottom:1px solid #e5e7eb;white-space:nowrap;font:13px/1.65 ui-monospace,Consolas,Menlo,monospace}
     thead th{background:#fafafa;position:sticky;top:0;z-index:2;cursor:pointer}
+    tfoot td{background:#fafafa;font-weight:700}
     .num{text-align:right}
     .p-red{color:#ef4444;font-weight:700}
     .p-green{color:#10b981;font-weight:700}
-    .sub{opacity:.8}
-    .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
-    @media (max-width:1100px){.grid{grid-template-columns:1fr}}
   </style>
   <!-- 依賴 -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -41,13 +39,13 @@
       <div class="chip">匯入時間：<span id="importAt">—</span></div>
     </div>
 
-    <!-- 上：第一檔 6 線圖 + 標示 -->
+    <!-- 6 線圖 -->
     <div class="card">
       <div id="chartBox"><canvas id="chart"></canvas></div>
-      <div class="sub" id="chartCaption">（顯示第一檔的含滑價/未滑價、多空累積曲線；標注第一檔之 Max/Min/Last）</div>
+      <div id="chartCaption" style="opacity:.8">（顯示第一檔：含滑價/未滑價、多空累積曲線；標注 Max/Min/Last）</div>
     </div>
 
-    <!-- 下：彙總表（可排序） -->
+    <!-- 彙總表 -->
     <div class="card">
       <table id="sumTable">
         <thead>
@@ -87,6 +85,6 @@
     </div>
   </div>
 
-  <script src="multi.js?v=multi-v1"></script>
+  <script src="multi.js?v=multi-v2"></script>
 </body>
 </html>
