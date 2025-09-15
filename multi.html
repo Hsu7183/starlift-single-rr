@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>多檔分析（機構級）</title>
+  <title>多檔分析</title>
   <style>
     body{font-family:ui-sans-serif,system-ui;-webkit-font-smoothing:antialiased;margin:0;padding:16px;background:#f7f7fb}
     .wrap{max-width:1440px;margin:0 auto}
@@ -15,10 +15,11 @@
     table{width:100%;border-collapse:collapse;background:#fff}
     th,td{padding:8px 10px;border-bottom:1px solid #e5e7eb;white-space:nowrap;font:13px/1.65 ui-monospace,Consolas,Menlo,monospace}
     thead th{background:#fafafa;position:sticky;top:0;z-index:2;cursor:pointer}
-    tfoot td{background:#fafafa;font-weight:700}
     .num{text-align:right}
     .p-red{color:#ef4444;font-weight:700}
     .p-green{color:#10b981;font-weight:700}
+    .active-row{background:#f1f5ff !important}
+    .hint{opacity:.75}
   </style>
   <!-- 依賴 -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -27,7 +28,7 @@
 <body>
   <div class="wrap">
     <a class="back-link" href="index.html">← 返回首頁</a>
-    <h1>多檔分析（機構級）</h1>
+    <h1>多檔分析</h1>
 
     <!-- 控制列 -->
     <div class="row card">
@@ -39,52 +40,37 @@
       <div class="chip">匯入時間：<span id="importAt">—</span></div>
     </div>
 
-    <!-- 6 線圖 -->
+    <!-- 上：6 線圖 -->
     <div class="card">
       <div id="chartBox"><canvas id="chart"></canvas></div>
-      <div id="chartCaption" style="opacity:.8">（顯示第一檔：含滑價/未滑價、多空累積曲線；標注 Max/Min/Last）</div>
+      <div id="chartCaption" class="hint">（點擊下方任一列，上方圖切換顯示；黑線標註 Max / Min / Last 為「含滑價累積」）</div>
     </div>
 
-    <!-- 彙總表 -->
+    <!-- 下：精簡彙總表（可排序、點選切換上方圖） -->
     <div class="card">
       <table id="sumTable">
         <thead>
           <tr>
-            <th data-k="name">檔名</th>
+            <th data-k="shortName">檔名</th>
             <th class="num" data-k="count">筆數</th>
             <th class="num" data-k="winRate">勝率</th>
             <th class="num" data-k="totalPnL">累積淨損益(含滑價)</th>
             <th class="num" data-k="maxDD">最大回撤</th>
-            <th class="num" data-k="PF">PF</th>
-            <th class="num" data-k="sharpe">Sharpe</th>
-            <th class="num" data-k="sortino">Sortino</th>
-            <th class="num" data-k="MAR">MAR</th>
-            <th class="num" data-k="tradesPerMonth">交易頻率(筆/月)</th>
+            <th class="num" data-k="PF">PF（獲利因子）</th>
+            <th class="num" data-k="sharpe">Sharpe（夏普）</th>
+            <th class="num" data-k="sortino">Sortino（索提諾）</th>
+            <th class="num" data-k="MAR">MAR（回報/回撤）</th>
+            <th class="num" data-k="tradesPerMonth">交易頻率（筆/月）</th>
             <th class="num" data-k="annRet">年化報酬</th>
             <th class="num" data-k="vol">年化波動</th>
           </tr>
         </thead>
         <tbody></tbody>
-        <tfoot>
-          <tr id="sumRow">
-            <td>合計/加權</td>
-            <td class="num">—</td>
-            <td class="num">—</td>
-            <td class="num">—</td>
-            <td class="num">—</td>
-            <td class="num">—</td>
-            <td class="num">—</td>
-            <td class="num">—</td>
-            <td class="num">—</td>
-            <td class="num">—</td>
-            <td class="num">—</td>
-            <td class="num">—</td>
-          </tr>
-        </tfoot>
       </table>
+      <div class="hint" style="margin-top:8px">提示：點欄位可升/降序；再次點擊同欄切換排序方向。</div>
     </div>
   </div>
 
-  <script src="multi.js?v=multi-v2"></script>
+  <script src="multi.js?v=multi-v3"></script>
 </body>
 </html>
