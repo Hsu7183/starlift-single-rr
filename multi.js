@@ -1,11 +1,13 @@
-/* 多檔分析（機構級） multi-v2
+/* 多檔分析（精簡挑參數） multi-v3
    - 匯入多份 TXT（檔案或剪貼簿）
-   - 上方：第一檔 6 線圖（含滑價黑線 Max/Min/Last）
-   - 下方：彙總表（可排序），含合計列
+   - 下方表格只顯示精簡欄位；檔名只顯示差異性 “MMDD_HHMMSS”
+   - 點列切換上方 6 線圖；各欄可升/降序排序
 */
 (function(){
   const $ = s => document.querySelector(s);
   let chart;
+  let rows = [];          // 目前展示用的列（排序後的順序）
+  let currentIdx = -1;    // 目前選取的列 index（指 rows 陣列位置）
 
   // ---------- 小工具 ----------
   const fmtPct = x => (Number.isFinite(x)? (x*100).toFixed(2) : "0.00")+"%";
@@ -19,6 +21,15 @@
   const toDate = ts => { const s=String(ts||""); const y=s.slice(0,4),m=s.slice(4,6),d=s.slice(6,8),hh=s.slice(8,10)||"00",mm=s.slice(10,12)||"00",ss=s.slice(12,14)||"00"; return new Date(`${y}-${m}-${d}T${hh}:${mm}:${ss}`); };
   const nowStr = ()=>{ const d=new Date(); const p=n=>String(n).padStart(2,"0"); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`; };
 
+  // 只保留差異性檔名：抓 8 碼日期 + '_' + 6 碼時間 → 顯示 MMDD_HHMMSS
+  function shortName(name){
+    const base = name.split(/[\\/]/).pop().replace(/\.[^.]+$/,'');
+    const m = base.match(/(\d{8})_(\d{6})/);
+    if(!m) return base;
+    const mmdd = m[1].slice(4,8);
+    return `${mmdd}_${m[2]}`;
+  }
+
   // ---------- Chart ----------
   function roundRect(ctx,x,y,w,h,r){
     const rr=Math.min(r,w/2,h/2);
@@ -31,11 +42,11 @@
     ctx.closePath();
   }
 
-  function drawChartFor(report){
-    if(!report) return;
-    if (chart) chart.destroy();
+  function drawChartFor(rec){
+    if(!rec) return;
+    if(chart) chart.destroy();
 
-    const {tsArr,total,slipCum,longCum,longSlipCum,shortCum,shortSlipCum} = report;
+    const {tsArr,total,slipCum,longCum,longSlipCum,shortCum,shortSlipCum} = rec;
     const labels = tsArr.map((_,i)=>i);
     const mkSolid=(data,col,w)=>({data,stepped:true,borderColor:col,borderWidth:w,pointRadius:0});
     const mkDash =(data,col,w)=>({data,stepped:true,borderColor:col,borderWidth:w,pointRadius:0,borderDash:[6,4]});
@@ -82,6 +93,8 @@
       },
       plugins:[anno]
     });
+
+    $("#chartCaption").textContent = `目前：${rec.shortName}（黑線 Max / Min / Last 為含滑價累積）`;
   }
 
   // ---------- RR（簡版） ----------
@@ -111,16 +124,18 @@
     }
     const winRate = trades.length? wins.length/trades.length : 0;
 
-    return {maxDD,totalPnL,PF,sharpe,sortino,MAR,tradesPerMonth:tpm,annRet,vol,winRate,count:trades.length,_winPnL:winPnL,_losePnL:losePnL};
+    return {maxDD,totalPnL,PF,sharpe,sortino,MAR,tradesPerMonth:tpm,annRet,vol,winRate,count:trades.length};
   }
 
-  // ---------- 彙總表 ----------
-  function renderTable(rows){
+  // ---------- 渲染表格（可點選 & 排序） ----------
+  function renderTable(){
     const tb=$("#sumTable tbody"); tb.innerHTML="";
-    rows.forEach(r=>{
+    rows.forEach((r,idx)=>{
       const tr=document.createElement("tr");
+      if(idx===currentIdx) tr.classList.add("active-row");
+      tr.dataset.idx = String(idx);
       tr.innerHTML=`
-        <td>${r.name}</td>
+        <td>${r.shortName}</td>
         <td class="num">${r.count}</td>
         <td class="num">${fmtPct(r.winRate)}</td>
         <td class="num ${cls(r.totalPnL)}">${comma(r.totalPnL)}</td>
@@ -133,35 +148,36 @@
         <td class="num">${fmtPct(r.annRet)}</td>
         <td class="num">${fmtPct(r.vol)}</td>
       `;
+      tr.onclick = ()=>selectRow(idx);
       tb.appendChild(tr);
     });
+  }
 
-    // 合計列
-    const totalPnL = sum(rows.map(r=>r.totalPnL||0));
-    const maxDD    = Math.max(0, ...rows.map(r=>r.maxDD||0));
-    const PF = (()=>{ const W=sum(rows.map(r=>r._winPnL||0)), L=Math.abs(sum(rows.map(r=>r._losePnL||0))); return L? W/L:0; })();
-    const sharpe = rows.length? avg(rows.map(r=>r.sharpe||0)) : 0;
-    const sortino= rows.length? avg(rows.map(r=>r.sortino||0)) : 0;
-    const MAR    = rows.length? avg(rows.map(r=>r.MAR||0)) : 0;
-    const tpm    = rows.length? avg(rows.map(r=>r.tradesPerMonth||0)) : 0;
-    const annRet = rows.length? avg(rows.map(r=>r.annRet||0)) : 0;
-    const vol    = rows.length? avg(rows.map(r=>r.vol||0)) : 0;
-    const winRate= rows.length? avg(rows.map(r=>r.winRate||0)) : 0;
-    const count  = sum(rows.map(r=>r.count||0));
+  function selectRow(idx){
+    currentIdx = idx;
+    renderTable();               // 更新高亮
+    drawChartFor(rows[idx]);     // 切圖
+  }
 
-    const sr = $("#sumRow").children;
-    sr[1].textContent = count;
-    sr[2].textContent = fmtPct(winRate);
-    sr[3].textContent = comma(totalPnL);
-    sr[3].className   = "num "+cls(totalPnL);
-    sr[4].textContent = "-"+comma(maxDD);
-    sr[5].textContent = fmt2(PF);
-    sr[6].textContent = fmt2(sharpe);
-    sr[7].textContent = fmt2(sortino);
-    sr[8].textContent = fmt2(MAR);
-    sr[9].textContent = fmt2(tpm);
-    sr[10].textContent= fmtPct(annRet);
-    sr[11].textContent= fmtPct(vol);
+  function bindSort(){
+    $("#sumTable thead").querySelectorAll("th").forEach(th=>{
+      th.onclick = ()=>{
+        const k = th.getAttribute("data-k"); if(!k) return;
+        const asc = th.dataset.asc !== "1";
+        rows.sort((a,b)=>{
+          if(k==="shortName"){ return asc ? a.shortName.localeCompare(b.shortName) : b.shortName.localeCompare(a.shortName); }
+          const x = Number(a[k]??0), y=Number(b[k]??0);
+          return asc ? (x-y) : (y-x);
+        });
+        th.dataset.asc = asc ? "1" : "0";
+        // 重新指向目前所選的那個「物件」，若原本有選就以同物件再定位
+        if(currentIdx>=0){
+          const sel = rows.findIndex(r => r.__id === rows[currentIdx]?.__id);
+          currentIdx = sel>=0 ? sel : -1;
+        }
+        renderTable();
+      };
+    });
   }
 
   // ---------- 多檔處理 ----------
@@ -181,7 +197,9 @@
       const k = computeRR(dailySlip, report.trades, 1_000_000, 0);
 
       results.push({
+        __id: Math.random().toString(36).slice(2),
         name,
+        shortName: shortName(name),
         ...k,
         tsArr:report.tsArr,
         total:report.total,
@@ -191,31 +209,14 @@
       });
     }
 
-    if(results[0]){
-      drawChartFor(results[0]);
-      $("#chartCaption").textContent = `第一檔：${results[0].name}（黑線標注 Max/Min/Last 為含滑價累積）`;
-    }
+    rows = results;
+    bindSort();
 
-    renderTable(results);
-    bindSort(results);
-  }
+    // 預設選第一列
+    if(rows[0]) selectRow(0);
 
-  // ---------- 排序 ----------
-  function bindSort(rows){
-    const thead = $("#sumTable thead");
-    thead.querySelectorAll("th").forEach(th=>{
-      th.onclick = ()=>{
-        const k = th.getAttribute("data-k"); if(!k) return;
-        const asc = th.dataset.asc !== "1";
-        rows.sort((a,b)=>{
-          if(k==="name"){ return asc ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name); }
-          const x = Number(a[k]??0), y=Number(b[k]??0);
-          return asc ? (x-y) : (y-x);
-        });
-        th.dataset.asc = asc ? "1" : "0";
-        renderTable(rows);
-      };
-    });
+    $("#fileCount").textContent = String(rows.length);
+    $("#importAt").textContent  = nowStr();
   }
 
   // ---------- 綁定事件 ----------
@@ -226,8 +227,6 @@
       const parts = clip.split(/\n-{5,}\n/);
       const pairs = parts.map((txt,i)=>({name:`CLIP_${i+1}.txt`, text:txt.trim()})).filter(p=>p.text);
       if(!pairs.length){ alert("剪貼簿沒有可用 TXT 內容"); return; }
-      $("#fileCount").textContent = String(pairs.length);
-      $("#importAt").textContent  = nowStr();
       await handleTexts(pairs);
     }catch(e){
       console.error(e);
@@ -244,8 +243,6 @@
       const text = await readAsTextAuto(f);
       pairs.push({name:f.name, text});
     }
-    $("#fileCount").textContent = String(pairs.length);
-    $("#importAt").textContent  = nowStr();
     await handleTexts(pairs);
   });
 })();
