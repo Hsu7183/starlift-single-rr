@@ -41,7 +41,7 @@
     <a class="back-link" href="index.html">← 返回首頁</a>
     <h1>分期報告（台指期）</h1>
 
-    <!-- (1) 上方控制列 -->
+    <!-- (1) 控制列 -->
     <div class="row card">
       <div class="row">
         <button id="btn-clip">從剪貼簿貼上 TXT</button>
@@ -54,7 +54,7 @@
     <!-- (2) 總覽圖：每期淨利 + 累積 + Max/Min 標註 -->
     <div class="card">
       <div id="chartBox"><canvas id="chart"></canvas></div>
-      <div class="sub">說明：柱＝每期淨利（含滑價，紅正綠負；柱上/下顯示數值）；線＝跨期累積；大紅/綠點＝全區最大獲利/最大虧損期（含結算日）。</div>
+      <div class="sub">柱＝每期淨利（紅正綠負；柱上/下顯示數值）；線＝跨期累積；大紅/綠點＝全區最大獲利/最大虧損期（標示期別起迄）。</div>
     </div>
 
     <!-- (3) 總表 KPI（整段） -->
@@ -79,13 +79,13 @@
       </table>
     </div>
 
-    <!-- (4) 分期對比 + 每期詳表（每日圖 + 交易明細） -->
+    <!-- (4) 分期對比 + 每期詳表 -->
     <div class="card">
       <h3 style="margin:0 0 8px 0">分期對比</h3>
       <table id="periodTable">
         <thead>
           <tr>
-            <th>期別（到期日）</th>
+            <th>期別（起迄）</th>
             <th class="num">筆數</th>
             <th class="num">勝率</th>
             <th class="num">當期淨利(含滑價)</th>
@@ -102,10 +102,10 @@
       </table>
     </div>
 
-    <!-- 動態插入每期（日圖 + 交易明細）的容器 -->
+    <!-- 每期（日圖 + 交易明細） -->
     <div id="periodDetails"></div>
   </div>
 
-  <script src="monthly.js?v=period-v2"></script>
+  <script src="monthly.js?v=period-v3"></script>
 </body>
 </html>
