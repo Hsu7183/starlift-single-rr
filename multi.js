@@ -1,13 +1,12 @@
-/* 多檔分析（精簡挑參數） multi-v3
-   - 匯入多份 TXT（檔案或剪貼簿）
-   - 下方表格只顯示精簡欄位；檔名只顯示差異性 “MMDD_HHMMSS”
-   - 點列切換上方 6 線圖；各欄可升/降序排序
+/* 多檔分析（精簡挑參數） multi-v4
+   - Max/Min 標註加入 (日期)，Last 只顯示數值
+   - 表格欄位可排序；點列切換上方圖；檔名縮短為 MMDD_HHMMSS
 */
 (function(){
   const $ = s => document.querySelector(s);
   let chart;
-  let rows = [];          // 目前展示用的列（排序後的順序）
-  let currentIdx = -1;    // 目前選取的列 index（指 rows 陣列位置）
+  let rows = [];          // 目前表格資料（可排序）
+  let currentIdx = -1;    // 目前選取 index（對應 rows）
 
   // ---------- 小工具 ----------
   const fmtPct = x => (Number.isFinite(x)? (x*100).toFixed(2) : "0.00")+"%";
@@ -20,8 +19,9 @@
   const keyFromTs = ts => { const s=String(ts); return `${s.slice(0,4)}-${s.slice(4,6)}-${s.slice(6,8)}`; };
   const toDate = ts => { const s=String(ts||""); const y=s.slice(0,4),m=s.slice(4,6),d=s.slice(6,8),hh=s.slice(8,10)||"00",mm=s.slice(10,12)||"00",ss=s.slice(12,14)||"00"; return new Date(`${y}-${m}-${d}T${hh}:${mm}:${ss}`); };
   const nowStr = ()=>{ const d=new Date(); const p=n=>String(n).padStart(2,"0"); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`; };
+  const tsToDate = ts => { const s=String(ts||""); const y=s.slice(0,4), m=Number(s.slice(4,6)), d=Number(s.slice(6,8)); if(y&&m&&d) return `${y}/${m}/${d}`; return s; };
 
-  // 只保留差異性檔名：抓 8 碼日期 + '_' + 6 碼時間 → 顯示 MMDD_HHMMSS
+  // 檔名縮短：抓 YYYYMMDD_HHMMSS → 顯示 MMDD_HHMMSS
   function shortName(name){
     const base = name.split(/[\\/]/).pop().replace(/\.[^.]+$/,'');
     const m = base.match(/(\d{8})_(\d{6})/);
@@ -55,10 +55,15 @@
     const idxLast = Math.max(0, arr.length-1);
     const idxMax  = arr.reduce((imax,v,i)=> v>(arr[imax]??-Infinity)? i:imax, 0);
     const idxMin  = arr.reduce((imin,v,i)=> v<(arr[imin]?? Infinity)? i:imin, 0);
+
+    const maxText  = `${comma(Math.round(arr[idxMax]||0))}(${tsToDate(tsArr[idxMax])})`;
+    const minText  = `${comma(Math.round(arr[idxMin]||0))}(${tsToDate(tsArr[idxMin])})`;
+    const lastText = `${comma(Math.round(arr[idxLast]||0))}`; // 只顯示數值
+
     const points = [
-      {i:idxMax,  val:arr[idxMax],  color:"#ef4444", text: comma(Math.round(arr[idxMax]||0))},
-      {i:idxMin,  val:arr[idxMin],  color:"#10b981", text: comma(Math.round(arr[idxMin]||0))},
-      {i:idxLast, val:arr[idxLast], color:"#111",    text: comma(Math.round(arr[idxLast]||0))},
+      {i:idxMax,  val:arr[idxMax],  color:"#ef4444", text:maxText},
+      {i:idxMin,  val:arr[idxMin],  color:"#10b981", text:minText},
+      {i:idxLast, val:arr[idxLast], color:"#111",    text:lastText},
     ];
 
     const anno = {
@@ -94,7 +99,7 @@
       plugins:[anno]
     });
 
-    $("#chartCaption").textContent = `目前：${rec.shortName}（黑線 Max / Min / Last 為含滑價累積）`;
+    $("#chartCaption").textContent = `目前：${rec.shortName}（黑線 Max/Min 顯示日期，Last 只顯示數值；皆為含滑價累積）`;
   }
 
   // ---------- RR（簡版） ----------
@@ -156,7 +161,7 @@
   function selectRow(idx){
     currentIdx = idx;
     renderTable();               // 更新高亮
-    drawChartFor(rows[idx]);     // 切圖
+    drawChartFor(rows[idx]);     // 切換圖表
   }
 
   function bindSort(){
@@ -170,10 +175,11 @@
           return asc ? (x-y) : (y-x);
         });
         th.dataset.asc = asc ? "1" : "0";
-        // 重新指向目前所選的那個「物件」，若原本有選就以同物件再定位
+        // 保持選取列指向同一筆（若存在）
         if(currentIdx>=0){
-          const sel = rows.findIndex(r => r.__id === rows[currentIdx]?.__id);
-          currentIdx = sel>=0 ? sel : -1;
+          const curId = rows[currentIdx]?.__id;
+          const newIdx = rows.findIndex(r=>r.__id===curId);
+          currentIdx = newIdx>=0 ? newIdx : -1;
         }
         renderTable();
       };
@@ -211,8 +217,6 @@
 
     rows = results;
     bindSort();
-
-    // 預設選第一列
     if(rows[0]) selectRow(0);
 
     $("#fileCount").textContent = String(rows.length);
