@@ -11,7 +11,7 @@
     .card{background:#fff;border:1px solid #e5e7eb;border-radius:12px;box-shadow:0 2px 10px rgba(0,0,0,.03);padding:12px;margin-bottom:16px}
     .back-link{margin-bottom:12px;display:inline-block}
     .chip{display:inline-block;background:#eef;padding:6px 10px;border-radius:999px;font-size:12px}
-    #chartBox{height:440px}
+    #chartBox{height:460px}
     table{width:100%;border-collapse:collapse;background:#fff}
     th,td{padding:8px 10px;border-bottom:1px solid #e5e7eb;white-space:nowrap;font:13px/1.65 ui-monospace,Consolas,Menlo,monospace}
     thead th{background:#fafafa;position:sticky;top:0;z-index:2}
@@ -19,6 +19,19 @@
     .p-red{color:#ef4444;font-weight:700}
     .p-green{color:#10b981;font-weight:700}
     .sub{opacity:.8}
+
+    /* 每期區塊 */
+    .period-block{margin-top:16px}
+    .period-title{font-weight:800;margin:4px 0 12px 0}
+    .miniChart{height:300px}
+
+    /* 列印：每期分頁（第一個不分頁） */
+    @media print{
+      .period-block{page-break-before: always}
+      .period-block:first-of-type{page-break-before: auto}
+      .card{box-shadow:none;border:1px solid #ddd}
+      .back-link,.row.card{display:none}
+    }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="shared.js?v=full-table-v12"></script>
@@ -38,13 +51,13 @@
       <div class="chip">參數：<span id="paramChip">—</span></div>
     </div>
 
-    <!-- (2) 中間圖表：每期盈虧 + 期別累積 -->
+    <!-- (2) 總覽圖：每期淨利 + 累積 + Max/Min 標註 -->
     <div class="card">
       <div id="chartBox"><canvas id="chart"></canvas></div>
-      <div class="sub">說明：柱＝每期淨利（含滑價，紅正綠負）；線＝跨期累積。</div>
+      <div class="sub">說明：柱＝每期淨利（含滑價，紅正綠負；柱上/下顯示數值）；線＝跨期累積；大紅/綠點＝全區最大獲利/最大虧損期（含結算日）。</div>
     </div>
 
-    <!-- (3) 下方表格：總表 KPI -->
+    <!-- (3) 總表 KPI（整段） -->
     <div class="card">
       <h3 style="margin:0 0 8px 0">總表 KPI（整段）</h3>
       <table id="totalTable">
@@ -66,7 +79,7 @@
       </table>
     </div>
 
-    <!-- (3) 下方表格：分期對比 -->
+    <!-- (4) 分期對比 + 每期詳表（每日圖 + 交易明細） -->
     <div class="card">
       <h3 style="margin:0 0 8px 0">分期對比</h3>
       <table id="periodTable">
@@ -88,8 +101,11 @@
         <tbody></tbody>
       </table>
     </div>
+
+    <!-- 動態插入每期（日圖 + 交易明細）的容器 -->
+    <div id="periodDetails"></div>
   </div>
 
-  <script src="monthly.js?v=period-v1"></script>
+  <script src="monthly.js?v=period-v2"></script>
 </body>
 </html>
