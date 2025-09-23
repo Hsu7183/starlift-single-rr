@@ -1,88 +1,226 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>三劍客量化科技（籌備中）｜策略分析系統</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>三劍客量化科技（籌備中）</title>
+  <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
   <style>
-    :root { --card-radius:12px; }
-    body{
-      font-family: Arial, "微軟正黑體", sans-serif;
-      margin: 20px;
-      background:#f8f9fa;
-      color:#333;
-    }
-    h1{
-      text-align:center;
-      margin: 0 0 6px 0;
-      font-weight: 800;
-      letter-spacing: .5px;
-    }
-    .subtitle{
-      text-align:center;
-      color:#666;
-      margin: 0 0 36px 0;
-      font-size:14px;
-    }
-    .nav{
-      display:grid;
-      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-      gap:20px;
-      max-width: 980px;
-      margin: 0 auto;
-    }
-    a.card{
-      display:block;
-      background:#fff;
-      padding:20px;
-      border-radius: var(--card-radius);
-      box-shadow:0 2px 8px rgba(0,0,0,.08);
-      text-decoration:none;
-      color:inherit;
-      transition: transform .15s ease, box-shadow .15s ease;
-    }
-    a.card:hover{
-      transform: translateY(-4px);
-      box-shadow:0 10px 22px rgba(0,0,0,.10);
-    }
-    .card-title{
-      font-weight:700;
-      font-size:18px;
-      color:#0d6efd;
-      margin:0 0 6px 0;
-    }
-    .card-desc{
-      margin:0;
-      color:#666;
-      font-size:14px;
-      line-height:1.5;
-    }
+    :root { --card-r:12px; }
+    body{font-family:Arial,"微軟正黑體",sans-serif;background:#f8f9fa;color:#333;margin:24px;}
+    h1{margin:0 0 6px 0;text-align:center;font-size:28px}
+    .sub{margin:0 0 28px 0;text-align:center;color:#666}
+    .gate{max-width:960px;margin:0 auto}
+    .login{background:#fff;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.08);padding:16px;max-width:960px;margin:0 auto}
+    .row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+    input[type="email"],input[type="password"]{padding:10px;border:1px solid #ddd;border-radius:8px;min-width:260px}
+    button{padding:10px 14px;border:0;border-radius:8px;cursor:pointer}
+    .primary{background:#0d6efd;color:#fff}
+    .muted{color:#666}
+    .warn{color:#b90}
+    .ok{color:#128a27}
+    .nav{display:none;max-width:980px;margin:26px auto 0;gap:20px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+    .nav.show{display:grid}
+    a.card{display:block;background:#fff;padding:20px;border-radius:var(--card-r);box-shadow:0 2px 8px rgba(0,0,0,.08);text-decoration:none;color:inherit;transition:.15s}
+    a.card:hover{transform:translateY(-4px);box-shadow:0 10px 22px rgba(0,0,0,.12)}
+    .card h4{margin:0 0 8px 0;color:#0d6efd}
+    .logs{max-width:980px;margin:20px auto 0;background:#fff;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.08);padding:16px}
+    table{width:100%;border-collapse:collapse}
+    th,td{padding:8px;border-bottom:1px solid #eee;text-align:left;font-size:14px}
+    th{background:#fafafa}
+    .right{text-align:right}
   </style>
 </head>
 <body>
-  <h1>三劍客量化科技（籌備中）</h1>
-  <p class="subtitle">共同創辦人：許夏睿、何冠緯、張宸</p>
-
-  <div class="nav">
-    <a class="card" href="single.html">
-      <p class="card-title">單檔分析</p>
-      <p class="card-desc">分析單一檔案，輸出收益曲線與 KPI。</p>
-    </a>
-
-    <a class="card" href="multi.html">
-      <p class="card-title">多檔分析</p>
-      <p class="card-desc">同時上傳多個檔案，輸出彙總表與統計。</p>
-    </a>
-
-    <a class="card" href="monthly.html">
-      <p class="card-title">分月報告</p>
-      <p class="card-desc">將交易結果依月份拆分，生成月度統計。</p>
-    </a>
-
-    <a class="card" href="upload.html">
-      <p class="card-title">資料上傳區</p>
-      <p class="card-desc">上傳／瀏覽／下載／刪除報表檔案（連接 Supabase Storage）。</p>
-    </a>
+  <!-- 標題區（永遠顯示） -->
+  <div class="gate">
+    <h1>三劍客量化科技（籌備中）</h1>
+    <p class="sub">共同創辦人：許夏睿、何冠緯、張宸</p>
   </div>
+
+  <!-- 登入表單（未登入時顯示） -->
+  <div class="login" id="loginPanel">
+    <h3 style="margin-top:0">登入</h3>
+    <div class="row">
+      <input id="email" type="email" placeholder="Email（至少 6 碼密碼）" />
+      <input id="password" type="password" placeholder="密碼（最少 6 碼）" />
+      <button class="primary" id="btnSignIn">登入</button>
+      <button id="btnSignUp">註冊</button>
+      <button id="btnSignOut" style="display:none;">登出</button>
+    </div>
+    <div id="loginMsg" class="muted" style="margin-top:8px;"></div>
+  </div>
+
+  <!-- 首頁卡片（登入後顯示） -->
+  <div class="nav" id="homeNav">
+    <a class="card" href="single.html"><h4>單檔分析</h4><div>分析單一檔案，輸出收益曲線與 KPI。</div></a>
+    <a class="card" href="multi.html"><h4>多檔分析</h4><div>同時上傳多個檔案，輸出彙總表與統計。</div></a>
+    <a class="card" href="monthly.html"><h4>分月報告</h4><div>將交易結果依月份拆分，生成月度統計。</div></a>
+    <a class="card" href="upload.html"><h4>資料上傳區</h4><div>上傳／瀏覽／下載／刪除報表檔案（連接 Supabase Storage）。</div></a>
+  </div>
+
+  <!-- 近 10 次登入紀錄（登入後顯示） -->
+  <div class="logs" id="logsPanel" style="display:none;">
+    <h3 style="margin-top:0">近 10 次登入紀錄</h3>
+    <div id="lastLogin" class="muted" style="margin-bottom:8px;"></div>
+    <table>
+      <thead><tr><th>時間</th><th>IP</th><th>裝置/瀏覽器</th><th>狀態</th></tr></thead>
+      <tbody id="logsBody"><tr><td colspan="4" class="muted">載入中…</td></tr></tbody>
+    </table>
+  </div>
+
+<script>
+/* ========= 你的 Supabase 資訊 ========= */
+const SUPABASE_URL = "https://byhbmmnacezzgkwfkozs.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_xVe8fGbqQ0XGwi4DsmjPMg_Y2RBOD3t";
+/* ========= 白名單三位（小寫 email）— 只做 UI 提示；真正限制請做 Policies ========= */
+const WRITERS = ["hsu@example.com","ho@example.com","chang@example.com"];
+/* ========= 警告信 Edge Function 名稱 ========= */
+const ALERT_FN = "alert-email";      // 下面 B 章節會提供 function 程式
+const LOG_FN   = "log-login";        // 可記「未登入」階段的失敗嘗試
+/* ===================================== */
+
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const emailEl = document.getElementById('email');
+const pwEl    = document.getElementById('password');
+const loginMsg= document.getElementById('loginMsg');
+const btnIn   = document.getElementById('btnSignIn');
+const btnUp   = document.getElementById('btnSignUp');
+const btnOut  = document.getElementById('btnSignOut');
+const homeNav = document.getElementById('homeNav');
+const logsPanel = document.getElementById('logsPanel');
+const logsBody  = document.getElementById('logsBody');
+const lastLogin = document.getElementById('lastLogin');
+const loginPanel= document.getElementById('loginPanel');
+
+/* 取得目前外網 IP（第一次錯誤要顯示） */
+async function getIP(){
+  try{
+    const r = await fetch("https://api.ipify.org?format=json");
+    const j = await r.json();
+    return j.ip || "unknown";
+  }catch{ return "unknown"; }
+}
+/* 讀/增計「該 email 的失敗次數」（存在 localStorage） */
+function getFailKey(email){ return `fail:${(email||'').toLowerCase()}` }
+function readFail(email){ return parseInt(localStorage.getItem(getFailKey(email))||"0",10) }
+function addFail(email){ const k=getFailKey(email); localStorage.setItem(k, String(readFail(email)+1)); }
+function clearFail(email){ localStorage.removeItem(getFailKey(email)); }
+
+/* 寫入成功登入紀錄（資料表 login_logs） */
+async function logSuccess(email, ip){
+  try{
+    await sb.from("login_logs").insert({ email, ip, success: true, ua: navigator.userAgent });
+  }catch(e){ console.warn("logSuccess error", e); }
+}
+/* 呼叫 Edge Function 記失敗＋寄警告信 */
+async function alertFail(email, ip, count){
+  try{
+    await sb.functions.invoke(ALERT_FN, { body: { email, ip, count, ua: navigator.userAgent }});
+  }catch(e){ console.warn("alert function error", e); }
+  // 也寫一筆（未登入階段）失敗紀錄
+  try{
+    await sb.functions.invoke(LOG_FN, { body: { email, ip, success:false, ua: navigator.userAgent }});
+  }catch(e){ console.warn("log function error", e); }
+}
+
+/* 讀近 10 次登入紀錄（成功/失敗都可，這裡只顯示成功） */
+async function loadLast10(email){
+  logsPanel.style.display = "block";
+  logsBody.innerHTML = `<tr><td colspan="4" class="muted">載入中…</td></tr>`;
+  try{
+    const { data, error } = await sb
+      .from("login_logs")
+      .select("created_at, ip, success, ua")
+      .eq("email", email.toLowerCase())
+      .order("created_at",{ ascending:false })
+      .limit(10);
+    if(error) throw error;
+    if(!data || data.length===0){
+      logsBody.innerHTML = `<tr><td colspan="4" class="muted">（尚無紀錄）</td></tr>`;
+      return;
+    }
+    const last = data[0];
+    lastLogin.textContent = `上次登入：${new Date(last.created_at).toLocaleString()}，IP：${last.ip}`;
+    logsBody.innerHTML = data.map(r=>`
+      <tr>
+        <td>${new Date(r.created_at).toLocaleString()}</td>
+        <td>${r.ip||'-'}</td>
+        <td>${(r.ua||'').slice(0,60)}</td>
+        <td>${r.success ? '成功' : '失敗'}</td>
+      </tr>
+    `).join("");
+  }catch(e){
+    logsBody.innerHTML = `<tr><td colspan="4" class="muted">讀取失敗：${e.message||e}</td></tr>`;
+  }
+}
+
+/* UI：登入狀態變化 */
+async function refreshUI(){
+  const { data:{ session } } = await sb.auth.getSession();
+  if(session){
+    // 顯示首頁與紀錄
+    loginPanel.querySelector('#btnSignOut').style.display = 'inline-block';
+    homeNav.classList.add('show');
+    const email = (session.user.email||'').toLowerCase();
+    await loadLast10(email);
+  }else{
+    // 只顯示標題＋登入表單
+    loginPanel.querySelector('#btnSignOut').style.display = 'none';
+    homeNav.classList.remove('show');
+    logsPanel.style.display = 'none';
+  }
+}
+
+/* 事件：登入 */
+btnIn.onclick = async () => {
+  const email = (emailEl.value||'').trim().toLowerCase();
+  const pw    = pwEl.value||'';
+  if(!email || pw.length<6){ loginMsg.textContent="請輸入有效 Email 與（至少 6 碼）密碼"; return; }
+
+  loginMsg.textContent = "登入中…";
+  const { data, error } = await sb.auth.signInWithPassword({ email, password: pw });
+
+  if(error){
+    const ip = await getIP();
+    const count = readFail(email) + 1;
+    addFail(email);
+
+    if(count === 1){
+      loginMsg.innerHTML = `<span class="warn">登入失敗（第 1 次）。你的 IP：${ip}</span>`;
+    }else if(count >= 2){
+      loginMsg.innerHTML = `<span class="warn">登入失敗（第 ${count} 次）。已寄出警告信。</span>`;
+      alertFail(email, ip, count);
+    }
+    return;
+  }
+
+  // 成功：清除失敗計數、寫入成功紀錄、刷新首頁
+  clearFail(email);
+  const ip = await getIP();
+  await logSuccess(email, ip);
+  loginMsg.innerHTML = `<span class="ok">登入成功</span>`;
+  await refreshUI();
+};
+
+/* 事件：註冊（若走做法 B 關掉公開註冊，此按鈕就不會成功，可保留或移除） */
+btnUp.onclick = async () => {
+  const email = (emailEl.value||'').trim().toLowerCase();
+  const pw    = pwEl.value||'';
+  if(!email || pw.length<6){ loginMsg.textContent="請輸入有效 Email 與（至少 6 碼）密碼"; return; }
+  const { error } = await sb.auth.signUp({ email, password: pw });
+  loginMsg.innerHTML = error ? `<span class="warn">註冊失敗：${error.message}</span>` : `✅ 已送出註冊（如需驗證請到信箱收信）`;
+};
+
+/* 事件：登出 */
+btnOut.onclick = async () => {
+  await sb.auth.signOut();
+  loginMsg.textContent = "已登出";
+  await refreshUI();
+};
+
+sb.auth.onAuthStateChange(()=>refreshUI());
+window.addEventListener('load', refreshUI);
+</script>
 </body>
 </html>
