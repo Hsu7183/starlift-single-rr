@@ -1,47 +1,69 @@
-<!doctype html>
-<html lang="zh-Hant">
+<!DOCTYPE html>
+<html lang="zh-TW">
 <head>
-  <meta charset="utf-8" />
-  <title>三劍客台指期策略分析｜首頁</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <link rel="stylesheet" href="./style.css" />
+  <meta charset="UTF-8">
+  <title>策略分析系統首頁</title>
   <style>
-    /* 簡潔首頁樣式，不動你的全站 style.css */
-    .home-wrap{max-width:980px;margin:48px auto;padding:0 16px}
-    h1{font-size:28px;margin:0 0 8px}
-    .sub{margin:0 0 20px;color:#6b7280}
-    .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
-    .card{display:block;background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:18px;
-          text-decoration:none;color:#111;box-shadow:0 1px 2px rgba(0,0,0,.04)}
-    .card:hover{border-color:#2563eb}
-    .card h3{margin:0 0 6px;font-size:18px}
-    .card p{margin:0;color:#6b7280;line-height:1.6}
-    .foot{margin-top:26px;color:#9ca3af;font-size:12px}
+    body {
+      font-family: Arial, "微軟正黑體", sans-serif;
+      margin: 20px;
+      background-color: #f8f9fa;
+      color: #333;
+    }
+    h1 {
+      text-align: center;
+      margin-bottom: 40px;
+    }
+    .nav {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 20px;
+      max-width: 900px;
+      margin: auto;
+    }
+    .card {
+      background: #fff;
+      padding: 20px;
+      border-radius: 10px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+      text-align: center;
+      transition: transform 0.2s;
+    }
+    .card:hover {
+      transform: translateY(-5px);
+    }
+    .card a {
+      text-decoration: none;
+      font-weight: bold;
+      color: #007bff;
+      font-size: 18px;
+    }
+    .desc {
+      margin-top: 8px;
+      font-size: 14px;
+      color: #666;
+    }
   </style>
 </head>
 <body>
-  <div class="home-wrap">
-    <h1>三劍客台指期策略分析</h1>
-    <p class="sub">請選擇模式</p>
-
-    <div class="cards">
-      <a class="card" href="./single.html">
-        <h3>單檔分析（機構級）</h3>
-        <p>主圖、Risk-Return 六大類、交易明細、列印 PDF</p>
-      </a>
-
-      <a class="card" href="./multi.html">
-        <h3>多檔分析</h3>
-        <p>一次載入多份 TXT，彙總 KPI 並可切換個別檔案</p>
-      </a>
-
-      <a class="card" href="./monthly.html">
-        <h3>分月報告</h3>
-        <p>每月一張圖＋該月交易明細（適合列印與追蹤）</p>
-      </a>
+  <h1>📊 策略分析系統</h1>
+  <div class="nav">
+    <div class="card">
+      <a href="single.html">單檔分析</a>
+      <div class="desc">分析單一檔案，輸出收益曲線與 KPI。</div>
     </div>
-
-    <p class="foot">提示：若連結的頁面尚未建立，先建立空檔（例如 monthly.html）再補功能。</p>
+    <div class="card">
+      <a href="multi.html">多檔分析</a>
+      <div class="desc">同時上傳多個檔案，輸出彙總表與統計。</div>
+    </div>
+    <div class="card">
+      <a href="monthly.html">分月報告</a>
+      <div class="desc">將交易結果依月份拆分，生成月度統計。</div>
+    </div>
+    <div class="card">
+      <a href="combined.html">第4分頁 - 總合報表</a>
+      <div class="desc">整合前3個分頁的輸出結果，集中展示。</div>
+    </div>
   </div>
 </body>
 </html>
