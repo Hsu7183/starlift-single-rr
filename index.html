@@ -10,12 +10,15 @@
     body{font-family:Arial,"微軟正黑體",sans-serif;background:#f8f9fa;color:#333;margin:24px;}
     h1{margin:0 0 6px 0;text-align:center;font-size:28px}
     .sub{margin:0 0 28px 0;text-align:center;color:#666}
+    .status{max-width:960px;margin:0 auto 12px;display:flex;gap:10px;align-items:center;justify-content:flex-end;font-size:12px;color:#555}
+    .badge{padding:4px 8px;border-radius:999px}
+    .ok{background:#e9f7ef;color:#128a27}.err{background:#fee;border: #fcc solid 1px;color:#b00020}
     .login{background:#fff;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.08);padding:16px;max-width:960px;margin:0 auto}
     .row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
     input[type="email"],input[type="password"]{padding:10px;border:1px solid #ddd;border-radius:8px;min-width:260px}
     button{padding:10px 14px;border:0;border-radius:8px;cursor:pointer}
     .primary{background:#0d6efd;color:#fff}
-    .muted{color:#666}.warn{color:#b90}.ok{color:#128a27}
+    .muted{color:#666}.warn{color:#b90}.okTxt{color:#128a27}
     .nav{display:none;max-width:980px;margin:26px auto 0;gap:20px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
     .nav.show{display:grid}
     a.card{display:block;background:#fff;padding:20px;border-radius:var(--card-r);box-shadow:0 2px 8px rgba(0,0,0,.08);text-decoration:none;color:inherit;transition:.15s}
@@ -30,6 +33,11 @@
 <body>
   <h1>三劍客量化科技（籌備中）</h1>
   <p class="sub">共同創辦人：許夏睿、何冠緯、張宸</p>
+
+  <!-- 連線狀態 -->
+  <div class="status">
+    <span id="healthBadge" class="badge">檢查連線中…</span>
+  </div>
 
   <!-- 登入（無註冊） -->
   <div class="login" id="loginPanel">
@@ -61,20 +69,19 @@
   </div>
 
 <script>
-/* ===== Supabase 設定（你的專案） ===== */
+/* ===== Supabase 設定 ===== */
 const SUPABASE_URL = "https://byhbmmnacezzgkwfkozs.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_xVe8fGbqQ0XGwi4DsmjPMg_Y2RBOD3t";
-
 /* ===== 允許登入白名單（僅這 3 個能進首頁） ===== */
 const EMAIL_WHITELIST = [
   "q72yg7f8@gmail.com",
   "ck6ej04jo3-2@yahoo.com",
   "tony71220@gmail.com",
 ].map(s=>s.toLowerCase());
-/* ==================================== */
 
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+/* DOM refs */
 const emailEl = document.getElementById('email');
 const pwEl    = document.getElementById('password');
 const loginMsg= document.getElementById('loginMsg');
@@ -83,8 +90,9 @@ const btnOut  = document.getElementById('btnSignOut');
 const homeNav = document.getElementById('homeNav');
 const failPanel = document.getElementById('failPanel');
 const failBody  = document.getElementById('failBody');
+const healthBadge = document.getElementById('healthBadge');
 
-/* 取得外網 IP（登入失敗時顯示） */
+/* 工具：取得外網 IP（登入失敗時顯示） */
 async function getIP(){
   try{
     const r = await fetch('https://api.ipify.org?format=json', { cache:'no-store' });
@@ -93,36 +101,51 @@ async function getIP(){
   }catch{ return 'unknown'; }
 }
 
-/* 在下方表格新增一筆錯誤紀錄（時間+IP） */
+/* 工具：錯誤表格新增一列（時間+IP+說明） */
 function appendFailRow(ip, note){
   failPanel.style.display='block';
   const tr=document.createElement('tr');
   tr.innerHTML=`<td>${new Date().toLocaleString()}</td><td>${ip}</td><td>${note||'登入失敗'}</td>`;
   if (failBody.children.length===1 && failBody.children[0].children[0].innerText==="—") failBody.innerHTML="";
-  failBody.prepend(tr); // 最新在最上方
+  failBody.prepend(tr);
 }
 
-/* UI 刷新：依 session 顯示/隱藏首頁卡片；白名單再檢查一次 */
+/* 首頁顯示/隱藏（白名單再檢查一次） */
 async function refreshUI(){
   const { data:{session} } = await sb.auth.getSession();
   const loggedIn = !!session;
   btnOut.style.display = loggedIn ? 'inline-block' : 'none';
   if(!loggedIn){ homeNav.classList.remove('show'); loginMsg.textContent=''; return; }
 
-  // 白名單二次確認
   const email=(session.user.email||'').toLowerCase();
   if(!EMAIL_WHITELIST.includes(email)){
     const ip = await getIP();
     appendFailRow(ip, '未授權帳號：'+email);
     loginMsg.innerHTML=`<span class="warn">此帳號未授權，已記錄 IP。</span>`;
-    await sb.auth.signOut(); // 立刻登出
+    await sb.auth.signOut();
     return;
   }
-  // 允許 → 顯示首頁卡片（= 開放所有功能）
-  homeNav.classList.add('show');
+  homeNav.classList.add('show'); // 允許 → 顯示卡片
 }
 
-/* 登入（移除逾時；任何錯誤都會顯示＋記 IP） */
+/* 健康檢查：能不能連到 Supabase Auth */
+async function checkHealth(){
+  try{
+    const r = await fetch(`${SUPABASE_URL}/auth/v1/health`, { cache:'no-store', mode:'cors' });
+    if(r.ok){
+      healthBadge.className = 'badge ok';
+      healthBadge.textContent = '✅ Supabase 連線正常';
+    }else{
+      healthBadge.className = 'badge err';
+      healthBadge.textContent = `❌ 連線異常（${r.status}）`;
+    }
+  }catch(e){
+    healthBadge.className = 'badge err';
+    healthBadge.textContent = '❌ 無法連線 Supabase';
+  }
+}
+
+/* 登入（任何錯誤都顯示＋記 IP） */
 btnIn.onclick = async () => {
   const email = (emailEl.value||'').trim().toLowerCase();
   const pw    = pwEl.value||'';
@@ -135,18 +158,17 @@ btnIn.onclick = async () => {
     const { error } = await sb.auth.signInWithPassword({ email, password: pw });
 
     if(error){
-      // 常見錯誤：invalid login credentials / Email not confirmed / rate-limited…
+      // 常見：invalid login credentials / Email not confirmed / rate-limited
       loginMsg.innerHTML = `<span class="warn">登入失敗：${error.message}</span>`;
       const ip = await getIP();
       appendFailRow(ip, error.message || '帳號或密碼不正確');
       return;
     }
 
-    loginMsg.innerHTML=`<span class="ok">登入成功</span>`;
+    loginMsg.innerHTML=`<span class="okTxt">登入成功</span>`;
     await refreshUI();
 
   }catch(e){
-    // 例如網路錯誤
     const ip = await getIP();
     loginMsg.innerHTML = `<span class="warn">登入失敗：${e?.message||e}</span>`;
     appendFailRow(ip, e?.message||'網路錯誤');
@@ -162,9 +184,9 @@ btnOut.onclick = async () => {
   await refreshUI();
 };
 
-/* 首次載入：依 session 狀態切換 */
+/* 初始：健康檢查 + 依 session 切換 */
 sb.auth.onAuthStateChange(()=>refreshUI());
-window.addEventListener('load', refreshUI);
+window.addEventListener('load', () => { checkHealth(); refreshUI(); });
 </script>
 </body>
 </html>
