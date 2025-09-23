@@ -46,7 +46,7 @@
     <div id="loginMsg" class="muted" style="margin-top:8px;"></div>
   </div>
 
-  <!-- 登入錯誤紀錄（時間＋IP；本頁顯示，不寄信） -->
+  <!-- 登入錯誤紀錄（時間＋IP；本頁顯示） -->
   <div class="faillog" id="failPanel" style="display:none;">
     <h3 style="margin:0 0 8px 0;">登入錯誤紀錄（本頁面顯示）</h3>
     <table>
@@ -105,7 +105,7 @@ function appendFailRow(ip, note){
   failBody.prepend(tr);
 }
 
-/* 首頁顯示/隱藏（白名單再檢查一次） */
+/* 白名單檢查 + 顯示首頁卡片 */
 async function refreshUI(){
   const { data:{session} } = await sb.auth.getSession();
   const loggedIn = !!session;
@@ -123,6 +123,40 @@ async function refreshUI(){
   homeNav.classList.add('show'); // 允許 → 顯示卡片
 }
 
+/* Login：先走 SDK；若失敗/卡住再走 REST 密碼授權作為備援 */
+async function signInResilient(email, password){
+  // 1) SDK 嘗試
+  try{
+    const { data, error } = await sb.auth.signInWithPassword({ email, password });
+    if (!error && data?.user) return { ok:true, from:'sdk', data };
+    if (error) return { ok:false, message:error.message };
+  }catch(e){
+    // SDK 例外，繼續走 REST
+  }
+
+  // 2) REST 備援（直接打 token 密碼授權）
+  try{
+    const r = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+      method:'POST',
+      headers:{
+        'Content-Type':'application/json',
+        'apikey': SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify({ email, password })
+    });
+    const j = await r.json().catch(()=> ({}));
+    if (r.ok && j?.access_token && j?.refresh_token){
+      // 用取得的 token 建立 session
+      await sb.auth.setSession({ access_token:j.access_token, refresh_token:j.refresh_token });
+      return { ok:true, from:'rest', data:j };
+    }
+    // 失敗時，回傳錯誤描述（Email not confirmed / Invalid login credentials 等）
+    return { ok:false, message: j?.error_description || j?.error || `HTTP ${r.status}` };
+  }catch(e){
+    return { ok:false, message:`REST 失敗：${e?.message||e}` };
+  }
+}
+
 /* 登入（任何錯誤都顯示＋記 IP） */
 btnIn.onclick = async () => {
   const email = (emailEl.value||'').trim().toLowerCase();
@@ -132,27 +166,20 @@ btnIn.onclick = async () => {
   btnIn.disabled = true;
   loginMsg.textContent='登入中…';
 
-  try{
-    const { data, error } = await sb.auth.signInWithPassword({ email, password: pw });
+  const result = await signInResilient(email, pw);
 
-    if(error){
-      // 常見：invalid login credentials / Email not confirmed / rate-limited
-      loginMsg.innerHTML = `<span class="warn">登入失敗：${error.message}</span>`;
-      const ip = await getIP();
-      appendFailRow(ip, error.message || '帳號或密碼不正確');
-      return;
-    }
-
-    loginMsg.innerHTML=`<span class="okTxt">登入成功</span>`;
-    await refreshUI();
-
-  }catch(e){
+  if(!result.ok){
     const ip = await getIP();
-    loginMsg.innerHTML = `<span class="warn">登入失敗：${e?.message||e}</span>`;
-    appendFailRow(ip, e?.message||'網路錯誤');
-  }finally{
+    loginMsg.innerHTML = `<span class="warn">登入失敗：${result.message || '未知錯誤'}</span>`;
+    appendFailRow(ip, result.message || '登入失敗');
     btnIn.disabled = false;
+    return;
   }
+
+  // 成功
+  loginMsg.innerHTML=`<span class="okTxt">登入成功</span>`;
+  await refreshUI();
+  btnIn.disabled = false;
 };
 
 /* 登出 */
