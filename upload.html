@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <title>資料上傳區（第4分頁）</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- Supabase JS v2（CDN） -->
+  <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+  <style>
+    body { font-family: Arial, "微軟正黑體", sans-serif; background:#f8f9fa; margin:20px; color:#333; }
+    h1 { margin-bottom:6px; }
+    .subtitle { color:#666; margin:0 0 20px 0; }
+    .panel { background:#fff; padding:16px; border-radius:10px; box-shadow:0 2px 6px rgba(0,0,0,.08); margin-bottom:16px; }
+    .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+    input[type="file"] { padding:6px; }
+    input[type="text"], input[type="email"], input[type="password"] { padding:8px; border:1px solid #ddd; border-radius:8px; }
+    button { padding:8px 14px; border:0; border-radius:8px; cursor:pointer; }
+    button.primary { background:#0d6efd; color:#fff; }
+    button.danger { background:#dc3545; color:#fff; }
+    button.link { background:transparent; color:#0d6efd; text-decoration:underline; padding:0; }
+    table { width:100%; border-collapse:collapse; background:#fff; border-radius:10px; overflow:hidden; }
+    th, td { border-bottom:1px solid #eee; padding:10px; text-align:left; font-size:14px; }
+    th { background:#fafafa; }
+    .right { text-align:right; }
+    .muted { color:#666; }
+    .grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(220px,1fr)); gap:12px; }
+    .hint { font-size:12px; color:#777; }
+  </style>
+</head>
+<body>
+  <h1>資料上傳區</h1>
+  <p class="subtitle">上傳 / 瀏覽 / 下載 / 刪除報表檔案（PDF、TXT…）。Bucket：<b>reports</b></p>
+
+  <!-- 登入／註冊 -->
+  <div class="panel" id="authPanel">
+    <h3>登入</h3>
+    <div class="row">
+      <input id="email" type="email" placeholder="Email" />
+      <input id="password" type="password" placeholder="密碼（最少 6 碼）" />
+      <button class="primary" id="btnSignIn">登入</button>
+      <button id="btnSignUp">註冊</button>
+      <button id="btnSignOut" style="display:none;">登出</button>
+      <span class="hint">（登入後可上傳/刪除；未登入可下載/預覽）</span>
+    </div>
+    <div id="authMsg" class="muted" style="margin-top:8px;"></div>
+  </div>
+
+  <!-- 上傳區 -->
+  <div class="panel" id="uploadPanel" style="display:none;">
+    <h3>上傳檔案</h3>
+    <div class="grid">
+      <div>
+        <label class="muted">選擇檔案</label><br/>
+        <input type="file" id="fileInput" multiple />
+      </div>
+      <div>
+        <label class="muted">儲存子資料夾（建議用日期：2025-09-23）</label><br/>
+        <input type="text" id="subfolder" placeholder="例如：2025-09-23" />
+      </div>
+      <div style="align-self:end;">
+        <button class="primary" id="btnUpload">開始上傳</button>
+      </div>
+    </div>
+    <div id="uploadMsg" class="muted" style="margin-top:8px;"></div>
+  </div>
+
+  <!-- 清單區 -->
+  <div class="panel">
+    <h3>檔案清單</h3>
+    <div class="row" style="margin-bottom:8px;">
+      <input type="text" id="prefix" placeholder="篩選資料夾（例如：2025-09-23/）" style="flex:1;" />
+      <button id="btnRefresh">重新整理</button>
+    </div>
+    <div class="hint" style="margin-bottom:8px;">提示：若要看某資料夾底下的檔案，prefix 請填「資料夾名/」，例如：<code>2025-09-23/</code></div>
+    <table>
+      <thead>
+        <tr>
+          <th>檔名（含路徑）</th>
+          <th class="right">大小</th>
+          <th>最後更新</th>
+          <th class="right">操作</th>
+        </tr>
+      </thead>
+      <tbody id="fileTbody">
+        <tr><td colspan="4" class="muted">載入中...</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <script>
+    // ====== 你的 Supabase 專案設定（已依你提供的值寫入） ======
+    const SUPABASE_URL = "https://byhbmmnacezzgkwfkozs.supabase.co";
+    const SUPABASE_ANON_KEY = "sb_publishable_xVe8fGbqQ0XGwi4DsmjPMg_Y2RBOD3t";
+    const BUCKET_NAME = "reports";
+    // ========================================================
+
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    const authPanel = document.getElementById('authPanel');
+    const uploadPanel = document.getElementById('uploadPanel');
+    const authMsg = document.getElementById('authMsg');
+    const uploadMsg = document.getElementById('uploadMsg');
+
+    const emailEl = document.getElementById('email');
+    const passwordEl = document.getElementById('password');
+    const btnSignOut = document.getElementById('btnSignOut');
+
+    const fileInput = document.getElementById('fileInput');
+    const subfolderEl = document.getElementById('subfolder');
+    const prefixEl = document.getElementById('prefix');
+    const tbody = document.getElementById('fileTbody');
+
+    // 監看登入狀態
+    async function refreshAuthUI() {
+      const { data: { session } } = await supabase.auth.getSession();
+      const loggedIn = !!session;
+      uploadPanel.style.display = loggedIn ? 'block' : 'none';
+      btnSignOut.style.display = loggedIn ? 'inline-block' : 'none';
+    }
+
+    supabase.auth.onAuthStateChange((_event, _session) => {
+      refreshAuthUI();
+      refreshList();
+    });
+
+    // 登入 / 註冊 / 登出
+    document.getElementById('btnSignIn').onclick = async () => {
+      authMsg.textContent = '登入中…';
+      const { error } = await supabase.auth.signInWithPassword({
+        email: emailEl.value.trim(),
+        password: passwordEl.value
+      });
+      authMsg.textContent = error ? '登入失敗：' + error.message : '✅ 登入成功';
+    };
+
+    document.getElementById('btnSignUp').onclick = async () => {
+      authMsg.textContent = '註冊中…';
+      const { error } = await supabase.auth.signUp({
+        email: emailEl.value.trim(),
+        password: passwordEl.value
+      });
+      authMsg.textContent = error ? '註冊失敗：' + error.message : '✅ 註冊成功，若有啟用信箱驗證請到信箱收信完成驗證';
+    };
+
+    btnSignOut.onclick = async () => {
+      await supabase.auth.signOut();
+      alert('已登出');
+      refreshAuthUI();
+      refreshList();
+    };
+
+    // 檔案清單
+    function normalizePrefix(v) {
+      v = (v || '').trim();
+      if (v && !v.endsWith('/')) v += '/';
+      return v;
+    }
+
+    async function refreshList() {
+      tbody.innerHTML = '<tr><td colspan="4" class="muted">載入中...</td></tr>';
+      const path = normalizePrefix(prefixEl.value);
+      const { data, error } = await supabase
+        .storage
+        .from(BUCKET_NAME)
+        .list(path, { limit: 1000, sortBy: { column: 'name', order: 'asc' } });
+
+      if (error) {
+        tbody.innerHTML = `<tr><td colspan="4" class="muted">讀取失敗：${error.message}</td></tr>`;
+        return;
+      }
+
+      if (!data || data.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="4" class="muted">（沒有檔案）</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = '';
+      for (const item of data) {
+        // Supabase list 會回傳目錄與檔案；目錄沒有 id/metadata，這裡只顯示檔案
+        if (item.id === null && !item.metadata) {
+          // 資料夾，略過（或可另外做「進入資料夾」功能）
+          continue;
+        }
+        const fullPath = (path ? path : '') + item.name;
+
+        // 公開下載網址
+        const { data: pub } = supabase.storage.from(BUCKET_NAME).getPublicUrl(fullPath);
+        const url = pub?.publicUrl || '#';
+
+        const size = item.metadata?.size ?? null;
+        const sizeStr = size ? formatBytes(size) : '—';
+        const updatedAt = item.updated_at ? new Date(item.updated_at).toLocaleString() : '—';
+
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${fullPath}</td>
+          <td class="right">${sizeStr}</td>
+          <td>${updatedAt}</td>
+          <td class="right">
+            <a class="link" href="${url}" target="_blank">下載 / 檢視</a>
+            &nbsp;|&nbsp;
+            <button class="danger" data-path="${fullPath}">刪除</button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      }
+
+      // 綁定刪除
+      tbody.querySelectorAll('button.danger').forEach(btn => {
+        btn.onclick = async () => {
+          const path = btn.getAttribute('data-path');
+          if (!confirm(`確定刪除「${path}」？`)) return;
+          const { error } = await supabase.storage.from(BUCKET_NAME).remove([path]);
+          if (error) alert('刪除失敗：' + error.message);
+          refreshList();
+        };
+      });
+    }
+
+    document.getElementById('btnRefresh').onclick = refreshList;
+    window.addEventListener('load', async () => {
+      await refreshAuthUI();
+      await refreshList();
+    });
+
+    // 上傳
+    document.getElementById('btnUpload').onclick = async () => {
+      const files = fileInput.files;
+      const folder = subfolderEl.value?.trim();
+      if (!files || files.length === 0) {
+        uploadMsg.textContent = '請先選擇檔案';
+        return;
+      }
+      uploadMsg.textContent = '上傳中…';
+
+      for (const f of files) {
+        const cleanFolder = folder ? folder.replace(/^\/+|\/+$/g, '') : '';
+        const path = cleanFolder ? `${cleanFolder}/${f.name}` : f.name;
+
+        const { error } = await supabase
+          .storage
+          .from(BUCKET_NAME)
+          .upload(path, f, { upsert: true, cacheControl: '3600', contentType: f.type || 'application/octet-stream' });
+
+        if (error) {
+          uploadMsg.textContent = '上傳失敗：' + error.message;
+          return;
+        }
+      }
+      uploadMsg.textContent = '✅ 上傳完成';
+      fileInput.value = '';
+      refreshList();
+    };
+
+    function formatBytes(bytes) {
+      if (!bytes) return '0 B';
+      const k = 1024, dm = 1, sizes = ['B','KB','MB','GB','TB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+    }
+  </script>
+</body>
+</html>
