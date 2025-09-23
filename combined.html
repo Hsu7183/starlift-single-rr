@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <title>第4分頁 - 總合報表</title>
+  <style>
+    body {
+      font-family: Arial, "微軟正黑體", sans-serif;
+      margin: 20px;
+      background-color: #f8f9fa;
+    }
+    h1 {
+      color: #333;
+    }
+    h2 {
+      margin-top: 25px;
+      color: #444;
+    }
+    .file-links a {
+      text-decoration: none;
+      color: #007bff;
+      font-weight: bold;
+    }
+    iframe, pre {
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      margin-top: 10px;
+      width: 100%;
+    }
+    iframe {
+      height: 600px;
+    }
+    pre {
+      background: #fff;
+      padding: 10px;
+      max-height: 400px;
+      overflow-y: auto;
+    }
+  </style>
+</head>
+<body>
+  <h1>📊 總合報表（第4分頁）</h1>
+  <p>自動顯示最新日期資料夾中的 PDF 與 TXT 報表。</p>
+
+  <div class="file-links">
+    <h2>📂 檔案下載</h2>
+    <ul>
+      <li><a id="pdfLink" href="#" target="_blank">📄 報表 PDF</a></li>
+      <li><a id="txtLink" href="#" target="_blank">📝 訊號紀錄 TXT</a></li>
+    </ul>
+  </div>
+
+  <h2>📄 PDF 預覽</h2>
+  <iframe id="pdfFrame"></iframe>
+
+  <h2>📝 TXT 內容</h2>
+  <pre id="txtContent">載入中...</pre>
+
+  <script>
+    // === 1. 設定已存在的日期資料夾（手動更新或後續可自動產生） ===
+    const availableDates = [
+      "2025-09-21",
+      "2025-09-22",
+      "2025-09-23" // 假設這是最新
+    ];
+
+    // 取得最新日期
+    const latestDate = availableDates[availableDates.length - 1];
+
+    // 檔案路徑
+    const pdfPath = `data/${latestDate}/report.pdf`;
+    const txtPath = `data/${latestDate}/summary.txt`;
+
+    // === 2. PDF ===
+    document.getElementById("pdfLink").href = pdfPath;
+    document.getElementById("pdfFrame").src = pdfPath;
+
+    // === 3. TXT ===
+    document.getElementById("txtLink").href = txtPath;
+    fetch(txtPath)
+      .then(res => res.text())
+      .then(text => {
+        document.getElementById("txtContent").textContent = text;
+      })
+      .catch(err => {
+        document.getElementById("txtContent").textContent = "⚠️ 無法載入 TXT 檔案";
+      });
+  </script>
+</body>
+</html>
