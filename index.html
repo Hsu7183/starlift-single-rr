@@ -28,11 +28,10 @@
   </style>
 </head>
 <body>
-  <!-- 標題（未登入只看到這塊＋登入框） -->
   <h1>三劍客量化科技（籌備中）</h1>
   <p class="sub">共同創辦人：許夏睿、何冠緯、張宸</p>
 
-  <!-- 登入表單（無註冊） -->
+  <!-- 登入（無註冊） -->
   <div class="login" id="loginPanel">
     <h3 style="margin-top:0">登入</h3>
     <div class="row">
@@ -85,7 +84,7 @@ const homeNav = document.getElementById('homeNav');
 const failPanel = document.getElementById('failPanel');
 const failBody  = document.getElementById('failBody');
 
-/* 工具：取得外網 IP（登入失敗時顯示） */
+/* 取得外網 IP（登入失敗時顯示） */
 async function getIP(){
   try{
     const r = await fetch('https://api.ipify.org?format=json', { cache:'no-store' });
@@ -94,13 +93,13 @@ async function getIP(){
   }catch{ return 'unknown'; }
 }
 
-/* 工具：在下方表格新增一筆錯誤紀錄（時間+IP） */
+/* 在下方表格新增一筆錯誤紀錄（時間+IP） */
 function appendFailRow(ip, note){
   failPanel.style.display='block';
   const tr=document.createElement('tr');
   tr.innerHTML=`<td>${new Date().toLocaleString()}</td><td>${ip}</td><td>${note||'登入失敗'}</td>`;
   if (failBody.children.length===1 && failBody.children[0].children[0].innerText==="—") failBody.innerHTML="";
-  failBody.prepend(tr);  // 最新在最上方
+  failBody.prepend(tr); // 最新在最上方
 }
 
 /* UI 刷新：依 session 顯示/隱藏首頁卡片；白名單再檢查一次 */
@@ -116,14 +115,14 @@ async function refreshUI(){
     const ip = await getIP();
     appendFailRow(ip, '未授權帳號：'+email);
     loginMsg.innerHTML=`<span class="warn">此帳號未授權，已記錄 IP。</span>`;
-    await sb.auth.signOut();
+    await sb.auth.signOut(); // 立刻登出
     return;
   }
   // 允許 → 顯示首頁卡片（= 開放所有功能）
   homeNav.classList.add('show');
 }
 
-/* 登入（加上逾時與完整錯誤顯示） */
+/* 登入（移除逾時；任何錯誤都會顯示＋記 IP） */
 btnIn.onclick = async () => {
   const email = (emailEl.value||'').trim().toLowerCase();
   const pw    = pwEl.value||'';
@@ -133,31 +132,24 @@ btnIn.onclick = async () => {
   loginMsg.textContent='登入中…';
 
   try{
-    // 15 秒逾時保護
-    const result = await Promise.race([
-      sb.auth.signInWithPassword({ email, password: pw }),
-      new Promise((_,rej)=>setTimeout(()=>rej(new Error('連線逾時，請稍後再試')),15000))
-    ]);
+    const { error } = await sb.auth.signInWithPassword({ email, password: pw });
 
-    // 如果是逾時，result 不是物件；上面會直接 throw，被 catch 接住
-    const { error } = result || {};
     if(error){
-      // Supabase 有回應，但帳密錯/未確認等
+      // 常見錯誤：invalid login credentials / Email not confirmed / rate-limited…
       loginMsg.innerHTML = `<span class="warn">登入失敗：${error.message}</span>`;
-      // 背景抓 IP，不阻塞 UI
-      getIP().then(ip=>appendFailRow(ip, error.message||'帳號或密碼不正確'));
+      const ip = await getIP();
+      appendFailRow(ip, error.message || '帳號或密碼不正確');
       return;
     }
 
-    // 成功 → 交給 refreshUI
     loginMsg.innerHTML=`<span class="ok">登入成功</span>`;
     await refreshUI();
 
   }catch(e){
-    // 例如網路錯誤/逾時
+    // 例如網路錯誤
     const ip = await getIP();
     loginMsg.innerHTML = `<span class="warn">登入失敗：${e?.message||e}</span>`;
-    appendFailRow(ip, e?.message||'網路錯誤或逾時');
+    appendFailRow(ip, e?.message||'網路錯誤');
   }finally{
     btnIn.disabled = false;
   }
