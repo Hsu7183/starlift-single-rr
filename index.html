@@ -1,53 +1,61 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
-  <meta charset="UTF-8">
-  <title>策略分析系統首頁</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>三劍客量化科技（籌備中）｜策略分析系統</title>
   <style>
-    body {
+    :root { --card-radius:12px; }
+    body{
       font-family: Arial, "微軟正黑體", sans-serif;
       margin: 20px;
-      background-color: #f8f9fa;
-      color: #333;
+      background:#f8f9fa;
+      color:#333;
     }
-    h1 {
-      text-align: center;
-      margin-bottom: 6px;
+    h1{
+      text-align:center;
+      margin: 0 0 6px 0;
+      font-weight: 800;
+      letter-spacing: .5px;
     }
-    p.subtitle {
-      text-align: center;
-      color: #666;
-      margin-top: 0;
-      margin-bottom: 40px;
+    .subtitle{
+      text-align:center;
+      color:#666;
+      margin: 0 0 36px 0;
+      font-size:14px;
     }
-    .nav {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 20px;
-      max-width: 900px;
-      margin: auto;
+    .nav{
+      display:grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap:20px;
+      max-width: 980px;
+      margin: 0 auto;
     }
-    .card {
-      background: #fff;
-      padding: 20px;
-      border-radius: 10px;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
-      text-align: center;
-      transition: transform 0.2s;
+    a.card{
+      display:block;
+      background:#fff;
+      padding:20px;
+      border-radius: var(--card-radius);
+      box-shadow:0 2px 8px rgba(0,0,0,.08);
+      text-decoration:none;
+      color:inherit;
+      transition: transform .15s ease, box-shadow .15s ease;
     }
-    .card:hover {
-      transform: translateY(-5px);
+    a.card:hover{
+      transform: translateY(-4px);
+      box-shadow:0 10px 22px rgba(0,0,0,.10);
     }
-    .card a {
-      text-decoration: none;
-      font-weight: bold;
-      color: #007bff;
-      font-size: 18px;
+    .card-title{
+      font-weight:700;
+      font-size:18px;
+      color:#0d6efd;
+      margin:0 0 6px 0;
     }
-    .desc {
-      margin-top: 8px;
-      font-size: 14px;
-      color: #666;
+    .card-desc{
+      margin:0;
+      color:#666;
+      font-size:14px;
+      line-height:1.5;
     }
   </style>
 </head>
@@ -56,22 +64,25 @@
   <p class="subtitle">共同合夥人：許夏睿、何冠緯、張宸</p>
 
   <div class="nav">
-    <div class="card">
-      <a href="single.html">單檔分析</a>
-      <div class="desc">分析單一檔案，輸出收益曲線與 KPI。</div>
-    </div>
-    <div class="card">
-      <a href="multi.html">多檔分析</a>
-      <div class="desc">同時上傳多個檔案，輸出彙總表與統計。</div>
-    </div>
-    <div class="card">
-      <a href="monthly.html">分月報告</a>
-      <div class="desc">將交易結果依月份拆分，生成月度統計。</div>
-    </div>
-    <div class="card">
-      <a href="upload.html">資料上傳區</a>
-      <div class="desc">上傳 / 瀏覽 / 下載 / 刪除報表檔案。</div>
-    </div>
+    <a class="card" href="single.html">
+      <p class="card-title">單檔分析</p>
+      <p class="card-desc">分析單一檔案，輸出收益曲線與 KPI。</p>
+    </a>
+
+    <a class="card" href="multi.html">
+      <p class="card-title">多檔分析</p>
+      <p class="card-desc">同時上傳多個檔案，輸出彙總表與統計。</p>
+    </a>
+
+    <a class="card" href="monthly.html">
+      <p class="card-title">分月報告</p>
+      <p class="card-desc">將交易結果依月份拆分，生成月度統計。</p>
+    </a>
+
+    <a class="card" href="upload.html">
+      <p class="card-title">資料上傳區</p>
+      <p class="card-desc">上傳／瀏覽／下載／刪除報表檔案（連接 Supabase Storage）。</p>
+    </a>
   </div>
 </body>
 </html>
