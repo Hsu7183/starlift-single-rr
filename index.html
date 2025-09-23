@@ -25,13 +25,13 @@
     table{width:100%;border-collapse:collapse}
     th,td{padding:8px;border-bottom:1px solid #eee;text-align:left;font-size:14px}
     th{background:#fafafa}
+    .tiny{font-size:12px;color:#555}
   </style>
 </head>
 <body>
   <h1>三劍客量化科技（籌備中）</h1>
   <p class="sub">共同創辦人：許夏睿、何冠緯、張宸</p>
 
-  <!-- 登入（無註冊） -->
   <div class="login" id="loginPanel">
     <h3 style="margin-top:0">登入</h3>
     <div class="row">
@@ -41,9 +41,9 @@
       <button id="btnSignOut" style="display:none;">登出</button>
     </div>
     <div id="loginMsg" class="muted" style="margin-top:8px;"></div>
+    <div id="debugMsg" class="tiny" style="margin-top:4px;"></div>
   </div>
 
-  <!-- 登入錯誤紀錄（時間＋IP；本頁顯示） -->
   <div class="faillog" id="failPanel" style="display:none;">
     <h3 style="margin:0 0 8px 0;">登入錯誤紀錄（本頁面顯示）</h3>
     <table>
@@ -52,7 +52,6 @@
     </table>
   </div>
 
-  <!-- 首頁卡片（登入成功才顯示） -->
   <div class="nav" id="homeNav">
     <a class="card" href="single.html"><h4>單檔分析</h4><div>分析單一檔案，輸出收益曲線與 KPI。</div></a>
     <a class="card" href="multi.html"><h4>多檔分析</h4><div>同時上傳多個檔案，輸出彙總表與統計。</div></a>
@@ -61,31 +60,24 @@
   </div>
 
 <script>
-/* ===== Supabase 設定 ===== */
 const SUPABASE_URL = "https://byhbmmnacezzgkwfkozs.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_xVe8fGbqQ0XGwi4DsmjPMg_Y2RBOD3t";
-/* 允許登入白名單（僅這 3 個能進首頁） */
 const EMAIL_WHITELIST = ["q72yg7f8@gmail.com","ck6ej04jo3-2@yahoo.com","tony71220@gmail.com"].map(s=>s.toLowerCase());
-
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-/* DOM */
 const emailEl = document.getElementById('email');
 const pwEl    = document.getElementById('password');
-const loginMsg= document.getElementById('loginMsg');
 const btnIn   = document.getElementById('btnSignIn');
 const btnOut  = document.getElementById('btnSignOut');
 const homeNav = document.getElementById('homeNav');
-const failPanel = document.getElementById('failPanel');
-const failBody  = document.getElementById('failBody');
+const loginMsg= document.getElementById('loginMsg');
+const debugMsg= document.getElementById('debugMsg');
+const failPanel=document.getElementById('failPanel');
+const failBody =document.getElementById('failBody');
 
-/* 你的 IP（顯示錯誤時使用） */
 async function getIP(){
-  try{
-    const r = await fetch('https://api.ipify.org?format=json', { cache:'no-store' });
-    const j = await r.json();
-    return j.ip || 'unknown';
-  }catch{ return 'unknown'; }
+  try{ const r=await fetch('https://api.ipify.org?format=json',{cache:'no-store'}); const j=await r.json(); return j.ip||'unknown'; }
+  catch{ return 'unknown'; }
 }
 function appendFailRow(ip, note){
   failPanel.style.display='block';
@@ -95,17 +87,15 @@ function appendFailRow(ip, note){
   failBody.prepend(tr);
 }
 
-/* 顯示/隱藏首頁卡片 + 白名單檢查 */
 async function refreshUI(){
   const { data:{session} } = await sb.auth.getSession();
   const loggedIn = !!session;
   btnOut.style.display = loggedIn ? 'inline-block' : 'none';
-  if(!loggedIn){ homeNav.classList.remove('show'); loginMsg.textContent=''; return; }
-
+  if(!loggedIn){ homeNav.classList.remove('show'); return; }
   const email=(session.user.email||'').toLowerCase();
   if(!EMAIL_WHITELIST.includes(email)){
     const ip = await getIP();
-    appendFailRow(ip, '未授權帳號：'+email);
+    appendFailRow(ip,'未授權帳號：'+email);
     loginMsg.innerHTML=`<span class="warn">此帳號未授權，已記錄 IP。</span>`;
     await sb.auth.signOut();
     return;
@@ -113,43 +103,41 @@ async function refreshUI(){
   homeNav.classList.add('show');
 }
 
-/* 先走 SDK；若失敗則用 REST 備援 */
 async function signInResilient(email, password){
+  // 1) SDK
   try{
     const { data, error } = await sb.auth.signInWithPassword({ email, password });
+    debugMsg.textContent = error ? `[SDK] ${error.message}` : `[SDK] ok`;
     if (!error && data?.user) return { ok:true, from:'sdk', data };
     if (error) return { ok:false, message:error.message };
-  }catch(e){ /* SDK 例外 → 繼續走 REST */ }
+  }catch(e){ debugMsg.textContent = `[SDK] exception: ${e?.message||e}`; }
 
+  // 2) REST 備援
   try{
     const r = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
       method:'POST',
-      headers:{
-        'Content-Type':'application/json',
-        'apikey': SUPABASE_ANON_KEY,
-        'Accept': 'application/json'
-      },
+      headers:{ 'Content-Type':'application/json', 'apikey': SUPABASE_ANON_KEY, 'Accept':'application/json' },
       body: JSON.stringify({ email, password })
     });
-    const j = await r.json().catch(()=> ({}));
+    const text = await r.text();
+    let j={}; try{ j = JSON.parse(text); }catch{}
+    debugMsg.textContent = `[REST] ${r.status} ${j?.error||''} ${j?.error_description||''}`;
     if (r.ok && j?.access_token && j?.refresh_token){
       await sb.auth.setSession({ access_token:j.access_token, refresh_token:j.refresh_token });
       return { ok:true, from:'rest', data:j };
     }
     return { ok:false, message: j?.error_description || j?.error || `HTTP ${r.status}` };
   }catch(e){
+    debugMsg.textContent = `[REST] exception: ${e?.message||e}`;
     return { ok:false, message:`REST 失敗：${e?.message||e}` };
   }
 }
 
-/* 登入 */
 btnIn.onclick = async () => {
-  const email = (emailEl.value||'').trim().toLowerCase();
-  const pw    = pwEl.value||'';
+  const email=(emailEl.value||'').trim().toLowerCase();
+  const pw = pwEl.value||'';
   if(!email || pw.length<6){ loginMsg.textContent='請輸入有效 Email 與（至少 6 碼）密碼'; return; }
-
-  btnIn.disabled = true;
-  loginMsg.textContent='登入中…';
+  btnIn.disabled=true; loginMsg.textContent='登入中…'; debugMsg.textContent='';
 
   const result = await signInResilient(email, pw);
 
@@ -158,23 +146,14 @@ btnIn.onclick = async () => {
     const msg = result.message || '未知錯誤';
     loginMsg.innerHTML = `<span class="warn">登入失敗：${msg}</span>`;
     appendFailRow(ip, msg);
-    btnIn.disabled = false;
-    return;
+    btnIn.disabled=false; return;
   }
-
-  loginMsg.innerHTML=`<span class="okTxt">登入成功</span>`;
+  loginMsg.innerHTML = `<span class="okTxt">登入成功</span>`;
   await refreshUI();
-  btnIn.disabled = false;
+  btnIn.disabled=false;
 };
 
-/* 登出 */
-btnOut.onclick = async () => {
-  await sb.auth.signOut();
-  loginMsg.textContent='已登出';
-  await refreshUI();
-};
-
-/* 初次載入：依 session 切換 */
+btnOut.onclick = async ()=>{ await sb.auth.signOut(); loginMsg.textContent='已登出'; await refreshUI(); };
 sb.auth.onAuthStateChange(()=>refreshUI());
 window.addEventListener('load', refreshUI);
 </script>
