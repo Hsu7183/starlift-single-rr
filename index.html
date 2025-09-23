@@ -28,10 +28,11 @@
   </style>
 </head>
 <body>
+  <!-- 標題（未登入只看到這塊＋登入框） -->
   <h1>三劍客量化科技（籌備中）</h1>
   <p class="sub">共同創辦人：許夏睿、何冠緯、張宸</p>
 
-  <!-- 登入（無註冊） -->
+  <!-- 登入表單（無註冊） -->
   <div class="login" id="loginPanel">
     <h3 style="margin-top:0">登入</h3>
     <div class="row">
@@ -43,7 +44,7 @@
     <div id="loginMsg" class="muted" style="margin-top:8px;"></div>
   </div>
 
-  <!-- 登入錯誤紀錄（時間＋IP） -->
+  <!-- 登入錯誤紀錄（時間＋IP；本頁顯示，不寄信） -->
   <div class="faillog" id="failPanel" style="display:none;">
     <h3 style="margin:0 0 8px 0;">登入錯誤紀錄（本頁面顯示）</h3>
     <table>
@@ -61,13 +62,17 @@
   </div>
 
 <script>
+/* ===== Supabase 設定（你的專案） ===== */
 const SUPABASE_URL = "https://byhbmmnacezzgkwfkozs.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_xVe8fGbqQ0XGwi4DsmjPMg_Y2RBOD3t";
+
+/* ===== 允許登入白名單（僅這 3 個能進首頁） ===== */
 const EMAIL_WHITELIST = [
   "q72yg7f8@gmail.com",
   "ck6ej04jo3-2@yahoo.com",
   "tony71220@gmail.com",
 ].map(s=>s.toLowerCase());
+/* ==================================== */
 
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -80,18 +85,25 @@ const homeNav = document.getElementById('homeNav');
 const failPanel = document.getElementById('failPanel');
 const failBody  = document.getElementById('failBody');
 
+/* 工具：取得外網 IP（登入失敗時顯示） */
 async function getIP(){
-  try{ const r=await fetch('https://api.ipify.org?format=json'); const j=await r.json(); return j.ip||'unknown'; }
-  catch{ return 'unknown'; }
+  try{
+    const r = await fetch('https://api.ipify.org?format=json', { cache:'no-store' });
+    const j = await r.json();
+    return j.ip || 'unknown';
+  }catch{ return 'unknown'; }
 }
+
+/* 工具：在下方表格新增一筆錯誤紀錄（時間+IP） */
 function appendFailRow(ip, note){
   failPanel.style.display='block';
   const tr=document.createElement('tr');
   tr.innerHTML=`<td>${new Date().toLocaleString()}</td><td>${ip}</td><td>${note||'登入失敗'}</td>`;
   if (failBody.children.length===1 && failBody.children[0].children[0].innerText==="—") failBody.innerHTML="";
-  failBody.prepend(tr);
+  failBody.prepend(tr);  // 最新在最上方
 }
 
+/* UI 刷新：依 session 顯示/隱藏首頁卡片；白名單再檢查一次 */
 async function refreshUI(){
   const { data:{session} } = await sb.auth.getSession();
   const loggedIn = !!session;
@@ -107,30 +119,58 @@ async function refreshUI(){
     await sb.auth.signOut();
     return;
   }
-  homeNav.classList.add('show'); // 允許 → 顯示首頁卡片
+  // 允許 → 顯示首頁卡片（= 開放所有功能）
+  homeNav.classList.add('show');
 }
 
+/* 登入（加上逾時與完整錯誤顯示） */
 btnIn.onclick = async () => {
   const email = (emailEl.value||'').trim().toLowerCase();
   const pw    = pwEl.value||'';
   if(!email || pw.length<6){ loginMsg.textContent='請輸入有效 Email 與（至少 6 碼）密碼'; return; }
 
+  btnIn.disabled = true;
   loginMsg.textContent='登入中…';
 
-  // 先送出登入；立刻顯示錯誤（不等 IP）
-  const { error } = await sb.auth.signInWithPassword({ email, password: pw });
-  if(error){
-    loginMsg.innerHTML=`<span class="warn">登入失敗：${error.message}</span>`;
-    // 背景抓 IP，不阻塞 UI
-    getIP().then(ip=>appendFailRow(ip,'帳號或密碼不正確'));
-    return;
-  }
+  try{
+    // 15 秒逾時保護
+    const result = await Promise.race([
+      sb.auth.signInWithPassword({ email, password: pw }),
+      new Promise((_,rej)=>setTimeout(()=>rej(new Error('連線逾時，請稍後再試')),15000))
+    ]);
 
-  loginMsg.innerHTML=`<span class="ok">登入成功</span>`;
+    // 如果是逾時，result 不是物件；上面會直接 throw，被 catch 接住
+    const { error } = result || {};
+    if(error){
+      // Supabase 有回應，但帳密錯/未確認等
+      loginMsg.innerHTML = `<span class="warn">登入失敗：${error.message}</span>`;
+      // 背景抓 IP，不阻塞 UI
+      getIP().then(ip=>appendFailRow(ip, error.message||'帳號或密碼不正確'));
+      return;
+    }
+
+    // 成功 → 交給 refreshUI
+    loginMsg.innerHTML=`<span class="ok">登入成功</span>`;
+    await refreshUI();
+
+  }catch(e){
+    // 例如網路錯誤/逾時
+    const ip = await getIP();
+    loginMsg.innerHTML = `<span class="warn">登入失敗：${e?.message||e}</span>`;
+    appendFailRow(ip, e?.message||'網路錯誤或逾時');
+  }finally{
+    btnIn.disabled = false;
+  }
+};
+
+/* 登出 */
+btnOut.onclick = async () => {
+  await sb.auth.signOut();
+  loginMsg.textContent='已登出';
   await refreshUI();
 };
 
-btnOut.onclick = async () => { await sb.auth.signOut(); loginMsg.textContent='已登出'; await refreshUI(); };
+/* 首次載入：依 session 狀態切換 */
 sb.auth.onAuthStateChange(()=>refreshUI());
 window.addEventListener('load', refreshUI);
 </script>
