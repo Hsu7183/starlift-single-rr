@@ -26,8 +26,6 @@
   <!-- 依賴 -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="shared.js?v=full-table-v7"></script>
-
-  <!-- Supabase（雲端選檔用） -->
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 </head>
 <body>
@@ -35,7 +33,7 @@
     <a class="back-link" href="index.html">← 返回首頁</a>
     <h1>單檔分析（機構級）</h1>
 
-    <!-- 控制列（原有） -->
+    <!-- 控制列 -->
     <div class="row card">
       <div>
         <button id="btn-clip">從剪貼簿貼上 TXT</button>
@@ -45,7 +43,7 @@
     </div>
 
     <!-- 雲端選檔（Supabase / reports） -->
-    <div class="card" id="cloudPanel">
+    <div class="card">
       <h3 style="margin:0 0 8px 0;">雲端檔案（Supabase / reports）</h3>
       <div class="row">
         <input id="cloudPrefix" class="ipt" placeholder="篩選資料夾（例：2025-09-24/）" />
@@ -57,7 +55,6 @@
       <div id="cloudMeta" class="tiny" style="margin-top:6px;"></div>
       <pre id="cloudPreview" class="preview"></pre>
       <textarea id="cloudTxt" style="display:none"></textarea>
-      <div id="cloudNote" class="tiny" style="margin-top:6px;"></div>
     </div>
 
     <!-- 6 線圖 -->
@@ -79,107 +76,85 @@
     </div>
   </div>
 
-  <!-- 主檔（改版：內含相容式解析） -->
-  <script src="single.js?v=full-table-v13c"></script>
+  <!-- 主檔（含 preNormalize 的新版 single.js） -->
+  <script src="single.js?v=full-table-v13-norm"></script>
 
-  <!-- 雲端選檔實作（抓檔→智慧解碼→交給 #file，不直接呼叫 handleRaw） -->
   <script>
+  // Supabase
   const SUPABASE_URL = "https://byhbmmnacezzgkwfkozs.supabase.co";
-  const SUPABASE_ANON_KEY = "sb_publishable_xVe8fGbqQ0XGwi4DsmjPMg_Y2RBOD3t";
-  const BUCKET_NAME = "reports";
-  const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    global: { fetch: (u,o={}) => fetch(u, { ...o, cache:'no-store' }) }
+  const SUPABASE_ANON = "sb_publishable_xVe8fGbqQ0XGwi4DsmjPMg_Y2RBOD3t";
+  const BUCKET = "reports";
+  const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON, {
+    global:{ fetch:(u,o={})=>fetch(u,{...o,cache:'no-store'}) }
   });
 
   const $ = s => document.querySelector(s);
-  const cloudPrefix = $('#cloudPrefix');
-  const btnCloudList= $('#btnCloudList');
-  const cloudSelect = $('#cloudSelect');
-  const btnCloudPrev= $('#btnCloudPreview');
-  const btnCloudImp = $('#btnCloudImport');
-  const cloudPreview= $('#cloudPreview');
-  const cloudMeta   = $('#cloudMeta');
-  const cloudNote   = $('#cloudNote');
-  const cloudTxt    = $('#cloudTxt');
-  const fileInput   = $('#file');
-  const btnClip     = $('#btn-clip');
+  const cloudPrefix=$('#cloudPrefix'), btnList=$('#btnCloudList'), sel=$('#cloudSelect');
+  const btnPrev=$('#btnCloudPreview'), btnImp=$('#btnCloudImport');
+  const meta=$('#cloudMeta'), prev=$('#cloudPreview'), cacheTxt=$('#cloudTxt');
+  const fileInput = $('#file');
 
-  function parseMetaFromPath(fullPath){
-    const base=fullPath.split('/').pop();
-    const name=base.replace(/\.[^.]+$/,'');
-    const segs=name.split(/[-_]+/).filter(Boolean);
-    const isD=s=>/^\d{8}$/.test(s);
-    const idx=[]; segs.forEach((s,i)=>{ if(isD(s)) idx.push(i); });
-    let strategy='—', params='—', range='—';
-    if(idx.length>=2){ const i0=idx[0]; strategy=i0>=1?segs[0]:'—'; params=i0>=2?segs.slice(1,i0).join('-'):'—'; range=`${segs[i0]}-${segs[idx[1]]}`; }
-    else if(idx.length===1){ const i0=idx[0]; strategy=i0>=1?segs[0]:'—'; params=i0>=2?segs.slice(1,i0).join('-'):'—'; range=segs[i0]; }
-    else { if(segs.length>=1) strategy=segs[0]; if(segs.length>=2) params=segs.slice(1).join('-'); }
-    return { strategy, params, range };
+  async function listCloud(){
+    prev.textContent=''; meta.textContent='';
+    sel.innerHTML='<option>載入中…</option>';
+    const p=(cloudPrefix.value||'').trim(); const fixed=p && !p.endsWith('/') ? p+'/' : p;
+    const {data, error} = await sb.storage.from(BUCKET).list(fixed,{limit:1000,sortBy:{column:'name',order:'asc'}});
+    if(error){ sel.innerHTML=`<option>讀取失敗：${error.message}</option>`; return; }
+    if(!data||!data.length){ sel.innerHTML='<option>（無檔案）</option>'; return; }
+    sel.innerHTML='';
+    data.forEach(it=>{
+      if(it.id===null && !it.metadata) return;
+      const path=(fixed||'')+it.name;
+      const opt=document.createElement('option');
+      opt.value=path; opt.textContent=path+` (${(it.metadata?.size/1024).toFixed(1)} KB)`;
+      sel.appendChild(opt);
+    });
   }
+
   async function getUrl(path){
-    try{ const {data,error}=await sb.storage.from(BUCKET_NAME).createSignedUrl(path,3600); if(!error&&data?.signedUrl) return data.signedUrl; }catch(e){}
-    const {data:pub}=sb.storage.from(BUCKET_NAME).getPublicUrl(path); return pub?.publicUrl||'';
+    try{ const {data} = await sb.storage.from(BUCKET).createSignedUrl(path,3600); if(data?.signedUrl) return data.signedUrl; }catch(e){}
+    const {data:pub}=sb.storage.from(BUCKET).getPublicUrl(path); return pub?.publicUrl||'';
   }
+
   function decodeBest(ab){
-    const encs=['utf-8','big5','gb18030']; let best={txt:'',score:1e9,enc:''};
-    for(const enc of encs){ try{ const dec=new TextDecoder(enc,{fatal:false}); const txt=dec.decode(ab); const bad=(txt.match(/\uFFFD/g)||[]).length; if(bad<best.score) best={txt,score:bad,enc}; }catch{} }
+    const encs=['utf-8','big5','gb18030']; let best={txt:'',bad:1e9,enc:''};
+    for(const e of encs){
+      try{ const t=new TextDecoder(e,{fatal:false}).decode(ab);
+           const b=(t.match(/\uFFFD/g)||[]).length; if(b<best.bad) best={txt:t,bad:b,enc:e}; }catch{}
+    }
     return best;
   }
+
+  async function preview(){
+    const path=sel.value; if(!path) return;
+    const url=await getUrl(path); if(!url){ prev.textContent='取得連結失敗'; return; }
+    const r=await fetch(url,{cache:'no-store'}); if(!r.ok){ prev.textContent=`HTTP ${r.status}`; return; }
+    const ab=await r.arrayBuffer(); const best=decodeBest(ab); cacheTxt.value=best.txt;
+    meta.textContent=`來源：${path}（編碼：${best.enc}）`;
+    const lines=best.txt.split(/\r?\n/); prev.textContent=lines.slice(0,500).join('\n')+(lines.length>500?`\n...（共 ${lines.length} 行）`:``);
+  }
+
+  // 把文字塞成 File → 觸發 #file（交給 single.js 的 preNormalize 處理）
   function feedToFile(text, name){
     const blob=new Blob([text],{type:'text/plain;charset=utf-8'});
-    const file=new File([blob], name||'cloud.txt', {type:'text/plain'});
-    const dt=new DataTransfer(); dt.items.add(file);
+    const f=new File([blob], name||'cloud.txt', {type:'text/plain'});
+    const dt=new DataTransfer(); dt.items.add(f);
     fileInput.files=dt.files;
     fileInput.dispatchEvent(new Event('change',{bubbles:true}));
   }
 
-  async function listCloudFiles(){
-    cloudPreview.textContent=''; cloudMeta.textContent=''; cloudNote.textContent='';
-    cloudSelect.innerHTML=`<option value="">載入中...</option>`;
-    const prefix=(cloudPrefix.value||'').trim();
-    const fixed = prefix&&!prefix.endsWith('/') ? prefix+'/' : prefix;
-    const {data,error}=await sb.storage.from(BUCKET_NAME).list(fixed,{limit:1000,sortBy:{column:'name',order:'asc'}});
-    if(error){ cloudSelect.innerHTML=`<option>讀取失敗：${error.message}</option>`; return; }
-    if(!data||data.length===0){ cloudSelect.innerHTML=`<option>（無檔案）</option>`; return; }
-    cloudSelect.innerHTML='';
-    for(const it of data){
-      if(it.id===null && !it.metadata) continue;
-      const path=(fixed||'')+it.name;
-      const meta=parseMetaFromPath(path);
-      const sizeKB=it.metadata?.size ? (it.metadata.size/1024).toFixed(1) : '-';
-      const opt=document.createElement('option');
-      opt.value=path; opt.textContent=`[${meta.strategy}] ${meta.params} | ${meta.range} — ${path} (${sizeKB} KB)`;
-      cloudSelect.appendChild(opt);
-    }
-  }
-  async function previewCloudFile(){
-    cloudPreview.textContent=''; cloudMeta.textContent=''; cloudNote.textContent='';
-    const path=cloudSelect.value; if(!path) return;
-    const url=await getUrl(path);
-    const res=await fetch(url,{cache:'no-store'}); if(!res.ok){ cloudPreview.textContent=`讀取失敗：HTTP ${res.status}`; return; }
-    const ab=await res.arrayBuffer(); const best=decodeBest(ab); cloudTxt.value=best.txt;
-    const meta=parseMetaFromPath(path);
-    cloudMeta.innerHTML=`策略：<b>${meta.strategy}</b>　參數：<b>${meta.params}</b>　起訖：<b>${meta.range}</b>　<small class="tiny">（編碼：${best.enc}）</small><br><span class="tiny">${path}</span>`;
-    const lines=best.txt.split(/\r?\n/);
-    cloudPreview.textContent=lines.slice(0,500).join('\n')+(lines.length>500?`\n...（共 ${lines.length} 行）`:``);
-    cloudNote.innerHTML=`提示：匯入時只轉換「交易行」，時間會正規為 14 碼，秒數>59 自動改為 59；輸出「時間 價格 動作」（空白分隔）。`;
-  }
   async function importToAnalysis(){
-    const path=cloudSelect.value; if(!path) return alert('請先選檔');
-    if(!cloudTxt.value){ const url=await getUrl(path); const r=await fetch(url,{cache:'no-store'}); const ab=await r.arrayBuffer(); cloudTxt.value=decodeBest(ab).txt; }
-    // 把原文交給 single.js（它內含相容式解析與標準化）；這裡不再處理。
-    feedToFile(cloudTxt.value, (path.split('/').pop()||'cloud.txt'));
+    const path=sel.value; if(!path) return alert('請先選檔');
+    if(!cacheTxt.value){
+      const url=await getUrl(path); const r=await fetch(url,{cache:'no-store'});
+      if(!r.ok) return alert(`HTTP ${r.status}`); cacheTxt.value=await r.text();
+    }
+    feedToFile(cacheTxt.value, (path.split('/').pop()||'cloud.txt'));
   }
 
-  btnCloudList.addEventListener('click', listCloudFiles);
-  btnCloudPrev.addEventListener('click', previewCloudFile);
-  btnCloudImp .addEventListener('click', importToAnalysis);
-
-  // 從剪貼簿：直接丟給 #file（讓 single.js 相容式解析）
-  $('#btn-clip').addEventListener('click', async ()=>{
-    try{ const txt=await navigator.clipboard.readText(); if(!txt) return alert('剪貼簿沒有文字'); feedToFile(txt,'clipboard.txt'); }
-    catch{ alert('無法讀取剪貼簿內容'); }
-  });
+  btnList.addEventListener('click', listCloud);
+  btnPrev.addEventListener('click', preview);
+  btnImp.addEventListener('click', importToAnalysis);
   </script>
 </body>
 </html>
