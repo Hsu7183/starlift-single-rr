@@ -1,4 +1,4 @@
-/* 單檔分析（機構級） full-table-v13
+/* 單檔分析（機構級） full-table-v13 + preNormalize
    - 圖表：6 線、右側留白、黑線 Max/Min/Last 標註（Last 只顯示數值）
    - KPI：合併表（全部/多/空 三欄；多=淡紅、空=淡綠）
    - RR 表：五欄評語 + 置頂「建議優化指標」粉紅區
@@ -9,7 +9,7 @@
   const $ = s => document.querySelector(s);
   const DEFAULT_NAV = Number(new URLSearchParams(location.search).get("nav")) || 1_000_000;
   const DEFAULT_RF  = Number(new URLSearchParams(location.search).get("rf"))  || 0.00;
-  console.log("[RR] single.js version full-table-v13");
+  console.log("[RR] single.js version full-table-v13+norm");
 
   // ---------- 樣式（一次注入） ----------
   (function injectStyle(){
@@ -67,7 +67,59 @@
     ctx.closePath();
   }
 
-  // ---------- 圖表（Max/Min/Last；Last 只顯示數值；右側留白） ----------
+  // ---------- 前置標準化：只處理「交易行」，檔頭原樣保留 ----------
+  // 允許：YYYYMMDDHHmm 或 YYYYMMDDHHmmss；動作容忍中文詞彙
+  // 目標：輸出「YYYYMMDDHHmm 價格 動作」（空白分隔；分鐘精度）
+  function preNormalize(raw){
+    const lines = String(raw||"").split(/\r?\n/);
+    const header = [];
+    const out    = [];
+    let seen = false;  // 是否已遇到交易行
+    let pos  = 0;      // >0 多單，<0 空單
+
+    const re = /^\s*(\d{12,16})[ \t,]+(-?\d+(?:\.\d+)?)[ \t,]+(.+?)\s*$/u;
+
+    const to12 = (ts)=>{
+      const s = String(ts).replace(/\D/g,'');
+      return (s + "000000000000").slice(0,12);  // yyyyMMddHHmm
+    };
+
+    for (const ln of lines){
+      const m = ln.match(re);
+      if(!m){
+        if(!seen) header.push(ln);
+        continue;
+      }
+      seen = true;
+
+      const ts12  = to12(m[1]);
+      const price = m[2].replace(/,/g,'');
+      let act     = m[3].replace(/\s+/g,'');
+
+      // 同義詞 → 標準詞
+      if (/^(買進|做多|開多|多單買進|新買)$/u.test(act)) { act='新買'; pos++; }
+      else if (/^(賣出|做空|開空|空單賣出|新賣)$/u.test(act)) { act='新賣'; pos--; }
+      else if (/^(多單平倉|空單平倉|平倉|結算平倉|平買|平賣)$/u.test(act)) {
+        if (act==='多單平倉') act='平賣';
+        else if (act==='空單平倉') act='平買';
+        else if (act==='平倉' || act==='結算平倉') {
+          if (pos>0) act='平賣';
+          else if (pos<0) act='平買';
+          else continue; // 無倉卻來平倉，略過
+        }
+        pos = 0;
+      } else {
+        continue; // 未知動作
+      }
+
+      out.push(`${ts12} ${price} ${act}`);
+    }
+
+    if (out.length===0) return raw; // 讓 parseTXT 自行處理
+    return [...header, ...out].join('\r\n')+'\r\n';
+  }
+
+  // ---------- 圖表（Max/Min/Last；右側留白） ----------
   function drawChart(ser) {
     if (chart) chart.destroy();
     const { tsArr, total, slipTotal, long, longSlip, short, shortSlip } = ser;
@@ -84,7 +136,7 @@
     const annos = [
       {i:idxMax,  val:arr[idxMax],  color:"#ef4444", label:`${fmtComma(Math.round(arr[idxMax]))}(${tsToDate(tsArr[idxMax])})`},
       {i:idxMin,  val:arr[idxMin],  color:"#10b981", label:`${fmtComma(Math.round(arr[idxMin]))}(${tsToDate(tsArr[idxMin])})`},
-      {i:idxLast, val:arr[idxLast], color:"#111",    label:fmtComma(Math.round(arr[idxLast]))}, // 只顯示數值
+      {i:idxLast, val:arr[idxLast], color:"#111",    label:fmtComma(Math.round(arr[idxLast]))},
     ];
 
     const annoPlugin = {
@@ -426,7 +478,7 @@
     const cls = v => v>0 ? "p-red" : (v<0 ? "p-green" : "");
 
     report.trades.forEach((t,i)=>{
-      // 進場列：顯示進場時間/價與「新買/新賣」，其餘以 — 佔位
+      // 進場列
       const entryRow = document.createElement("tr");
       entryRow.innerHTML = `
         <td rowspan="2">${i+1}</td>
@@ -442,7 +494,7 @@
         <td class="num">—</td>
       `;
 
-      // 出場列：顯示出場資料與點數/費用/稅/損益與累積
+      // 出場列
       const fee = FEE * 2;
       const tax = Math.round(t.priceOut * MULT * TAX);
       const newCum     = cum     + t.gain;
@@ -465,16 +517,19 @@
       tb.appendChild(entryRow);
       tb.appendChild(exitRow);
 
-      // 更新累積
       cum = newCum;
       cumSlip = newCumSlip;
     });
   }
 
-  // ---------- 主流程 ----------
+  // ---------- 主流程（唯一改動：先 preNormalize 再 parseTXT） ----------
   async function handleRaw(raw){
     const { parseTXT, buildReport, paramsLabel } = window.SHARED;
-    const parsed = parseTXT(raw);
+
+    // NEW：先把原始文字的「交易行」容錯標準化，只保留檔頭原樣
+    const prepared = preNormalize(raw);
+
+    const parsed = parseTXT(prepared);
     const report = buildReport(parsed.rows);
     if(report.trades.length===0){ alert("沒有成功配對的交易"); return; }
 
@@ -483,23 +538,26 @@
       long:report.longCum, longSlip:report.longSlipCum, short:report.shortCum, shortSlip:report.shortSlipCum
     });
 
-    // 參數列 + 匯入時間
     $("#paramChip").textContent = paramsLabel(parsed.params) + " ｜ 匯入時間：" + nowStr();
 
-    // KPI
     renderKpiCombined(report.statAll, report.statL, report.statS);
 
-    // 以出場日聚合（含滑價）
     const dailyMap=new Map();
-    for(const t of report.trades){ const k=keyFromTs(t.tsOut); dailyMap.set(k,(dailyMap.get(k)||0)+t.gainSlip); }
-    const dailySlip=[...dailyMap.entries()].sort((a,b)=>a[0].localeCompare(b[0])).map(([date,pnl])=>({date,pnl}));
+    for(const t of report.trades){ const k=keyFromTs(t.tsOut); dailyMap.set(k,(m
+      =>m.set(k,(m.get(k)||0)+t.gainSlip))(dailyMap) && dailyMap.get(k)); }
+    // 上面寫法太繞，改回清楚版：
+    {
+      const m = new Map();
+      for(const t of report.trades){ const k=keyFromTs(t.tsOut); m.set(k,(m.get(k)||0)+t.gainSlip); }
+      const arr=[...m.entries()].sort((a,b)=>a[0].localeCompare(b[0])).map(([date,pnl])=>({date,pnl}));
+      const k = computeRR(arr,report.trades,DEFAULT_NAV,DEFAULT_RF);
+      renderRR6Cats(k);
+    }
 
-    const k=computeRR(dailySlip,report.trades,DEFAULT_NAV,DEFAULT_RF);
-    renderRR6Cats(k);
     renderTable(report);
   }
 
-  // 綁定
+  // 綁定（與原版相同）
   $("#btn-clip").addEventListener("click", async ()=>{
     try{ const txt=await navigator.clipboard.readText(); handleRaw(txt); }
     catch{ alert("無法讀取剪貼簿內容，請改用「選擇檔案」。"); }
