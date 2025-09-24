@@ -1,31 +1,15 @@
-/* 單檔分析（機構級） full-table-v13 + preNormalize + fallback parser
+/* 單檔分析（機構級） full-table-v13 (safe-param)
    - 圖表：6 線、右側留白、黑線 Max/Min/Last 標註（Last 只顯示數值）
    - KPI：合併表（全部/多/空 三欄；多=淡紅、空=淡綠）
    - RR 表：五欄評語 + 置頂「建議優化指標」粉紅區
    - 交易明細：一筆＝兩列（進場列＋出場列），表頭固定、數字右對齊、紅正綠負、條紋列
    - 參數列：尾端顯示本次 TXT「匯入時間」
-   - 新增：preNormalize(raw) 先標準化交易行（檔頭原樣保留）
-   - 新增：parseTXT_fallback / buildReport_fallback（若 shared.js 不存在或配對為 0，自動啟用）
 */
 (function () {
   const $ = s => document.querySelector(s);
   const DEFAULT_NAV = Number(new URLSearchParams(location.search).get("nav")) || 1_000_000;
   const DEFAULT_RF  = Number(new URLSearchParams(location.search).get("rf"))  || 0.00;
-  console.log("[RR] single.js version full-table-v13+norm+fb");
-
-  // ---------- 保險：若 window.SHARED 缺少必要工具，就先補上 ----------
-  window.SHARED = window.SHARED || {};
-  if (!window.SHARED.fmtMoney) window.SHARED.fmtMoney = n => (Number(n)||0).toLocaleString("zh-TW");
-  if (!window.SHARED.pct)      window.SHARED.pct      = x => (Number.isFinite(x)? (x*100).toFixed(2) : "0.00") + "%";
-  if (!window.SHARED.fmtTs)    window.SHARED.fmtTs    = ts => {
-    const s=String(ts||""); const y=s.slice(0,4), m=s.slice(4,6), d=s.slice(6,8);
-    const H=s.slice(8,10)||"00", M=s.slice(10,12)||"00", S=s.slice(12,14)||"00";
-    return `${y}/${Number(m)}/${Number(d)} ${H}:${M}:${S}`;
-  };
-  // （如果你有 MULT/FEE/TAX，shared.js 會覆蓋這裡）
-  if (typeof window.SHARED.MULT !== "number") window.SHARED.MULT = 1;
-  if (typeof window.SHARED.FEE  !== "number") window.SHARED.FEE  = 50;
-  if (typeof window.SHARED.TAX  !== "number") window.SHARED.TAX  = 0;
+  console.log("[RR] single.js version full-table-v13 (safe-param)");
 
   // ---------- 樣式（一次注入） ----------
   (function injectStyle(){
@@ -60,7 +44,7 @@
 
   let chart;
 
-  // ---------- 通用小工具 ----------
+  // ---------- 小工具 ----------
   const fmtComma = n => (Number(n)||0).toLocaleString("zh-TW");
   const tsToDate = ts => {
     const s = String(ts||"");
@@ -83,150 +67,7 @@
     ctx.closePath();
   }
 
-  // ---------- 前置標準化：只處理「交易行」，檔頭原樣保留 ----------
-  function preNormalize(raw){
-    const lines = String(raw||"").split(/\r?\n/);
-    const header = [];
-    const out    = [];
-    let seen = false;
-    let pos  = 0; // >0 多單，<0 空單
-
-    // 接受：YYYYMMDDHHmm 或 HHmmss 也在內的 12~16 碼；分隔可空白/Tab/逗號
-    const re = /^\s*(\d{12,16})[ \t,]+(-?\d+(?:\.\d+)?)[ \t,]+(.+?)\s*$/u;
-    const to12 = (ts)=> (String(ts).replace(/\D/g,'') + "000000000000").slice(0,12);
-
-    for (const ln of lines){
-      const m = ln.match(re);
-      if(!m){
-        if(!seen) header.push(ln);
-        continue;
-      }
-      seen = true;
-
-      const ts12  = to12(m[1]);
-      const price = m[2].replace(/,/g,'');
-      let act     = m[3].replace(/\s+/g,'');
-
-      // 同義詞 → 標準詞
-      if (/^(買進|做多|開多|多單買進|新買)$/u.test(act)) { act='新買'; pos++; }
-      else if (/^(賣出|做空|開空|空單賣出|新賣)$/u.test(act)) { act='新賣'; pos--; }
-      else if (/^(多單平倉|空單平倉|平倉|結算平倉|平買|平賣)$/u.test(act)) {
-        if (act==='多單平倉') act='平賣';
-        else if (act==='空單平倉') act='平買';
-        else if (act==='平倉' || act==='結算平倉') {
-          if (pos>0) act='平賣';
-          else if (pos<0) act='平買';
-          else continue;
-        }
-        pos = 0;
-      } else {
-        continue;
-      }
-      out.push(`${ts12} ${price} ${act}`);
-    }
-
-    if (out.length===0) return raw;           // 讓 parseTXT 自己試
-    return [...header, ...out].join('\r\n');  // CRLF/ LF 都可
-  }
-
-  // ---------- fallback：parseTXT / buildReport（若 shared.js 不可用時） ----------
-  function parseTXT_fallback(raw){
-    const lines = String(raw||"").split(/\r?\n/);
-    const params = { raw: [] };
-    const rows   = [];
-    const re = /^\s*(\d{12,16})[ \t,]+(-?\d+(?:\.\d+)?)[ \t,]+(.+?)\s*$/u;
-    let seen = false;
-    const to12 = s => (String(s).replace(/\D/g,'') + "000000000000").slice(0,12);
-
-    for (const ln of lines){
-      const m = ln.match(re);
-      if (!m){
-        if (!seen) params.raw.push(ln);
-        continue;
-      }
-      seen = true;
-      const ts = to12(m[1]);                         // 分鐘精度
-      const price = Number(String(m[2]).replace(/,/g,''));
-      const act   = m[3].trim();
-      rows.push({ ts, price, act });
-    }
-    return { params, rows };
-  }
-
-  function buildReport_fallback(rows){
-    const r = [...rows].sort((a,b)=> String(a.ts).localeCompare(String(b.ts)));
-    const MULT = window.SHARED.MULT, FEE = window.SHARED.FEE, TAX = window.SHARED.TAX;
-
-    const trades = [];
-    let pos = null; // { side:'L'|'S', tsIn, pIn }
-
-    function normAct(act){
-      const a = act.replace(/\s+/g,'');
-      if (a === '強制平倉' || a === '結算平倉' || a === '平倉'){
-        if (!pos) return null;
-        return pos.side==='L' ? '平賣' : '平買';
-      }
-      return a;
-    }
-
-    for (const x of r){
-      const act = normAct(x.act);
-      if (!act) continue;
-
-      if (act === '新買'){
-        if (pos && pos.side==='S'){ // 先平空
-          const pts = pos.pIn - x.price, gain = pts*MULT;
-          trades.push({ pos:{tsIn:pos.tsIn, pIn:pos.pIn, side:'S'}, tsOut:x.ts+"00", priceOut:x.price, pts, gain, gainSlip:gain });
-          pos = null;
-        }
-        pos = { side:'L', tsIn:x.ts+"00", pIn:x.price };
-      } else if (act === '新賣'){
-        if (pos && pos.side==='L'){ // 先平多
-          const pts = x.price - pos.pIn, gain = pts*MULT;
-          trades.push({ pos:{tsIn:pos.tsIn, pIn:pos.pIn, side:'L'}, tsOut:x.ts+"00", priceOut:x.price, pts, gain, gainSlip:gain });
-          pos = null;
-        }
-        pos = { side:'S', tsIn:x.ts+"00", pIn:x.price };
-      } else if (act === '平賣' || act === '平買'){
-        if (!pos) continue;
-        if (act==='平賣' && pos.side!=='L') continue;
-        if (act==='平買' && pos.side!=='S') continue;
-
-        const pts = (pos.side==='L') ? (x.price-pos.pIn) : (pos.pIn-x.price);
-        const gain = pts*MULT;
-        trades.push({ pos:{tsIn:pos.tsIn, pIn:pos.pIn, side:pos.side}, tsOut:x.ts+"00", priceOut:x.price, pts, gain, gainSlip:gain });
-        pos = null;
-      }
-    }
-
-    // 序列
-    const tsArr=[], total=[], slipCum=[], longCum=[], longSlipCum=[], shortCum=[], shortSlipCum=[];
-    let cTot=0,cSlip=0,cL=0,cLS=0,cS=0,cSS=0;
-    trades.forEach(t=>{
-      cTot+=t.gain; cSlip+=t.gainSlip;
-      if(t.pos.side==='L'){ cL+=t.gain; cLS+=t.gainSlip; } else { cS+=t.gain; cSS+=t.gainSlip; }
-      tsArr.push(t.tsOut.slice(0,8));
-      total.push(cTot); slipCum.push(cSlip); longCum.push(cL); longSlipCum.push(cLS); shortCum.push(cS); shortSlipCum.push(cSS);
-    });
-
-    // fake stat 給 KPI（讓舊流程能跑；真正統計由 computeRR 計算）
-    const mkStat = (arr)=>({ count:trades.length, winRate:0, loseRate:0, dayMax:0, dayMin:0, up:Math.max(...arr,0), dd:Math.min(...arr,0), gain:cTot });
-    return {
-      trades,
-      tsArr,
-      total,
-      slipCum,
-      longCum,
-      longSlipCum,
-      shortCum,
-      shortSlipCum,
-      statAll: mkStat(slipCum),
-      statL  : mkStat(longSlipCum),
-      statS  : mkStat(shortSlipCum)
-    };
-  }
-
-  // ---------- 圖表（Max/Min/Last；右側留白） ----------
+  // ---------- 圖表（Max/Min/Last；Last 只顯示數值；右側留白） ----------
   function drawChart(ser) {
     if (chart) chart.destroy();
     const { tsArr, total, slipTotal, long, longSlip, short, shortSlip } = ser;
@@ -288,16 +129,16 @@
   function renderKpiCombined(statAll, statL, statS) {
     const { fmtMoney, pct } = window.SHARED;
     const mk = s => ({
-      "交易數": String(s.count||0),
-      "勝率": pct(s.winRate||0),
-      "敗率": pct(s.loseRate||0),
-      "單日最大獲利": fmtMoney(s.dayMax||0),
-      "單日最大虧損": fmtMoney(s.dayMin||0),
-      "區間最大獲利": fmtMoney(s.up||0),
-      "區間最大回撤": fmtMoney(s.dd||0),
-      "累積獲利": fmtMoney(s.gain||0),
+      "交易數": String(s.count),
+      "勝率": pct(s.winRate),
+      "敗率": pct(s.loseRate),
+      "單日最大獲利": fmtMoney(s.dayMax),
+      "單日最大虧損": fmtMoney(s.dayMin),
+      "區間最大獲利": fmtMoney(s.up),
+      "區間最大回撤": fmtMoney(s.dd),
+      "累積獲利": fmtMoney(s.gain),
     });
-    const A = mk(statAll||{}), L = mk(statL||{}), S = mk(statS||{});
+    const A = mk(statAll), L = mk(statL), S = mk(statS);
 
     const host = $("#kpiAll"); $("#kpiL").innerHTML=""; $("#kpiS").innerHTML="";
     host.innerHTML = "";
@@ -477,7 +318,7 @@
     pushRow("平均獲利單",                money(k.avgWin),   "含滑價的平均獲利金額",                 ['ok','—','≥平均虧損單'], "Core");
     pushRow("平均虧損單",                pmoney(-k.avgLoss),"含滑價的平均虧損金額",                 ['ok','—','—'], "Core");
     pushRow("最大連勝",                  String(k.maxWS),   "連續獲利筆數",                         ['ok','—','—'], "Core");
-    pushRow("最大連敗",                  String(k.maxLS),   "連續虧損筆數",                         ['ok','—','—'], "Core");
+    pushRow("最大連敗",                  String(k.maxLS),   "連續虧損筆數",                         RULES.maxLS(k.maxLS), "Core");
     pushRow("平均持倉時間",              `${k.avgHoldingMins.toFixed(2)} 分`, "tsIn→tsOut 平均分鐘數", ['ok','—','—'], "Core");
     pushRow("交易頻率",                  `${k.tradesPerMonth.toFixed(2)} 筆/月`, "以回測期間月份估算", ['ok','—','—'], "Core");
     pushRow("Slippage（滑價）",           "—",               "滑價影響（委託型態/參與率）",         ['ok','—','—'], "Imp.");
@@ -585,7 +426,7 @@
     const cls = v => v>0 ? "p-red" : (v<0 ? "p-green" : "");
 
     report.trades.forEach((t,i)=>{
-      // 進場列
+      // 進場列：顯示進場時間/價與「新買/新賣」，其餘以 — 佔位
       const entryRow = document.createElement("tr");
       entryRow.innerHTML = `
         <td rowspan="2">${i+1}</td>
@@ -601,7 +442,7 @@
         <td class="num">—</td>
       `;
 
-      // 出場列
+      // 出場列：顯示出場資料與點數/費用/稅/損益與累積
       const fee = FEE * 2;
       const tax = Math.round(t.priceOut * MULT * TAX);
       const newCum     = cum     + t.gain;
@@ -623,84 +464,65 @@
       tb.appendChild(entryRow);
       tb.appendChild(exitRow);
 
+      // 更新累積
       cum = newCum;
       cumSlip = newCumSlip;
     });
   }
 
-  // ---------- helper：以出場日聚合（含滑價） ----------
-  function buildDailySlipFromTrades(trades){
-    const by = new Map();
-    for (const t of trades){
-      const d = keyFromTs(t.tsOut);
-      by.set(d, (by.get(d) || 0) + t.gainSlip);
-    }
-    return [...by.entries()]
-      .sort((a,b)=>a[0].localeCompare(b[0]))
-      .map(([date,pnl]) => ({ date, pnl }));
-  }
-
-  // ---------- 主流程（先 preNormalize，再用 shared 或 fallback 解析並配對） ----------
+  // ---------- 主流程 ----------
   async function handleRaw(raw){
-    const prepared = preNormalize(raw);
+    const { parseTXT, buildReport, paramsLabel } = window.SHARED;
 
-    // 1) 優先使用 shared.js
-    const parsedA  = (window.SHARED && typeof window.SHARED.parseTXT === 'function')
-                      ? window.SHARED.parseTXT(prepared) : null;
-    const reportA  = (parsedA && typeof window.SHARED.buildReport === 'function')
-                      ? window.SHARED.buildReport(parsedA.rows) : null;
-
-    // 2) 如 shared.js 不在或配對為 0，改用 fallback
-    const useFb = (!reportA || !Array.isArray(reportA.trades) || reportA.trades.length === 0);
-    const parsed = useFb ? parseTXT_fallback(prepared) : parsedA;
-    const report = useFb ? buildReport_fallback(parsed.rows) : reportA;
-
-    if (!report || !report.trades || report.trades.length === 0){
-      alert("沒有成功配對的交易");
-      return;
-    }
+    const parsed = parseTXT(raw);
+    const report = buildReport(parsed.rows);
+    if(report.trades.length===0){ alert("沒有成功配對的交易"); return; }
 
     // 6 線圖
     drawChart({
-      tsArr     : report.tsArr,
-      total     : report.total,
-      slipTotal : report.slipCum,
-      long      : report.longCum,
-      longSlip  : report.longSlipCum,
-      short     : report.shortCum,
-      shortSlip : report.shortSlipCum
+      tsArr:report.tsArr, total:report.total, slipTotal:report.slipCum,
+      long:report.longCum, longSlip:report.longSlipCum, short:report.shortCum, shortSlip:report.shortSlipCum
     });
 
-    // 參數列 + 匯入時間
-    $("#paramChip").textContent =
-      (window.SHARED.paramsLabel ? window.SHARED.paramsLabel(parsed.params) : "—") +
-      " ｜ 匯入時間：" + nowStr();
+    // 參數列 + 匯入時間（安全取值，不管是陣列或 {raw:[]} 都不會噴錯）
+    const paramLines = Array.isArray(parsed.params) ? parsed.params
+                     : (parsed.params && Array.isArray(parsed.params.raw)) ? parsed.params.raw
+                     : [];
+    let paramText = "—";
+    try {
+      if (typeof paramsLabel === "function") {
+        // 你的新版 shared.js 用 paramsLabel(params)；舊版可能用陣列
+        paramText = paramsLabel(Array.isArray(parsed.params) ? parsed.params : { raw: paramLines });
+      } else {
+        paramText = paramLines.slice(0,2).map(x => String(x).trim()).join(" ｜ ") || "—";
+      }
+    } catch {
+      paramText = paramLines.slice(0,2).map(x => String(x).trim()).join(" ｜ ") || "—";
+    }
+    $("#paramChip").textContent = paramText + " ｜ 匯入時間：" + nowStr();
 
-    // KPI / RR
-    renderKpiCombined(report.statAll||{}, report.statL||{}, report.statS||{});
-    const dailySlip = buildDailySlipFromTrades(report.trades);
-    const k = computeRR(dailySlip, report.trades, DEFAULT_NAV, DEFAULT_RF);
+    // KPI
+    renderKpiCombined(report.statAll, report.statL, report.statS);
+
+    // 以出場日聚合（含滑價）
+    const dailyMap=new Map();
+    for(const t of report.trades){ const k=keyFromTs(t.tsOut); dailyMap.set(k,(dailyMap.get(k)||0)+t.gainSlip); }
+    const dailySlip=[...dailyMap.entries()].sort((a,b)=>a[0].localeCompare(b[0])).map(([date,pnl])=>({date,pnl}));
+
+    const k=computeRR(dailySlip,report.trades,DEFAULT_NAV,DEFAULT_RF);
     renderRR6Cats(k);
-
-    // 交易明細
     renderTable(report);
   }
 
-  // ---------- 綁定 ----------
+  // 綁定
   $("#btn-clip").addEventListener("click", async ()=>{
     try{ const txt=await navigator.clipboard.readText(); handleRaw(txt); }
     catch{ alert("無法讀取剪貼簿內容，請改用「選擇檔案」。"); }
   });
   $("#file").addEventListener("change", async e=>{
     const f=e.target.files[0]; if(!f) return;
-    try{
-      // 這裡仍交給 shared.js 的 readAsTextAuto（若不存在，瀏覽器會用預設讀法）
-      if (window.SHARED.readAsTextAuto){
-        const txt=await window.SHARED.readAsTextAuto(f); await handleRaw(txt);
-      }else{
-        const txt=await f.text(); await handleRaw(txt);
-      }
-    }catch(err){ alert(err.message||"讀檔失敗"); }
+    try{ const txt=await window.SHARED.readAsTextAuto(f); await handleRaw(txt); }
+    catch(err){ alert(err.message||"讀檔失敗"); }
   });
 
   // ---------- 通用工具 ----------
