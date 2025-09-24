@@ -36,6 +36,7 @@
   <!-- 頂部導覽 -->
   <div class="topbar">
     <a class="home" href="index.html">回首頁</a>
+    <button id="btnFix" title="清除快取與登入資訊後重新載入">修復（清快取/重登入）</button>
     <span class="badge">Bucket: reports（Private）</span>
   </div>
 
@@ -106,14 +107,24 @@
   </div>
 
 <script>
-/* ===== Supabase 設定 ===== */
+/* ===== Supabase 設定：使用 sessionStorage 避免壞掉的 localStorage 造成卡死 ===== */
 const SUPABASE_URL = "https://byhbmmnacezzgkwfkozs.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_xVe8fGbqQ0XGwi4DsmjPMg_Y2RBOD3t";
 const BUCKET_NAME = "reports";
-/* ===== 白名單（可操作） ===== */
+/* 白名單（可操作） */
 const ALLOW = ["q72yg7f8@gmail.com","ck6ej04jo3-2@yahoo.com","tony71220@gmail.com"].map(s=>s.toLowerCase());
 
-const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: {
+    persistSession: true,
+    storage: window.sessionStorage,     // ← 用 sessionStorage
+    autoRefreshToken: true,
+    detectSessionInUrl: false,
+  },
+  global: {
+    fetch: (url, options={}) => fetch(url, { ...options, cache: 'no-store' }) // 盡量避免快取
+  }
+});
 
 /* DOM */
 const emailEl = document.getElementById('email');
@@ -130,8 +141,23 @@ const subfolderEl = document.getElementById('subfolder');
 const prefixEl    = document.getElementById('prefix');
 const tbody       = document.getElementById('fileTbody');
 const viewerHint  = document.getElementById('viewerHint');
+const btnFix      = document.getElementById('btnFix');
 
-/* 小工具 */
+/* 一鍵修復：清 session/localStorage 與 Cache 後重載 */
+btnFix.onclick = async () => {
+  try { await sb.auth.signOut(); } catch {}
+  try { localStorage.clear(); } catch {}
+  try { sessionStorage.clear(); } catch {}
+  try {
+    if ('caches' in window) {
+      const keys = await caches.keys();
+      await Promise.all(keys.map(k => caches.delete(k)));
+    }
+  } catch {}
+  location.href = 'upload.html?v=' + Date.now();
+};
+
+/* 工具 */
 function isAllow(email){ return !!email && ALLOW.includes(email.toLowerCase()); }
 function withDownload(url){ return url ? url + (url.includes('?')?'&':'?') + 'download' : '#'; }
 function sanitizeSeg(s){ return (s||'').normalize('NFKD').replace(/[^\w.\-]+/g,'-').replace(/-+/g,'-').replace(/^-+|-+$/g,''); }
@@ -166,11 +192,9 @@ async function refreshAuthUI(){
     uploadPanel.style.display = 'none';
     writerBadge.innerHTML = '';
     viewerHint.style.display = 'block';
-    // 未登入也不可讀清單（bucket=Private；後端RLS限制）
     tbody.innerHTML = `<tr><td colspan="6" class="muted">請以白名單帳號登入後才能載入清單與下載。</td></tr>`;
     return { logined:false, email:'' };
   }
-
   const email = (session.user.email||'').toLowerCase();
   if(isAllow(email)){
     uploadPanel.style.display = 'block';
@@ -192,10 +216,15 @@ document.getElementById('btnSignIn').onclick = async ()=>{
   const pw=pwEl.value||'';
   if(!email || pw.length<6){ authMsg.textContent='請輸入有效 Email 與（至少 6 碼）密碼'; return; }
   authMsg.textContent='登入中…';
-  const { error } = await sb.auth.signInWithPassword({ email, password: pw });
-  authMsg.innerHTML = error ? `<span class="warn">登入失敗：${error.message}</span>` : '✅ 登入成功';
+  try{
+    const { error } = await sb.auth.signInWithPassword({ email, password: pw });
+    authMsg.innerHTML = error ? `<span class="warn">登入失敗：${error.message}</span>` : '✅ 登入成功';
+  }catch(e){
+    authMsg.innerHTML = `<span class="warn">登入失敗：${e?.message||e}</span>`;
+  }
   await refreshAuthUI(); await refreshList();
 };
+
 document.getElementById('btnSignOut').onclick = async ()=>{
   await sb.auth.signOut();
   authMsg.textContent='已登出';
@@ -206,12 +235,7 @@ document.getElementById('btnSignOut').onclick = async ()=>{
 async function refreshList(){
   const { data:{session} } = await sb.auth.getSession();
   const email = session?.user?.email?.toLowerCase() || '';
-  const allowed = isAllow(email);
-
-  if(!allowed){
-    // 不在白名單：不載清單、不產生任何連結
-    return;
-  }
+  if(!isAllow(email)) return; // 非白名單：不載清單、不產生連結
 
   tbody.innerHTML = '<tr><td colspan="6" class="muted">載入中...</td></tr>';
   const path = normalizePrefix(prefixEl.value);
@@ -222,11 +246,11 @@ async function refreshList(){
 
   tbody.innerHTML = '';
   for(const item of data){
-    if(item.id===null && !item.metadata) continue; // 跳過資料夾
+    if(item.id===null && !item.metadata) continue;
     const fullPath = (path?path:'') + item.name;
     const meta = parseMeta(fullPath);
 
-    // 產生 1 小時有效簽名網址（只有白名單才會做到這一步）
+    // 產生 1 小時簽名網址
     const { data: signed, error: sigErr } = await sb.storage.from(BUCKET_NAME).createSignedUrl(fullPath, 60*60);
     const viewUrl = !sigErr ? signed.signedUrl : '#';
     const dlUrl   = withDownload(viewUrl);
