@@ -14,10 +14,21 @@
     table{width:100%;border-collapse:collapse}
     .back-link{margin-bottom:12px;display:inline-block}
     .scroll-x{overflow-x:auto}
+    .btn{padding:8px 12px;border:0;border-radius:8px;cursor:pointer}
+    .btn-primary{background:#0d6efd;color:#fff}
+    .btn-gray{background:#6c757d;color:#fff}
+    .sel{min-width:320px;padding:8px;border:1px solid #ddd;border-radius:8px}
+    .ipt{padding:8px;border:1px solid #ddd;border-radius:8px}
+    .tiny{font-size:12px;color:#666}
+    pre.preview{margin-top:10px;max-height:280px;overflow:auto;background:#f8f9fa;padding:10px;border:1px solid #eee;border-radius:8px;white-space:pre-wrap}
   </style>
+
   <!-- 依賴 -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="shared.js?v=full-table-v7"></script>
+
+  <!-- Supabase（用來列出 upload.html 上傳到 reports 的檔案） -->
+  <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 </head>
 <body>
   <div class="wrap">
@@ -31,6 +42,24 @@
         <input id="file" type="file" accept=".txt" />
       </div>
       <div class="chip">參數：<span id="paramChip">—</span></div>
+    </div>
+
+    <!-- ▶ 新增：從雲端選檔（Supabase） ◀ -->
+    <div class="card" id="cloudPanel">
+      <h3 style="margin:0 0 8px 0;">雲端檔案（Supabase / reports）</h3>
+      <div class="row">
+        <input id="cloudPrefix" class="ipt" placeholder="篩選資料夾（例：2025-09-24/）" />
+        <button id="btnCloudList" class="btn btn-primary">載入清單</button>
+        <select id="cloudSelect" class="sel">
+          <option value="">（請先載入清單）</option>
+        </select>
+        <button id="btnCloudPreview" class="btn btn-gray">預覽</button>
+        <button id="btnCloudImport" class="btn btn-primary">載入到分析</button>
+      </div>
+      <div id="cloudMeta" class="tiny" style="margin-top:6px;"></div>
+      <pre id="cloudPreview" class="preview"></pre>
+      <!-- 暫存文字（若你的 single.js 有需要可以讀取這個） -->
+      <textarea id="cloudTxt" style="display:none"></textarea>
     </div>
 
     <!-- 6 線圖 -->
@@ -52,7 +81,150 @@
     </div>
   </div>
 
-  <!-- 主檔 -->
+  <!-- 主檔（你的既有分析） -->
   <script src="single.js?v=full-table-v8"></script>
+
+  <!-- 雲端選檔實作 -->
+  <script>
+  // === Supabase 設定（與 upload.html 相同專案/桶） ===
+  const SUPABASE_URL = "https://byhbmmnacezzgkwfkozs.supabase.co";
+  const SUPABASE_ANON_KEY = "sb_publishable_xVe8fGbqQ0XGwi4DsmjPMg_Y2RBOD3t";
+  const BUCKET_NAME = "reports";
+  const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    global: { fetch: (u,o={}) => fetch(u, { ...o, cache:'no-store' }) }
+  });
+
+  // === DOM 參照 ===
+  const $ = s => document.querySelector(s);
+  const cloudPrefix   = $('#cloudPrefix');
+  const btnCloudList  = $('#btnCloudList');
+  const cloudSelect   = $('#cloudSelect');
+  const btnCloudPrev  = $('#btnCloudPreview');
+  const btnCloudImp   = $('#btnCloudImport');
+  const cloudPreview  = $('#cloudPreview');
+  const cloudMeta     = $('#cloudMeta');
+  const cloudTxt      = $('#cloudTxt');
+  const fileInput     = $('#file');
+
+  // === 解析檔名 → 策略／參數／起訖期間（與 upload.html 同邏輯） ===
+  function parseMetaFromPath(fullPath){
+    const base = fullPath.split('/').pop();
+    const name = base.replace(/\.[^.]+$/,'');
+    const segs = name.split(/[-_]+/).filter(Boolean);
+    const isD = s => /^\d{8}$/.test(s);
+    const idx = [];
+    segs.forEach((s,i)=>{ if(isD(s)) idx.push(i); });
+    let strategy='—', params='—', range='—';
+    if(idx.length>=2){
+      const i0 = idx[0];
+      strategy = i0>=1 ? segs[0] : '—';
+      params   = i0>=2 ? segs.slice(1,i0).join('-') : '—';
+      range    = `${segs[i0]}-${segs[idx[1]]}`;
+    }else if(idx.length===1){
+      const i0 = idx[0];
+      strategy = i0>=1 ? segs[0] : '—';
+      params   = i0>=2 ? segs.slice(1,i0).join('-') : '—';
+      range    = segs[i0];
+    }else{
+      if(segs.length>=1) strategy = segs[0];
+      if(segs.length>=2) params   = segs.slice(1).join('-');
+    }
+    return { strategy, params, range };
+  }
+
+  // === 列出 Supabase bucket 清單（Public 桶用 public URL） ===
+  async function listCloudFiles(){
+    cloudPreview.textContent = '';
+    cloudMeta.textContent = '';
+    cloudSelect.innerHTML = `<option value="">載入中...</option>`;
+
+    const prefix = (cloudPrefix.value||'').trim();
+    const fixed  = prefix && !prefix.endsWith('/') ? prefix + '/' : prefix;
+
+    const { data, error } = await sb.storage
+      .from(BUCKET_NAME)
+      .list(fixed, { limit:1000, sortBy:{ column:'name', order:'asc' } });
+
+    if(error){
+      cloudSelect.innerHTML = `<option value="">讀取失敗：${error.message}</option>`;
+      return;
+    }
+    if(!data || data.length===0){
+      cloudSelect.innerHTML = `<option value="">（無檔案）</option>`;
+      return;
+    }
+
+    const opts = [];
+    for(const item of data){
+      if(item.id===null && !item.metadata) continue; // 資料夾略過
+      const fullPath = (fixed||'') + item.name;
+      const meta     = parseMetaFromPath(fullPath);
+      const sizeKB   = item.metadata?.size ? (item.metadata.size/1024).toFixed(1) : '-';
+      const label    = `[${meta.strategy}] ${meta.params} | ${meta.range}  —  ${fullPath}  (${sizeKB} KB)`;
+      const opt = document.createElement('option');
+      opt.value = fullPath; opt.textContent = label;
+      opts.push(opt);
+    }
+    cloudSelect.innerHTML = '';
+    opts.forEach(o => cloudSelect.appendChild(o));
+  }
+
+  // === 依選擇預覽檔案（僅前 500 行避免過長） ===
+  async function previewCloudFile(){
+    cloudPreview.textContent = '';
+    cloudMeta.textContent = '';
+    const path = cloudSelect.value;
+    if(!path) return;
+
+    const { data: pub } = sb.storage.from(BUCKET_NAME).getPublicUrl(path);
+    const url = pub?.publicUrl;
+    if(!url){ cloudPreview.textContent = '取得連結失敗'; return; }
+
+    const res  = await fetch(url, { cache:'no-store' });
+    const text = await res.text();
+    cloudTxt.value = text;
+
+    const meta = parseMetaFromPath(path);
+    cloudMeta.innerHTML =
+      `策略：<b>${meta.strategy}</b>　參數：<b>${meta.params}</b>　起訖：<b>${meta.range}</b><br><span class="tiny">${path}</span>`;
+
+    const lines = text.split(/\r?\n/);
+    cloudPreview.textContent = lines.slice(0, 500).join('\n') + (lines.length>500 ? `\n...（共 ${lines.length} 行）` : ``);
+  }
+
+  // === 把雲端文字「偽裝成檔案」塞到 #file，觸發你的 single.js 原本流程 ===
+  async function importToAnalysis(){
+    const path = cloudSelect.value;
+    if(!path){ alert('請先從清單選擇檔案'); return; }
+
+    // 確保抓到最新文字（若尚未點預覽）
+    if(!cloudTxt.value){
+      const { data: pub } = sb.storage.from(BUCKET_NAME).getPublicUrl(path);
+      const url = pub?.publicUrl;
+      const res  = await fetch(url, { cache:'no-store' });
+      const text = await res.text();
+      cloudTxt.value = text;
+    }
+    const text = cloudTxt.value;
+
+    // 變成 File → 塞進 #file → 觸發 change（走既有 single.js 的處理）
+    try{
+      const blob = new Blob([text], { type:'text/plain' });
+      const filename = path.split('/').pop() || 'cloud.txt';
+      const file = new File([blob], filename, { type:'text/plain' });
+      const dt = new DataTransfer();
+      dt.items.add(file);
+      fileInput.files = dt.files;
+      fileInput.dispatchEvent(new Event('change', { bubbles:true }));
+    }catch(e){
+      alert('匯入分析失敗：' + (e?.message||e));
+    }
+  }
+
+  // 綁定
+  btnCloudList.addEventListener('click', listCloudFiles);
+  btnCloudPrev.addEventListener('click', previewCloudFile);
+  btnCloudImp.addEventListener('click', importToAnalysis);
+  </script>
 </body>
 </html>
