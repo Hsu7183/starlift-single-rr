@@ -318,7 +318,7 @@
     pushRow("平均獲利單",                money(k.avgWin),   "含滑價的平均獲利金額",                 ['ok','—','≥平均虧損單'], "Core");
     pushRow("平均虧損單",                pmoney(-k.avgLoss),"含滑價的平均虧損金額",                 ['ok','—','—'], "Core");
     pushRow("最大連勝",                  String(k.maxWS),   "連續獲利筆數",                         ['ok','—','—'], "Core");
-    pushRow("最大連敗",                  String(k.maxLS),   "連續虧損筆數",                         ['ok','—','—'], "Core");
+    pushRow("最大連敗",                  String(k.maxLS),   "連續虧損筆數",                         RULES.maxLS(k.maxLS), "Core");
     pushRow("平均持倉時間",              `${k.avgHoldingMins.toFixed(2)} 分`, "tsIn→tsOut 平均分鐘數", ['ok','—','—'], "Core");
     pushRow("交易頻率",                  `${k.tradesPerMonth.toFixed(2)} 筆/月`, "以回測期間月份估算", ['ok','—','—'], "Core");
     pushRow("Slippage（滑價）",           "—",               "滑價影響（委託型態/參與率）",         ['ok','—','—'], "Imp.");
@@ -327,37 +327,64 @@
     pushRow("Adverse Selection",         "—",               "成交後短窗報酬為負的比例",             ['ok','—','—'], "Adv.");
     pushRow("時段 Edge 熱力圖",           "—",               "各時段勝率/期望差異",                 ['ok','—','—'], "Adv.");
 
-    // 建議優化 + 其餘各節渲染（同上）
-    const sections=[]; const improvs=[];
-    const pushHeader = (title) => sections.push({title, rows: []});
-    const labelGrade = lvl => lvl==='good'?'Strong（強）':(lvl==='bad'?'Improve（優化）':'Adequate（可接受）');
-    const money=n=>(Number(n)||0).toLocaleString("zh-TW");
-    const pmoney=n=>(Number(n)>0?"":"-")+money(Math.abs(Number(n)||0));
-    const pct2=x=>(Number.isFinite(x)?(x*100).toFixed(2):"0.00")+"%";
-    const fix2=x=>Number(x).toFixed(2);
+    // 五、穩健性
+    pushHeader("五、穩健性與可複製性（Robustness & Statistical Soundness）");
+    pushRow("滾動 Sharpe（6個月中位）",  fix2(k.rollSharpeMed), "126 交易日窗的 Sharpe 中位數", RULES.roll(k.rollSharpeMed), "Core");
+    pushRow("WFA（Walk-Forward）",        "—",               "滾動調參/驗證",                       ['ok','—','—'], "Core");
+    pushRow("OOS（樣本外）",              "—",               "樣本外表現",                           ['ok','—','—'], "Core");
+    pushRow("參數敏感度（±10~20%）",      "—",               "熱圖檢查過擬合",                       ['ok','—','—'], "Imp.");
+    pushRow("Prob./Deflated Sharpe",      "—",               "修正多測偏誤之 Sharpe",                ['ok','—','—'], "Imp.");
+    pushRow("Regime 分析",               "—",               "趨勢/震盪 × 高/低波動",                ['ok','—','—'], "Adv.");
+    pushRow("Alpha/Concept Decay",       "—",               "邊際優勢衰退速度",                     ['ok','—','—'], "Adv.");
 
-    const RULES = { /* 省略—同上定義（為了檔案完整性已出現在上方） */ };
+    // 六、風險用量與容量
+    pushHeader("六、風險用量、槓桿與容量（Risk Usage, Leverage & Capacity）");
+    pushRow("Leverage（槓桿）",           "—",               "名目曝險 / 權益 或 Margin-to-Equity", ['ok','—','—'], "Core");
+    pushRow("Gross / Net Exposure",       "—",               "總/淨曝險",                           ['ok','—','—'], "Core");
+    pushRow("Risk Contribution（mVaR）",  "—",               "子策略/商品風險貢獻",                  ['ok','—','—'], "Core");
+    pushRow("Diversification Ratio",      "—",               "分散度指標",                           ['ok','—','—'], "Imp.");
+    pushRow("Concentration (HHI)",        "—",               "集中度指標（權重或風險）",             ['ok','—','—'], "Imp.");
+    pushRow("Capacity / Participation",   "—",               "容量/參與率壓測",                       ['ok','—','—'], "Adv.");
+    pushRow("Impact per 100口",           "—",               "單位下單的價格衝擊",                   ['ok','—','—'], "Adv.");
+    pushRow("Kyle’s λ / Amihud",          "—",               "衝擊係數 / 流動性稀薄度",              ['ok','—','—'], "Adv.");
+    pushRow("Stress Scenarios",           "—",               "情境/沖擊測試",                         ['ok','—','—'], "Adv.");
 
-    const pushRow = (title, value, desc, tuple, tierLabel, sec=sections[sections.length-1]) => {
-      const [grade, comment, bench] = tuple;
-      const evalText = `${labelGrade(grade)}${comment? '，'+comment : ''}`;
-      sec.rows.push({ grade, cells:[`${title}${tierLabel?` <span class="rr-tier">(${tierLabel})</span>`:''}`, value, desc, evalText, bench||'—'] });
-      if (grade==='bad') improvs.push([title, value || '—', '建議優化', evalText, bench||'—']);
-    };
-
+    // 渲染
     const tbody = document.createElement('tbody');
+
+    // 建議優化（粉紅專區）
     tbody.appendChild(sectionRow("建議優化指標", true));
     tbody.appendChild(subHeadRow(true));
     if (improvs.length === 0) {
-      const tr = document.createElement('tr'); tr.className = 'rr-improve-row';
-      tr.innerHTML = `<td colspan="5">（目前無紅色指標）</td>`; tbody.appendChild(tr);
+      const tr = document.createElement('tr');
+      tr.className = 'rr-improve-row';
+      tr.innerHTML = `<td colspan="5">（目前無紅色指標）</td>`;
+      tbody.appendChild(tr);
     } else {
       improvs.forEach(([name,val,adv,evalText,bench])=>{
-        const tr = document.createElement('tr'); tr.className = 'rr-improve-row rr-bad-row';
+        const tr = document.createElement('tr');
+        tr.className = 'rr-improve-row rr-bad-row';
         tr.innerHTML = `<td>• ${name}</td><td>${val}</td><td>${adv}</td><td>${evalText}</td><td>${bench}</td>`;
         tbody.appendChild(tr);
       });
     }
+
+    // 其餘各節
+    for (let i=1;i<sections.length;i++){
+      const sec = sections[i];
+      tbody.appendChild(sectionRow(sec.title, false));
+      tbody.appendChild(subHeadRow(false));
+      sec.rows.forEach(r=>{
+        const tr = document.createElement('tr');
+        tr.className = r.grade==='bad' ? 'rr-bad-row' : (r.grade==='good' ? 'rr-good-row' : '');
+        tr.innerHTML = `<td>${r.cells[0]}</td><td>${r.cells[1]}</td><td>${r.cells[2]}</td><td>${r.cells[3]}</td><td>${r.cells[4]}</td>`;
+        tbody.appendChild(tr);
+      });
+    }
+
+    const wrap = $("#rrLines");
+    wrap.innerHTML = `<table class="rr-table"></table>`;
+    wrap.querySelector('table').appendChild(tbody);
 
     function sectionRow(title, isImprove){
       const tr = document.createElement('tr');
@@ -373,9 +400,6 @@
         : `<td>指標</td><td>數值</td><td>說明</td><td>機構評語</td><td>參考區間</td>`;
       return tr;
     }
-
-    // 這裡把 sections 其餘章節照你的需要 pushRow 後 append；省略重覆樣板避免過長
-    const wrap = $("#rrLines"); wrap.innerHTML = `<table class="rr-table"></table>`; wrap.querySelector('table').appendChild(tbody);
   }
 
   // ---------- 交易明細（兩列顯示：進場＋出場） ----------
@@ -402,10 +426,13 @@
     const cls = v => v>0 ? "p-red" : (v<0 ? "p-green" : "");
 
     report.trades.forEach((t,i)=>{
-      const fee = FEE * 2;                               // 來回手續費
-      const tax = Math.round(t.priceOut * MULT * TAX);   // 依出場價估計之稅金（如期貨為 0）
-      const theo = (t.pts * MULT) - fee - tax;           // 理論淨損益（不含滑價）
-      const real = (t.gainSlip)    - fee - tax;          // 含滑價淨損益
+      // 費用與稅（以你 shared.js 設定為準）
+      const fee = FEE * 2;
+      const tax = Math.round(t.priceOut * MULT * TAX);
+
+      // 理論淨損益 / 實際淨損益（含滑價）
+      const theo = (t.pts * MULT) - fee - tax;
+      const real = (t.gainSlip)    - fee - tax;
 
       cumTheo += theo;
       cumReal += real;
