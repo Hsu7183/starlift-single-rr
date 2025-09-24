@@ -21,6 +21,8 @@
     .ipt{padding:8px;border:1px solid #ddd;border-radius:8px}
     .tiny{font-size:12px;color:#666}
     pre.preview{margin-top:10px;max-height:280px;overflow:auto;background:#f8f9fa;padding:10px;border:1px solid #eee;border-radius:8px;white-space:pre-wrap}
+    .ok{color:#128a27}
+    .warn{color:#b90}
   </style>
 
   <!-- 依賴 -->
@@ -35,7 +37,7 @@
     <a class="back-link" href="index.html">← 返回首頁</a>
     <h1>單檔分析（機構級）</h1>
 
-    <!-- 控制列 -->
+    <!-- 控制列（原有） -->
     <div class="row card">
       <div>
         <button id="btn-clip">從剪貼簿貼上 TXT</button>
@@ -50,15 +52,14 @@
       <div class="row">
         <input id="cloudPrefix" class="ipt" placeholder="篩選資料夾（例：2025-09-24/）" />
         <button id="btnCloudList" class="btn btn-primary">載入清單</button>
-        <select id="cloudSelect" class="sel">
-          <option value="">（請先載入清單）</option>
-        </select>
+        <select id="cloudSelect" class="sel"><option value="">（請先載入清單）</option></select>
         <button id="btnCloudPreview" class="btn btn-gray">預覽</button>
         <button id="btnCloudImport" class="btn btn-primary">載入到分析</button>
       </div>
       <div id="cloudMeta" class="tiny" style="margin-top:6px;"></div>
       <pre id="cloudPreview" class="preview"></pre>
       <textarea id="cloudTxt" style="display:none"></textarea>
+      <div id="cloudNote" class="tiny" style="margin-top:6px;"></div>
     </div>
 
     <!-- 6 線圖 -->
@@ -66,7 +67,7 @@
 
     <!-- KPI（合併表格） -->
     <div id="kpiAll" class="card scroll-x"></div>
-    <div id="kpiL"></div><div id="kpiS"></div> <!-- 保留避免報錯 -->
+    <div id="kpiL"></div><div id="kpiS"></div>
 
     <!-- Risk-Return 表 -->
     <div id="rrLines" class="card scroll-x"></div>
@@ -83,9 +84,9 @@
   <!-- 你的分析主檔 -->
   <script src="single.js?v=full-table-v8"></script>
 
-  <!-- 雲端選檔實作（自動偵測 Big5/UTF-8 編碼） -->
+  <!-- 雲端選檔 + 編碼偵測 + 動作標準化 -->
   <script>
-  // ===== Supabase 設定 =====
+  /* ===== Supabase 設定 ===== */
   const SUPABASE_URL = "https://byhbmmnacezzgkwfkozs.supabase.co";
   const SUPABASE_ANON_KEY = "sb_publishable_xVe8fGbqQ0XGwi4DsmjPMg_Y2RBOD3t";
   const BUCKET_NAME = "reports";
@@ -93,7 +94,7 @@
     global: { fetch: (u,o={}) => fetch(u, { ...o, cache:'no-store' }) }
   });
 
-  // ===== DOM =====
+  /* ===== DOM ===== */
   const $ = s => document.querySelector(s);
   const cloudPrefix   = $('#cloudPrefix');
   const btnCloudList  = $('#btnCloudList');
@@ -103,9 +104,10 @@
   const cloudPreview  = $('#cloudPreview');
   const cloudMeta     = $('#cloudMeta');
   const cloudTxt      = $('#cloudTxt');
+  const cloudNote     = $('#cloudNote');
   const fileInput     = $('#file');
 
-  // 解析檔名 → 策略/參數/起訖期間
+  /* ===== 工具：解析檔名 → 策略/參數/起訖期間 ===== */
   function parseMetaFromPath(fullPath){
     const base = fullPath.split('/').pop();
     const name = base.replace(/\.[^.]+$/,'');
@@ -119,7 +121,7 @@
     return { strategy, params, range };
   }
 
-  // 先簽名，失敗再退 public URL（Public/Private 皆可用）
+  /* ===== 先簽名，失敗再退 public URL（Public/Private 皆可） ===== */
   async function getFileUrl(path){
     try{
       const { data, error } = await sb.storage.from(BUCKET_NAME).createSignedUrl(path, 60*60);
@@ -129,23 +131,76 @@
     return pub?.publicUrl || '';
   }
 
-  // 以 ArrayBuffer 下載後智慧解碼：utf-8 / big5 / gb18030，選用「�」最少的結果
-  function decodeBest(ab){
+  /* ===== 智慧解碼：utf-8 / big5 / gb18030（選 � 最少者） ===== */
+  function decodeBest(arrayBuffer){
     const encs = ['utf-8','big5','gb18030'];
     let best = { txt:'', score:1e9, enc:'' };
     for(const enc of encs){
       try{
         const dec = new TextDecoder(enc, { fatal:false });
-        const txt = dec.decode(ab);
-        const bad = (txt.match(/\uFFFD/g)||[]).length;       // � 的數量
-        const score = bad;                                   // 分數越小越好
-        if(score < best.score) best = { txt, score, enc };
-      }catch(e){ /* 某些瀏覽器不支援該編碼就略過 */ }
+        const txt = dec.decode(arrayBuffer);
+        const bad = (txt.match(/\uFFFD/g)||[]).length;
+        if(bad < best.score) best = { txt, score:bad, enc };
+      }catch(e){ /* 瀏覽器不支援該編碼時略過 */ }
     }
     return best;
   }
 
-  // 列清單
+  /* ===== 將動作標準化：買進→新買、賣出→新賣、平倉→依持倉轉平賣/平買 ===== */
+  function normalizeTradesText(raw){
+    const lines = raw.split(/\r?\n/);
+    const out = [];
+    let pos = 0; // >0 多單，<0 空單，0 無倉
+
+    // 可接受：時間 價格 動作（以空白/Tab 分隔）
+    const re = /^(\d{12,16})[ \t]+(\d+(?:\.\d+)?)[ \t]+(.+)$/;
+
+    for(let s of lines){
+      const m = s.trim().match(re);
+      if(!m){ continue; } // 跳過非交易行（例如參數區塊）
+      const t = m[1];
+      const p = m[2];
+      let actionRaw = m[3].replace(/\s+/g,'');  // 去空白
+
+      let action = null;
+
+      // 1) 新倉
+      if(/買進|做多|多單買進|開多/.test(actionRaw)){ action = '新買'; pos = pos + 1; }
+      else if(/賣出|做空|空單賣出|開空/.test(actionRaw)){ action = '新賣'; pos = pos - 1; }
+
+      // 2) 平倉詞彙
+      else if(/平倉|結算平倉|多單平倉|空單平倉/.test(actionRaw)){
+        if(/多單平倉/.test(actionRaw)){ action = '平賣'; pos = 0; }
+        else if(/空單平倉/.test(actionRaw)){ action = '平買'; pos = 0; }
+        else{
+          // 僅寫「平倉」→ 依持倉方向推斷
+          if(pos > 0){ action = '平賣'; pos = 0; }
+          else if(pos < 0){ action = '平買'; pos = 0; }
+          else{
+            // 若無法判斷，先跳過（避免誤轉）
+            continue;
+          }
+        }
+      }
+
+      // 3) 已是標準詞
+      else if(/新買|新賣|平買|平賣/.test(actionRaw)){
+        action = actionRaw;
+        if(action === '新買') pos = pos + 1;
+        else if(action === '新賣') pos = pos - 1;
+        else pos = 0;
+      }
+
+      if(!action) continue; // 不認得的動作，略過
+
+      // 輸出標準行：時間 價格 動作（以空白分隔）
+      out.push(`${t} ${p} ${action}`);
+    }
+
+    return out.join('\n');
+  }
+
+  /* ===== 列清單 ===== */
   async function listCloudFiles(){
     cloudPreview.textContent = '';
     cloudMeta.textContent = '';
@@ -176,10 +231,12 @@
     opts.forEach(o => cloudSelect.appendChild(o));
   }
 
-  // 預覽（使用智慧解碼，顯示繁中）
+  /* ===== 預覽（智慧解碼 → 顯示繁中） ===== */
   async function previewCloudFile(){
     cloudPreview.textContent = '';
     cloudMeta.textContent = '';
+    cloudNote.innerHTML = '';
+
     const path = cloudSelect.value;
     if(!path) return;
 
@@ -188,37 +245,49 @@
 
     const res = await fetch(url, { cache:'no-store' });
     if(!res.ok){ cloudPreview.textContent = `讀取失敗：HTTP ${res.status}`; return; }
-    const ab  = await res.arrayBuffer();
-    const best = decodeBest(ab);                 // ← 自動挑選 utf-8 / big5 / gb18030
-    cloudTxt.value = best.txt;                   // 存起來給「載入到分析」
+
+    const ab   = await res.arrayBuffer();
+    const best = decodeBest(ab);  // ← utf-8/big5/gb18030 智慧解碼
+    cloudTxt.value = best.txt;    // 先存原文；匯入時會再做標準化
 
     const meta = parseMetaFromPath(path);
     cloudMeta.innerHTML = `策略：<b>${meta.strategy}</b>　參數：<b>${meta.params}</b>　起訖：<b>${meta.range}</b>　<small class="tiny">（編碼：${best.enc}）</small><br><span class="tiny">${path}</span>`;
 
     const lines = best.txt.split(/\r?\n/);
     cloudPreview.textContent = lines.slice(0, 500).join('\n') + (lines.length>500 ? `\n...（共 ${lines.length} 行）` : ``);
+
+    cloudNote.innerHTML = `<span class="ok">提示：</span>匯入時會將「買進/賣出/平倉(結算平倉)」自動轉為「新買/新賣/平買/平賣」，以符合分析程式。`;
   }
 
-  // 匯入到分析：把「正確解碼後的文字」偽裝成檔案，觸發 #file 原流程（single.js 會接手）
+  /* ===== 匯入到分析：標準化 → 偽裝檔案 → 觸發 #file 原流程 ===== */
   async function importToAnalysis(){
     const path = cloudSelect.value;
     if(!path){ alert('請先從清單選擇檔案'); return; }
 
-    // 若尚未預覽，這裡再抓一次並智慧解碼
+    // 確保取得文字（若未預覽）
     if(!cloudTxt.value){
       const url = await getFileUrl(path);
       const res = await fetch(url, { cache:'no-store' });
       if(!res.ok){ alert(`讀取失敗：HTTP ${res.status}`); return; }
-      const ab  = await res.arrayBuffer();
+      const ab   = await res.arrayBuffer();
       const best = decodeBest(ab);
       cloudTxt.value = best.txt;
     }
 
-    const text = cloudTxt.value;
+    // 1) 標準化動作詞彙與行格式（時間 價格 動作）
+    const normalized = normalizeTradesText(cloudTxt.value);
+
+    if(!normalized.trim()){
+      alert('匯入失敗：未能從檔案辨識出有效的交易行（需包含：時間 價格 動作）。');
+      return;
+    }
+
+    // 2) 打包成檔案（UTF-8），交給你的 single.js 既有流程
     try{
-      const blob = new Blob([text], { type:'text/plain;charset=utf-8' }); // 送入 UTF-8 給 single.js
-      const filename = path.split('/').pop() || 'cloud.txt';
+      const blob = new Blob([normalized], { type:'text/plain;charset=utf-8' });
+      const filename = (path.split('/').pop() || 'cloud.txt').replace(/\.txt$/i,'') + '_normalized.txt';
       const file = new File([blob], filename, { type:'text/plain' });
+
       const dt = new DataTransfer();
       dt.items.add(file);
       fileInput.files = dt.files;
@@ -229,9 +298,9 @@
   }
 
   // 綁定
-  document.getElementById('btnCloudList').addEventListener('click', listCloudFiles);
-  document.getElementById('btnCloudPreview').addEventListener('click', previewCloudFile);
-  document.getElementById('btnCloudImport').addEventListener('click', importToAnalysis);
+  btnCloudList.addEventListener('click', listCloudFiles);
+  btnCloudPrev.addEventListener('click', previewCloudFile);
+  btnCloudImp.addEventListener('click', importToAnalysis);
   </script>
 </body>
 </html>
