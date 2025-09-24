@@ -2,62 +2,59 @@
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8" />
-  <title>資料上傳區（第4分頁）</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>資料上傳區（第4分頁）</title>
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
   <style>
-    body { font-family: Arial, "微軟正黑體", sans-serif; background:#f8f9fa; margin:20px; color:#333; }
-    h1 { margin-bottom:6px; }
-    .subtitle { color:#666; margin:0 0 20px 0; }
-    .panel { background:#fff; padding:16px; border-radius:10px; box-shadow:0 2px 6px rgba(0,0,0,.08); margin-bottom:16px; }
-    .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
-    input[type="file"] { padding:6px; }
-    input[type="text"], input[type="email"], input[type="password"] { padding:8px; border:1px solid #ddd; border-radius:8px; }
-    button { padding:8px 14px; border:0; border-radius:8px; cursor:pointer; }
-    button.primary { background:#0d6efd; color:#fff; }
-    button.danger { background:#dc3545; color:#fff; }
-    button.link { background:transparent; color:#0d6efd; text-decoration:underline; padding:0; }
-    table { width:100%; border-collapse:collapse; background:#fff; border-radius:10px; overflow:hidden; }
-    th, td { border-bottom:1px solid #eee; padding:10px; text-align:left; font-size:14px; }
-    th { background:#fafafa; }
-    .right { text-align:right; }
-    .muted { color:#666; }
-    .hint { font-size:12px; color:#777; }
-    .ok { color:#128a27; }
-    .warn { color:#b90; }
-
-    /* 顶部導覽：回首頁 */
-    .topbar { display:flex; align-items:center; gap:10px; margin-bottom:12px; }
-    .home { text-decoration:none; color:#0d6efd; font-weight:700; }
+    body { font-family: Arial,"微軟正黑體",sans-serif; background:#f8f9fa; color:#333; margin:20px; }
+    h1 { margin:8px 0; }
+    .topbar{display:flex;align-items:center;gap:10px;margin-bottom:8px;}
+    .home{ text-decoration:none; color:#0d6efd; font-weight:700; }
     .home::before{ content:"← "; }
-    .spacer { flex:1; }
-    .badge { background:#eef4ff; color:#0d6efd; padding:4px 8px; border-radius:999px; font-size:12px; }
+    .badge{ margin-left:auto; background:#eef4ff; color:#0d6efd; padding:4px 8px; border-radius:999px; font-size:12px; }
+
+    .panel{ background:#fff; padding:16px; border-radius:10px; box-shadow:0 2px 6px rgba(0,0,0,.08); margin-bottom:16px; }
+    .row{ display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
+    input[type="file"]{ padding:6px; }
+    input[type="text"],input[type="email"],input[type="password"]{ padding:8px; border:1px solid #ddd; border-radius:8px; }
+    button{ padding:8px 14px; border:0; border-radius:8px; cursor:pointer; }
+    .primary{ background:#0d6efd; color:#fff; }
+    .danger{ background:#dc3545; color:#fff; }
+    .link{ background:transparent; color:#0d6efd; text-decoration:underline; padding:0; }
+    .muted{ color:#666; }
+    .hint{ font-size:12px; color:#777; }
+
+    table{ width:100%; border-collapse:collapse; background:#fff; border-radius:10px; overflow:hidden; }
+    th,td{ border-bottom:1px solid #eee; padding:10px; text-align:left; font-size:14px; }
+    th{ background:#fafafa; }
+    .right{ text-align:right; }
+    .warn{ color:#b90; }
+    .ok{ color:#128a27; }
   </style>
 </head>
 <body>
+  <!-- 頂部導覽 -->
   <div class="topbar">
     <a class="home" href="index.html">回首頁</a>
-    <span class="spacer"></span>
-    <span class="badge">Bucket: reports</span>
+    <span class="badge">Bucket: reports（Private）</span>
   </div>
 
   <h1>資料上傳區</h1>
-  <p class="subtitle">上傳 / 瀏覽 / 下載 / 刪除報表檔案（PDF、TXT…）。</p>
+  <p class="muted" style="margin-top:-6px;">上傳／瀏覽／下載／刪除報表檔案（PDF、TXT…）。</p>
 
-  <!-- 登入／註冊 -->
+  <!-- 登入 -->
   <div class="panel" id="authPanel">
     <h3>登入</h3>
     <div class="row">
       <input id="email" type="email" placeholder="Email（至少 6 碼密碼）" />
       <input id="password" type="password" placeholder="密碼（最少 6 碼）" />
       <button class="primary" id="btnSignIn">登入</button>
-      <button id="btnSignUp">註冊</button>
       <button id="btnSignOut" style="display:none;">登出</button>
     </div>
     <div id="authMsg" class="muted" style="margin-top:8px;"></div>
   </div>
 
-  <!-- 上傳區（白名單可見；真正權限靠 Policies） -->
+  <!-- 上傳（僅白名單顯示） -->
   <div class="panel" id="uploadPanel" style="display:none;">
     <h3>上傳檔案</h3>
     <div class="row">
@@ -69,8 +66,8 @@
         <input type="file" id="fileInput" multiple />
       </div>
       <div>
-        <label class="muted">儲存子資料夾（建議用日期：2025-09-23）</label><br/>
-        <input type="text" id="subfolder" placeholder="例如：2025-09-23" />
+        <label class="muted">儲存子資料夾（建議日期：2025-09-24）</label><br/>
+        <input type="text" id="subfolder" placeholder="例如：2025-09-24" />
       </div>
       <div style="align-self:end;">
         <button class="primary" id="btnUpload">開始上傳</button>
@@ -79,16 +76,17 @@
     <div id="uploadMsg" class="muted" style="margin-top:8px;"></div>
   </div>
 
-  <!-- 清單區 -->
+  <!-- 檔案清單 -->
   <div class="panel">
     <div class="row" style="align-items:center; margin-bottom:6px;">
       <h3 style="margin:0;">檔案清單</h3>
-      <span class="spacer"></span>
-      <span class="badge">命名建議：策略-參數-起始日-結束日.ext</span>
-    </div>
-    <div class="row" style="margin-bottom:8px;">
-      <input type="text" id="prefix" placeholder="篩選資料夾（例如：2025-09-23/）" style="flex:1;" />
+      <span class="hint">命名建議：策略-參數-起始日-結束日.ext（例：0807-ATR20x2-FITX-1m-20231002-20250923.txt）</span>
+      <span style="flex:1"></span>
+      <input type="text" id="prefix" placeholder="篩選資料夾（例：2025-09-24/）" />
       <button id="btnRefresh">重新整理</button>
+    </div>
+    <div id="viewerHint" class="warn" style="display:none; margin-bottom:8px;">
+      ＊此頁任何人都能開啟，但僅白名單帳號登入後才可「瀏覽清單、檢視、下載、上傳、刪除」。
     </div>
     <table>
       <thead>
@@ -107,204 +105,194 @@
     </table>
   </div>
 
-  <script>
-    // ====== Supabase 專案設定 ======
-    const SUPABASE_URL = "https://byhbmmnacezzgkwfkozs.supabase.co";
-    const SUPABASE_ANON_KEY = "sb_publishable_xVe8fGbqQ0XGwi4DsmjPMg_Y2RBOD3t";
-    const BUCKET_NAME = "reports";
-    // ===============================
+<script>
+/* ===== Supabase 設定 ===== */
+const SUPABASE_URL = "https://byhbmmnacezzgkwfkozs.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_xVe8fGbqQ0XGwi4DsmjPMg_Y2RBOD3t";
+const BUCKET_NAME = "reports";
+/* ===== 白名單（可操作） ===== */
+const ALLOW = ["q72yg7f8@gmail.com","ck6ej04jo3-2@yahoo.com","tony71220@gmail.com"].map(s=>s.toLowerCase());
 
-    // TODO：把三位合夥人的 Email（小寫）填進來
-    const ALLOWED_WRITERS = [
-      "user_hsu@example.com",   // 許
-      "user_ho@example.com",    // 何
-      "user_chang@example.com", // 張
-    ].map(s => s.toLowerCase());
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+/* DOM */
+const emailEl = document.getElementById('email');
+const pwEl    = document.getElementById('password');
+const authMsg = document.getElementById('authMsg');
+const btnIn   = document.getElementById('btnSignIn');
+const btnOut  = document.getElementById('btnSignOut');
 
-    const authPanel = document.getElementById('authPanel');
-    const uploadPanel = document.getElementById('uploadPanel');
-    const writerBadge = document.getElementById('writerBadge');
-    const authMsg = document.getElementById('authMsg');
-    const uploadMsg = document.getElementById('uploadMsg');
+const uploadPanel = document.getElementById('uploadPanel');
+const writerBadge = document.getElementById('writerBadge');
+const uploadMsg   = document.getElementById('uploadMsg');
+const fileInput   = document.getElementById('fileInput');
+const subfolderEl = document.getElementById('subfolder');
+const prefixEl    = document.getElementById('prefix');
+const tbody       = document.getElementById('fileTbody');
+const viewerHint  = document.getElementById('viewerHint');
 
-    const emailEl = document.getElementById('email');
-    const passwordEl = document.getElementById('password');
-    const btnSignOut = document.getElementById('btnSignOut');
+/* 小工具 */
+function isAllow(email){ return !!email && ALLOW.includes(email.toLowerCase()); }
+function withDownload(url){ return url ? url + (url.includes('?')?'&':'?') + 'download' : '#'; }
+function sanitizeSeg(s){ return (s||'').normalize('NFKD').replace(/[^\w.\-]+/g,'-').replace(/-+/g,'-').replace(/^-+|-+$/g,''); }
+function makeSafePath(folder, name){
+  const segs = [];
+  if(folder && folder.trim()){ for(const raw of folder.split('/')){ const c=sanitizeSeg(raw.trim()); if(c) segs.push(c); } }
+  const safeName = sanitizeSeg(name);
+  return (segs.length?segs.join('/')+'/':'') + safeName;
+}
+function normalizePrefix(v){ v=(v||'').trim(); if(v && !v.endsWith('/')) v+='/'; return v; }
+function parseMeta(fullPath){
+  const base = fullPath.split('/').pop();
+  const name = base.replace(/\.[^.]+$/,'');
+  const segs = name.split(/[-_]+/).filter(Boolean);
+  const isD = s=>/^\d{8}$/.test(s); const idx=[];
+  segs.forEach((s,i)=>{ if(isD(s)) idx.push(i); });
+  let strategy='—', params='—', range='—';
+  if(idx.length>=2){ const i0=idx[0]; strategy=i0>=1?segs[0]:'—'; params=i0>=2?segs.slice(1,i0).join('-'):'—'; range=`${segs[i0]}-${segs[idx[1]]}`; }
+  else if(idx.length===1){ const i0=idx[0]; strategy=i0>=1?segs[0]:'—'; params=i0>=2?segs.slice(1,i0).join('-'):'—'; range=segs[i0]; }
+  else{ if(segs.length>=1) strategy=segs[0]; if(segs.length>=2) params=segs.slice(1).join('-'); }
+  return {strategy,params,range};
+}
+async function getIP(){ try{ const r=await fetch('https://api.ipify.org?format=json',{cache:'no-store'}); const j=await r.json(); return j.ip||'unknown'; }catch{ return 'unknown'; } }
 
-    const fileInput = document.getElementById('fileInput');
-    const subfolderEl = document.getElementById('subfolder');
-    const prefixEl = document.getElementById('prefix');
-    const tbody = document.getElementById('fileTbody');
+/* 登入/登出與白名單 UI */
+async function refreshAuthUI(){
+  const { data:{session} } = await sb.auth.getSession();
+  const logined = !!session;
+  btnOut.style.display = logined ? 'inline-block' : 'none';
 
-    function withDownloadParam(url) {
-      if (!url || url === '#') return '#';
-      return url + (url.includes('?') ? '&' : '?') + 'download';
-    }
+  if(!logined){
+    uploadPanel.style.display = 'none';
+    writerBadge.innerHTML = '';
+    viewerHint.style.display = 'block';
+    // 未登入也不可讀清單（bucket=Private；後端RLS限制）
+    tbody.innerHTML = `<tr><td colspan="6" class="muted">請以白名單帳號登入後才能載入清單與下載。</td></tr>`;
+    return { logined:false, email:'' };
+  }
 
-    function parseFileMeta(fullPath) {
-      const base = fullPath.split('/').pop();
-      const nameNoExt = base.replace(/\.[^.]+$/, '');
-      const segs = nameNoExt.split(/[-_]+/).filter(Boolean);
-      const isDate8 = (s) => /^\d{8}$/.test(s);
-      const dateIdx = [];
-      segs.forEach((s, i) => { if (isDate8(s)) dateIdx.push(i); });
+  const email = (session.user.email||'').toLowerCase();
+  if(isAllow(email)){
+    uploadPanel.style.display = 'block';
+    writerBadge.innerHTML = `<span class="ok">登入身份：${email}（可上傳/檢視/下載/刪除）</span>`;
+    viewerHint.style.display = 'none';
+  }else{
+    uploadPanel.style.display = 'none';
+    writerBadge.innerHTML = '';
+    viewerHint.style.display = 'block';
+    tbody.innerHTML = `<tr><td colspan="6" class="muted">此帳號未在白名單，無法瀏覽與操作。</td></tr>`;
+  }
+  return { logined:true, email };
+}
 
-      let strategy = '—', params = '—', range = '—';
-      if (dateIdx.length >= 2) {
-        const i0 = dateIdx[0];
-        strategy = i0 >= 1 ? segs[0] : '—';
-        params   = i0 >= 2 ? segs.slice(1, i0).join('-') : '—';
-        range    = `${segs[i0]}-${segs[dateIdx[1]]}`;
-      } else if (dateIdx.length === 1) {
-        const i0 = dateIdx[0];
-        strategy = i0 >= 1 ? segs[0] : '—';
-        params   = i0 >= 2 ? segs.slice(1, i0).join('-') : '—';
-        range    = segs[i0];
-      } else {
-        if (segs.length >= 1) strategy = segs[0];
-        if (segs.length >= 2) params   = segs.slice(1).join('-');
-      }
-      return { strategy, params, range };
-    }
+sb.auth.onAuthStateChange(async ()=>{ await refreshAuthUI(); await refreshList(); });
 
-    function sanitizeSegment(s) {
-      return (s || '')
-        .normalize('NFKD')
-        .replace(/[^\w.\-]+/g, '-') .replace(/-+/g, '-') .replace(/^-+|-+$/g, '');
-    }
-    function makeSafePath(folder, fileName) {
-      const segs = [];
-      if (folder && folder.trim()) {
-        for (const raw of folder.split('/')) {
-          const cleaned = sanitizeSegment(raw.trim());
-          if (cleaned) segs.push(cleaned);
-        }
-      }
-      const safeName = sanitizeSegment(fileName);
-      return (segs.length ? segs.join('/') + '/' : '') + safeName;
-    }
-    function normalizePrefix(v) { v = (v || '').trim(); if (v && !v.endsWith('/')) v += '/'; return v; }
+document.getElementById('btnSignIn').onclick = async ()=>{
+  const email=(emailEl.value||'').trim().toLowerCase();
+  const pw=pwEl.value||'';
+  if(!email || pw.length<6){ authMsg.textContent='請輸入有效 Email 與（至少 6 碼）密碼'; return; }
+  authMsg.textContent='登入中…';
+  const { error } = await sb.auth.signInWithPassword({ email, password: pw });
+  authMsg.innerHTML = error ? `<span class="warn">登入失敗：${error.message}</span>` : '✅ 登入成功';
+  await refreshAuthUI(); await refreshList();
+};
+document.getElementById('btnSignOut').onclick = async ()=>{
+  await sb.auth.signOut();
+  authMsg.textContent='已登出';
+  await refreshAuthUI(); await refreshList();
+};
 
-    async function getCurrentEmail() {
-      const { data } = await supabase.auth.getUser();
-      const email = data?.user?.email || '';
-      return email.toLowerCase();
-    }
-    function isWriter(email) { return !!email && ALLOWED_WRITERS.includes(email.toLowerCase()); }
+/* 清單（僅白名單才會抓並產生簽名網址） */
+async function refreshList(){
+  const { data:{session} } = await sb.auth.getSession();
+  const email = session?.user?.email?.toLowerCase() || '';
+  const allowed = isAllow(email);
 
-    async function refreshAuthUI() {
-      const { data: { session } } = await supabase.auth.getSession();
-      const loggedIn = !!session;
-      const email = loggedIn ? (await getCurrentEmail()) : '';
+  if(!allowed){
+    // 不在白名單：不載清單、不產生任何連結
+    return;
+  }
 
-      btnSignOut.style.display = loggedIn ? 'inline-block' : 'none';
+  tbody.innerHTML = '<tr><td colspan="6" class="muted">載入中...</td></tr>';
+  const path = normalizePrefix(prefixEl.value);
+  const { data, error } = await sb.storage.from(BUCKET_NAME).list(path, { limit:1000, sortBy:{column:'name',order:'asc'} });
 
-      if (!loggedIn) {
-        uploadPanel.style.display = 'none';
-        writerBadge.innerHTML = '';
-        return;
-      }
-      if (isWriter(email)) {
-        uploadPanel.style.display = 'block';
-        writerBadge.innerHTML = `<span class="ok">登入身份：${email}（具備上傳/刪除權限）</span>`;
-      } else {
-        uploadPanel.style.display = 'none';
-        writerBadge.innerHTML = '';
-        authMsg.innerHTML = `<span class="warn">已登入：${email}，但不在授權名單，僅可瀏覽/下載。</span>`;
-      }
-    }
+  if(error){ tbody.innerHTML = `<tr><td colspan="6" class="muted">讀取失敗：${error.message}</td></tr>`; return; }
+  if(!data || data.length===0){ tbody.innerHTML = `<tr><td colspan="6" class="muted">（沒有檔案）</td></tr>`; return; }
 
-    supabase.auth.onAuthStateChange((_event, _session) => { refreshAuthUI(); refreshList(); });
+  tbody.innerHTML = '';
+  for(const item of data){
+    if(item.id===null && !item.metadata) continue; // 跳過資料夾
+    const fullPath = (path?path:'') + item.name;
+    const meta = parseMeta(fullPath);
 
-    document.getElementById('btnSignIn').onclick = async () => {
-      authMsg.textContent = '登入中…';
-      const { error } = await supabase.auth.signInWithPassword({ email: emailEl.value.trim(), password: passwordEl.value });
-      authMsg.textContent = error ? '登入失敗：' + error.message : '✅ 登入成功';
+    // 產生 1 小時有效簽名網址（只有白名單才會做到這一步）
+    const { data: signed, error: sigErr } = await sb.storage.from(BUCKET_NAME).createSignedUrl(fullPath, 60*60);
+    const viewUrl = !sigErr ? signed.signedUrl : '#';
+    const dlUrl   = withDownload(viewUrl);
+
+    const sizeStr = item.metadata?.size ? formatBytes(item.metadata.size) : '—';
+    const updated = item.updated_at ? new Date(item.updated_at).toLocaleString() : '—';
+
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${meta.strategy}</td>
+      <td>${meta.params}</td>
+      <td>${meta.range}</td>
+      <td class="right">${sizeStr}</td>
+      <td>${updated}</td>
+      <td class="right">
+        <a class="link" href="${viewUrl}" target="_blank" rel="noopener">檢視</a>
+        &nbsp;|&nbsp;
+        <a class="link" href="${dlUrl}">下載</a>
+        &nbsp;|&nbsp;
+        <button class="danger" data-path="${fullPath}">刪除</button>
+      </td>`;
+    tbody.appendChild(tr);
+  }
+
+  // 綁定刪除
+  tbody.querySelectorAll('button.danger').forEach(btn=>{
+    btn.onclick = async ()=>{
+      const p = btn.getAttribute('data-path');
+      if(!confirm(`確定刪除「${p}」？`)) return;
+      const { error } = await sb.storage.from(BUCKET_NAME).remove([p]);
+      if(error) alert('刪除失敗：'+error.message);
+      refreshList();
     };
-    document.getElementById('btnSignUp').onclick = async () => {
-      authMsg.textContent = '註冊中…';
-      const { error } = await supabase.auth.signUp({ email: emailEl.value.trim(), password: passwordEl.value });
-      authMsg.textContent = error ? '註冊失敗：' + error.message : '✅ 註冊成功，若需信箱驗證請至信箱完成';
-    };
-    btnSignOut.onclick = async () => { await supabase.auth.signOut(); alert('已登出'); refreshAuthUI(); refreshList(); };
+  });
+}
 
-    async function refreshList() {
-      tbody.innerHTML = '<tr><td colspan="6" class="muted">載入中...</td></tr>';
-      const path = normalizePrefix(prefixEl.value);
-      const { data, error } = await supabase.storage.from(BUCKET_NAME).list(path, { limit: 1000, sortBy: { column: 'name', order: 'asc' } });
-      if (error) { tbody.innerHTML = `<tr><td colspan="6" class="muted">讀取失敗：${error.message}</td></tr>`; return; }
-      if (!data || data.length === 0) { tbody.innerHTML = `<tr><td colspan="6" class="muted">（沒有檔案）</td></tr>`; return; }
+document.getElementById('btnRefresh').onclick = refreshList;
+window.addEventListener('load', async ()=>{ await refreshAuthUI(); await refreshList(); });
 
-      tbody.innerHTML = '';
-      for (const item of data) {
-        if (item.id === null && !item.metadata) continue; // 資料夾
-        const fullPath = (path ? path : '') + item.name;
-        const meta = parseFileMeta(fullPath);
+/* 上傳（僅白名單） */
+document.getElementById('btnUpload').onclick = async ()=>{
+  const { data:{session} } = await sb.auth.getSession();
+  const email = session?.user?.email?.toLowerCase() || '';
+  if(!isAllow(email)){ uploadMsg.textContent='沒有上傳權限'; return; }
 
-        const { data: pub } = supabase.storage.from(BUCKET_NAME).getPublicUrl(fullPath);
-        const viewUrl = pub?.publicUrl || '#';
-        const downloadUrl = withDownloadParam(viewUrl);
+  const files = fileInput.files;
+  const folder = subfolderEl.value?.trim();
+  if(!files || files.length===0){ uploadMsg.textContent='請先選擇檔案'; return; }
+  uploadMsg.textContent='上傳中…';
 
-        const sizeStr = item.metadata?.size ? formatBytes(item.metadata.size) : '—';
-        const updatedAt = item.updated_at ? new Date(item.updated_at).toLocaleString() : '—';
+  for(const f of files){
+    const safePath = makeSafePath(folder, f.name);
+    const { error } = await sb.storage.from(BUCKET_NAME).upload(safePath, f, {
+      upsert:true, cacheControl:'3600', contentType: f.type || 'text/plain'
+    });
+    if(error){ uploadMsg.innerHTML = `<span class="warn">上傳失敗：${error.message}</span>`; return; }
+  }
+  uploadMsg.innerHTML = '✅ 上傳完成';
+  fileInput.value=''; refreshList();
+};
 
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-          <td>${meta.strategy}</td>
-          <td>${meta.params}</td>
-          <td>${meta.range}</td>
-          <td class="right">${sizeStr}</td>
-          <td>${updatedAt}</td>
-          <td class="right">
-            <a class="link" href="${viewUrl}" target="_blank" rel="noopener">檢視</a>
-            &nbsp;|&nbsp;
-            <a class="link" href="${downloadUrl}">下載</a>
-            &nbsp;|&nbsp;
-            <button class="danger" data-path="${fullPath}">刪除</button>
-          </td>`;
-        tbody.appendChild(tr);
-      }
-
-      tbody.querySelectorAll('button.danger').forEach(btn => {
-        btn.onclick = async () => {
-          const p = btn.getAttribute('data-path');
-          if (!confirm(`確定刪除「${p}」？`)) return;
-          const { error } = await supabase.storage.from(BUCKET_NAME).remove([p]);
-          if (error) alert('刪除失敗：' + error.message);
-          refreshList();
-        };
-      });
-    }
-
-    document.getElementById('btnRefresh').onclick = refreshList;
-    window.addEventListener('load', async () => { await refreshAuthUI(); await refreshList(); });
-
-    document.getElementById('btnUpload').onclick = async () => {
-      const files = fileInput.files;
-      const folder = subfolderEl.value?.trim();
-      if (!files || files.length === 0) { uploadMsg.textContent = '請先選擇檔案'; return; }
-      uploadMsg.textContent = '上傳中…';
-      for (const f of files) {
-        const safePath = makeSafePath(folder, f.name);
-        try {
-          const { error } = await supabase.storage.from(BUCKET_NAME).upload(safePath, f, {
-            upsert: true, cacheControl: '3600', contentType: f.type || 'text/plain'
-          });
-          if (error) { console.error('Upload error:', error); uploadMsg.textContent = `上傳失敗：${error.message || '未知錯誤'}`; return; }
-        } catch (e) { console.error('Upload fetch failed:', e); uploadMsg.textContent = `上傳失敗（網路/權限）：${e?.message || e}`; return; }
-      }
-      uploadMsg.textContent = '✅ 上傳完成';
-      fileInput.value = ''; refreshList();
-    };
-
-    function formatBytes(bytes) {
-      if (!bytes) return '0 B';
-      const k = 1024, dm = 1, sizes = ['B','KB','MB','GB','TB'];
-      const i = Math.floor(Math.log(bytes)/Math.log(k));
-      return parseFloat((bytes/Math.pow(k,i)).toFixed(dm)) + ' ' + sizes[i];
-    }
-  </script>
+function formatBytes(bytes){
+  if(!bytes) return '0 B';
+  const k=1024, dm=1, sizes=['B','KB','MB','GB','TB']; const i=Math.floor(Math.log(bytes)/Math.log(k));
+  return parseFloat((bytes/Math.pow(k,i)).toFixed(dm))+' '+sizes[i];
+}
+</script>
 </body>
 </html>
