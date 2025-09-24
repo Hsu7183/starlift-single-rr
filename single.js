@@ -4,6 +4,7 @@
    - RR 表：五欄評語 + 置頂「建議優化指標」粉紅區
    - 交易明細：一筆＝兩列（進場列＋出場列），表頭固定、數字右對齊、紅正綠負、條紋列
    - 參數列：尾端顯示本次 TXT「匯入時間」
+   - 新增：preNormalize(raw) → 只標準化「交易行」，檔頭原樣保留
 */
 (function () {
   const $ = s => document.querySelector(s);
@@ -478,7 +479,7 @@
     const cls = v => v>0 ? "p-red" : (v<0 ? "p-green" : "");
 
     report.trades.forEach((t,i)=>{
-      // 進場列
+      // 進場列：顯示進場時間/價與「新買/新賣」，其餘以 — 佔位
       const entryRow = document.createElement("tr");
       entryRow.innerHTML = `
         <td rowspan="2">${i+1}</td>
@@ -494,7 +495,7 @@
         <td class="num">—</td>
       `;
 
-      // 出場列
+      // 出場列：顯示出場資料與點數/費用/稅/損益與累積
       const fee = FEE * 2;
       const tax = Math.round(t.priceOut * MULT * TAX);
       const newCum     = cum     + t.gain;
@@ -517,47 +518,58 @@
       tb.appendChild(entryRow);
       tb.appendChild(exitRow);
 
+      // 更新累積
       cum = newCum;
       cumSlip = newCumSlip;
     });
   }
 
-  // ---------- 主流程（唯一改動：先 preNormalize 再 parseTXT） ----------
+  // ---------- helper：以出場日聚合（含滑價） ----------
+  function buildDailySlipFromTrades(trades){
+    const by = new Map();
+    for (const t of trades){
+      const d = keyFromTs(t.tsOut);                 // yyyy-MM-dd
+      by.set(d, (by.get(d) || 0) + t.gainSlip);     // 以出場日聚合（含滑價）
+    }
+    return [...by.entries()]
+      .sort((a,b)=>a[0].localeCompare(b[0]))
+      .map(([date,pnl]) => ({ date, pnl }));
+  }
+
+  // ---------- 主流程（先 preNormalize 再 parseTXT） ----------
   async function handleRaw(raw){
     const { parseTXT, buildReport, paramsLabel } = window.SHARED;
 
-    // NEW：先把原始文字的「交易行」容錯標準化，只保留檔頭原樣
-    const prepared = preNormalize(raw);
-
-    const parsed = parseTXT(prepared);
-    const report = buildReport(parsed.rows);
+    const prepared = preNormalize(raw);      // ☆ 新增：容錯標準化
+    const parsed   = parseTXT(prepared);
+    const report   = buildReport(parsed.rows);
     if(report.trades.length===0){ alert("沒有成功配對的交易"); return; }
 
+    // 6 線圖
     drawChart({
-      tsArr:report.tsArr, total:report.total, slipTotal:report.slipCum,
-      long:report.longCum, longSlip:report.longSlipCum, short:report.shortCum, shortSlip:report.shortSlipCum
+      tsArr: report.tsArr,
+      total: report.total,
+      slipTotal: report.slipCum,
+      long: report.longCum,
+      longSlip: report.longSlipCum,
+      short: report.shortCum,
+      shortSlip: report.shortSlipCum
     });
 
+    // 參數列 + 匯入時間
     $("#paramChip").textContent = paramsLabel(parsed.params) + " ｜ 匯入時間：" + nowStr();
 
+    // KPI、RR
     renderKpiCombined(report.statAll, report.statL, report.statS);
+    const dailySlip = buildDailySlipFromTrades(report.trades);
+    const k = computeRR(dailySlip, report.trades, DEFAULT_NAV, DEFAULT_RF);
+    renderRR6Cats(k);
 
-    const dailyMap=new Map();
-    for(const t of report.trades){ const k=keyFromTs(t.tsOut); dailyMap.set(k,(m
-      =>m.set(k,(m.get(k)||0)+t.gainSlip))(dailyMap) && dailyMap.get(k)); }
-    // 上面寫法太繞，改回清楚版：
-    {
-      const m = new Map();
-      for(const t of report.trades){ const k=keyFromTs(t.tsOut); m.set(k,(m.get(k)||0)+t.gainSlip); }
-      const arr=[...m.entries()].sort((a,b)=>a[0].localeCompare(b[0])).map(([date,pnl])=>({date,pnl}));
-      const k = computeRR(arr,report.trades,DEFAULT_NAV,DEFAULT_RF);
-      renderRR6Cats(k);
-    }
-
+    // 交易明細
     renderTable(report);
   }
 
-  // 綁定（與原版相同）
+  // ---------- 綁定 ----------
   $("#btn-clip").addEventListener("click", async ()=>{
     try{ const txt=await navigator.clipboard.readText(); handleRaw(txt); }
     catch{ alert("無法讀取剪貼簿內容，請改用「選擇檔案」。"); }
