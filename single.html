@@ -84,7 +84,7 @@
   <!-- 你的分析主檔 -->
   <script src="single.js?v=full-table-v8"></script>
 
-  <!-- 雲端選檔 + 自動解碼 + 行標準化（保留檔頭；空白分隔；時間14碼） -->
+  <!-- 雲端選檔 + 自動解碼 + 行標準化（修正秒數>59；空白分隔；時間14碼） -->
   <script>
   /* ===== Supabase 設定 ===== */
   const SUPABASE_URL = "https://byhbmmnacezzgkwfkozs.supabase.co";
@@ -142,27 +142,31 @@
     return best;
   }
 
-  /* ===== 將檔案標準化成 single.js 能吃的格式 =====
-     - 保留檔頭（非交易行）原樣
-     - 交易行標準化為：yyyyMMddHHmmss 價格 動作（空白分隔）
-     - 動作：買進/賣出/平倉(結算平倉)/多單平倉/空單平倉 → 新買/新賣/平賣/平買
-  */
-  function normalizeKeepHeader(raw){
+  /* ===== 只標準化「交易行」：空白分隔，時間14碼，秒數>59→59；保留檔頭 ===== */
+  function normalizeKeepHeader_fixSeconds(raw){
     const lines = raw.split(/\r?\n/);
     const header = [];
     const trades = [];
     let reachedTrade = false;
-    let pos = 0; // >0 多單，<0 空單
+    let pos = 0; // >0 多單；<0 空單
 
-    // 接受：時間(10~18碼) 價格(整數/小數) 動作（以空白/Tab/逗號分隔）
+    // 接受：時間(10~18) 價格(整/小數) 動作（空白/Tab/逗號）
     const re = /^\s*(\d{10,18})[ \t,]+(\d+(?:\.\d+)?)[ \t,]+(.+?)\s*$/u;
 
-    // 時間正規化為 14 碼
     const normTs = (t)=>{
-      let s = String(t).replace(/\D/g,'');
-      if (s.length >= 14) return s.slice(0,14);
-      if (s.length === 12) return s + "00";
-      return (s + "00000000000000").slice(0,14);
+      let s = String(t).replace(/\D/g,''); // 留數字
+      // 拆成 ymd h m s（盡量保守處理）
+      const y = s.slice(0,4);
+      const m = s.slice(4,6);
+      const d = s.slice(6,8);
+      const H = (s.slice(8,10) || "00");
+      const M = (s.slice(10,12)|| "00");
+      let  S = (s.slice(12,14)|| "00");
+      // 秒數容錯：>59 就改 59；<00 改 00
+      let sNum = parseInt(S,10); if (isNaN(sNum)) sNum=0;
+      if (sNum > 59) sNum = 59; if (sNum < 0) sNum = 0;
+      S = String(sNum).padStart(2,'0');
+      return `${y}${m}${d}${H}${M}${S}`; // 14 碼
     };
 
     for (const rawLine of lines){
@@ -174,8 +178,8 @@
       reachedTrade = true;
 
       const t = normTs(m[1]);
-      const p = m[2]; // 保留原始價格（含小數）
-      let a = m[3].replace(/\s+/g,'');
+      const p = m[2].replace(/,/g,'');        // 價格去千分位
+      let a = m[3].replace(/\s+/g,'');        // 動作去空白
 
       if(/^(買進|做多|多單買進|開多|新買)$/u.test(a)){ a='新買'; pos++; }
       else if(/^(賣出|做空|空單賣出|開空|新賣)$/u.test(a)){ a='新賣'; pos--; }
@@ -185,20 +189,18 @@
         else if(a==='平倉' || a==='結算平倉'){
           if(pos>0) a='平賣';
           else if(pos<0) a='平買';
-          else continue;
+          else continue; // 無持倉就「平倉」→跳過
         }
         pos = 0;
       }else{
-        continue;
+        continue; // 未識別動作
       }
+
       trades.push(`${t} ${p} ${a}`);
     }
 
-    // 若完全抓不到交易行，回傳原文（讓你看得到問題）
-    if (trades.length===0) return raw;
-
-    // 用 CRLF 輸出（保險）
-    return [...header, ...trades].join('\r\n') + '\r\n';
+    if (trades.length===0) return raw;                       // 仍抓不到→回傳原文便於目視
+    return [...header, ...trades].join('\r\n') + '\r\n';     // CRLF
   }
 
   /* ===== 列清單 ===== */
@@ -255,10 +257,10 @@
 
     const lines = best.txt.split(/\r?\n/);
     cloudPreview.textContent = lines.slice(0, 500).join('\n') + (lines.length>500?`\n...（共 ${lines.length} 行）`:``);
-    cloudNote.innerHTML = `<span class="ok">提示：</span>匯入時會保留檔頭，只把交易行轉為 <b>時間 價格 動作</b>（空白分隔，時間 14 碼）再交給分析程式。`;
+    cloudNote.innerHTML = `<span class="ok">提示：</span>匯入時僅轉換「交易行」，會把秒數 >59 改為 59，並輸出為 <b>時間 價格 動作</b>（空白分隔，時間 14 碼）。`;
   }
 
-  /* ===== 匯入到分析：保留檔頭 + 標準化交易行（空白分隔/14碼）→ 偽裝檔案 → 觸發 #file ===== */
+  /* ===== 匯入到分析（保留檔頭 + 標準化交易行） ===== */
   async function importToAnalysis(){
     const path = cloudSelect.value;
     if(!path){ alert('請先從清單選擇檔案'); return; }
@@ -272,7 +274,7 @@
       cloudTxt.value = best.txt;
     }
 
-    const normalized = normalizeKeepHeader(cloudTxt.value);
+    const normalized = normalizeKeepHeader_fixSeconds(cloudTxt.value);
     if(!normalized.trim()){
       alert('匯入失敗：未能辨識有效的交易行（需要：時間 價格 動作）。');
       return;
@@ -296,7 +298,7 @@
   document.getElementById('btnCloudPreview').addEventListener('click', previewCloudFile);
   document.getElementById('btnCloudImport').addEventListener('click', importToAnalysis);
 
-  // 你的原有按鈕
+  // 原有本地匯入
   $("#btn-clip").addEventListener("click", async ()=>{
     try{ const txt=await navigator.clipboard.readText(); handleRaw(txt); }
     catch{ alert("無法讀取剪貼簿內容，請改用「選擇檔案」。"); }
