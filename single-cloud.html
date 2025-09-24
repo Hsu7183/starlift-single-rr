@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>雲端單檔分析（第5分頁）</title>
+  <style>
+    body{font-family:ui-sans-serif,system-ui;-webkit-font-smoothing:antialiased;margin:0;padding:16px;background:#f7f7fb}
+    .wrap{max-width:1440px;margin:0 auto}
+    .row{display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+    .chip{display:inline-block;background:#eef;padding:6px 10px;border-radius:999px;font-size:12px}
+    .card{background:#fff;border:1px solid #e5e7eb;border-radius:12px;box-shadow:0 2px 10px rgba(0,0,0,.03);padding:12px;margin-bottom:20px}
+    #chartBox{height:520px}
+    table{width:100%;border-collapse:collapse}
+    .back-link{margin-bottom:12px;display:inline-block}
+    .scroll-x{overflow-x:auto}
+    .btn{padding:8px 12px;border:0;border-radius:8px;cursor:pointer}
+    .btn-primary{background:#0d6efd;color:#fff}
+    .btn-gray{background:#6c757d;color:#fff}
+    .sel{min-width:320px;padding:8px;border:1px solid #ddd;border-radius:8px}
+    .ipt{padding:8px;border:1px solid #ddd;border-radius:8px}
+    .tiny{font-size:12px;color:#666}
+    pre.preview{margin-top:10px;max-height:280px;overflow:auto;background:#f8f9fa;padding:10px;border:1px solid #eee;border-radius:8px;white-space:pre-wrap}
+  </style>
+  <!-- 依賴 -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="shared.js?v=full-table-v7"></script>
+  <!-- Supabase（雲端選檔用） -->
+  <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+</head>
+<body>
+  <div class="wrap">
+    <a class="back-link" href="index.html">← 返回首頁</a>
+    <h1>雲端單檔分析（第5分頁）</h1>
+
+    <!-- 控制列（本機 / 剪貼簿，與 single.html 一致） -->
+    <div class="row card">
+      <div>
+        <button id="btn-clip" class="btn btn-gray">從剪貼簿貼上 TXT</button>
+        <input id="file" type="file" accept=".txt" />
+      </div>
+      <div class="chip">參數：<span id="paramChip">—</span></div>
+    </div>
+
+    <!-- 雲端檔案（直接讀第4分頁上傳到 Supabase Storage 的 reports bucket） -->
+    <div class="card" id="cloudPanel">
+      <h3 style="margin:0 0 8px 0;">從「資料上傳區」讀檔（Supabase / reports）</h3>
+      <div class="row">
+        <input id="cloudPrefix" class="ipt" placeholder="篩選資料夾（例：2025-09-24/）" />
+        <button id="btnCloudList" class="btn btn-primary">載入清單</button>
+        <select id="cloudSelect" class="sel">
+          <option value="">（請先載入清單）</option>
+        </select>
+        <button id="btnCloudPreview" class="btn btn-gray">預覽</button>
+        <button id="btnCloudImport" class="btn btn-primary">載入到分析</button>
+      </div>
+      <div id="cloudMeta" class="tiny" style="margin-top:6px;"></div>
+      <pre id="cloudPreview" class="preview"></pre>
+      <textarea id="cloudTxt" style="display:none"></textarea>
+    </div>
+
+    <!-- 6 線圖 -->
+    <div id="chartBox" class="card"><canvas id="chart"></canvas></div>
+
+    <!-- KPI（合併表格） -->
+    <div id="kpiAll" class="card scroll-x"></div>
+    <div id="kpiL"></div><div id="kpiS"></div> <!-- 與原頁相同，保留容器 -->
+
+    <!-- Risk-Return 表 -->
+    <div id="rrLines" class="card scroll-x"></div>
+
+    <!-- 交易明細表 -->
+    <div class="card scroll-x">
+      <table id="tradeTable">
+        <thead></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- 主檔：沿用你的 single.js，不做修改 -->
+  <script src="single.js?v=full-table-v8"></script>
+
+  <!-- 只在這頁加的雲端讀檔腳本（不影響原頁） -->
+  <script>
+  // ===== Supabase 設定（沿用你第4分頁的專案） =====
+  const SUPABASE_URL  = "https://byhbmmnacezzgkwfkozs.supabase.co";
+  const SUPABASE_ANON = "sb_publishable_xVe8fGbqQ0XGwi4DsmjPMg_Y2RBOD3t";
+  const BUCKET        = "reports";
+  const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON, {
+    global:{ fetch:(u,o={})=>fetch(u,{...o,cache:'no-store'}) }
+  });
+
+  // DOM
+  const $ = s => document.querySelector(s);
+  const fileInput = $('#file');
+  const btnClip   = $('#btn-clip');
+
+  const prefix  = $('#cloudPrefix');
+  const btnList = $('#btnCloudList');
+  const pick    = $('#cloudSelect');
+  const btnPrev = $('#btnCloudPreview');
+  const btnImp  = $('#btnCloudImport');
+  const meta    = $('#cloudMeta');
+  const prev    = $('#cloudPreview');
+  const cacheTxt= $('#cloudTxt');
+
+  // 本機：剪貼簿 → 丟給 #file（交給 shared.js + single.js）
+  btnClip.addEventListener('click', async ()=>{
+    try{
+      const txt = await navigator.clipboard.readText();
+      if(!txt) return alert('剪貼簿沒有文字');
+      const blob = new Blob([txt], { type:'text/plain;charset=utf-8' });
+      const f = new File([blob], 'clipboard.txt', { type:'text/plain' });
+      const dt = new DataTransfer(); dt.items.add(f);
+      fileInput.files = dt.files;
+      fileInput.dispatchEvent(new Event('change', { bubbles:true }));
+    }catch(e){
+      alert('無法讀取剪貼簿內容，請改用「選擇檔案」。');
+    }
+  });
+
+  // 雲端：列清單
+  btnList.addEventListener('click', async ()=>{
+    prev.textContent=''; meta.textContent=''; cacheTxt.value='';
+    pick.innerHTML = '<option value="">載入中…</option>';
+    const p=(prefix.value||'').trim(); const fixed = p && !p.endsWith('/') ? p+'/' : p;
+    const { data, error } = await sb.storage.from(BUCKET).list(fixed,{limit:1000,sortBy:{column:'name',order:'asc'}});
+    if(error){ pick.innerHTML = `<option>讀取失敗：${error.message}</option>`; return; }
+    if(!data || !data.length){ pick.innerHTML = '<option>（無檔案）</option>'; return; }
+    pick.innerHTML = '';
+    data.forEach(it=>{
+      if(it.id===null && !it.metadata) return; // 跳過資料夾
+      const path=(fixed||'')+it.name;
+      const opt=document.createElement('option');
+      opt.value=path; opt.textContent=`${path} (${(it.metadata?.size/1024).toFixed(1)} KB)`;
+      pick.appendChild(opt);
+    });
+  });
+
+  // 取得檔案網址：先試簽名，失敗退回 public URL（Public/Private 皆可）
+  async function getUrl(path){
+    try{
+      const { data } = await sb.storage.from(BUCKET).createSignedUrl(path, 3600);
+      if(data?.signedUrl) return data.signedUrl;
+    }catch(e){}
+    const { data:pub } = sb.storage.from(BUCKET).getPublicUrl(path);
+    return pub?.publicUrl || '';
+  }
+
+  // 預覽（ArrayBuffer 自動偵測：utf-8 / big5 / gb18030）
+  function decodeBest(ab){
+    const encs=['utf-8','big5','gb18030']; let best={txt:'',bad:1e9,enc:''};
+    for(const e of encs){
+      try{
+        const t=new TextDecoder(e,{fatal:false}).decode(ab);
+        const b=(t.match(/\uFFFD/g)||[]).length;
+        if(b<best.bad) best={txt:t,bad:b,enc:e};
+      }catch{}
+    }
+    return best;
+  }
+
+  // 雲端：預覽
+  btnPrev.addEventListener('click', async ()=>{
+    prev.textContent=''; meta.textContent=''; cacheTxt.value='';
+    const path=pick.value; if(!path) return;
+    const url=await getUrl(path); if(!url){ prev.textContent='取得連結失敗'; return; }
+    const r=await fetch(url,{cache:'no-store'}); if(!r.ok){ prev.textContent=`HTTP ${r.status}`; return; }
+    const ab=await r.arrayBuffer(); const best=decodeBest(ab);
+    cacheTxt.value = best.txt; // 只用來顯示；實際匯入用原始位元組
+    meta.textContent=`來源：${path}（編碼：${best.enc}）`;
+    const lines=best.txt.split(/\r?\n/);
+    prev.textContent = lines.slice(0,500).join('\n') + (lines.length>500?`\n...（共 ${lines.length} 行）`:``);
+  });
+
+  // 雲端：載入到分析（用原始位元組做成 File → 觸發 #file）
+  btnImp.addEventListener('click', async ()=>{
+    const path=pick.value; if(!path) return alert('請先選檔');
+    const url=await getUrl(path); if(!url) return alert('取得連結失敗');
+    const r=await fetch(url,{cache:'no-store'}); if(!r.ok) return alert(`HTTP ${r.status}`);
+    const ab=await r.arrayBuffer();
+    const f=new File([new Uint8Array(ab)], path.split('/').pop() || 'cloud.txt', { type:'application/octet-stream' });
+    const dt=new DataTransfer(); dt.items.add(f);
+    fileInput.files=dt.files;
+    fileInput.dispatchEvent(new Event('change',{bubbles:true}));
+  });
+  </script>
+</body>
+</html>
