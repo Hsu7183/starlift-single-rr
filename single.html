@@ -84,7 +84,7 @@
   <!-- 你的分析主檔 -->
   <script src="single.js?v=full-table-v8"></script>
 
-  <!-- 雲端選檔 + 編碼偵測 + 動作標準化 -->
+  <!-- 雲端選檔 + 編碼偵測 + 動作標準化(→CSV) -->
   <script>
   /* ===== Supabase 設定 ===== */
   const SUPABASE_URL = "https://byhbmmnacezzgkwfkozs.supabase.co";
@@ -107,7 +107,7 @@
   const cloudNote     = $('#cloudNote');
   const fileInput     = $('#file');
 
-  /* ===== 工具：解析檔名 → 策略/參數/起訖期間 ===== */
+  /* ===== 解析檔名 → 策略/參數/起訖期間 ===== */
   function parseMetaFromPath(fullPath){
     const base = fullPath.split('/').pop();
     const name = base.replace(/\.[^.]+$/,'');
@@ -121,7 +121,7 @@
     return { strategy, params, range };
   }
 
-  /* ===== 先簽名，失敗再退 public URL（Public/Private 皆可） ===== */
+  /* ===== 先簽名，失敗再退 public URL ===== */
   async function getFileUrl(path){
     try{
       const { data, error } = await sb.storage.from(BUCKET_NAME).createSignedUrl(path, 60*60);
@@ -131,7 +131,7 @@
     return pub?.publicUrl || '';
   }
 
-  /* ===== 智慧解碼：utf-8 / big5 / gb18030（選 � 最少者） ===== */
+  /* ===== 智慧解碼：utf-8 / big5 / gb18030（選 � 最少） ===== */
   function decodeBest(arrayBuffer){
     const encs = ['utf-8','big5','gb18030'];
     let best = { txt:'', score:1e9, enc:'' };
@@ -146,64 +146,51 @@
     return best;
   }
 
-  /* ===== 將動作標準化：買進→新買、賣出→新賣、平倉→依持倉轉平賣/平買 ===== */
-  function normalizeTradesText(raw){
+  /* ===== 標準化：把「買進/賣出/平倉」→「新買/新賣/平買/平賣」，並輸出 CSV（時間,價格,動作）===== */
+  function normalizeTradesToCSV(raw){
     const lines = raw.split(/\r?\n/);
-    const out = [];
+    const csv = [];
     let pos = 0; // >0 多單，<0 空單，0 無倉
-
-    // 可接受：時間 價格 動作（以空白/Tab 分隔）
-    const re = /^(\d{12,16})[ \t]+(\d+(?:\.\d+)?)[ \t]+(.+)$/;
+    // 時間(12~16位) 價格 動作（空白/逗號/Tab 皆可）
+    const re = /^(\d{12,16})[ \t,]+(\d+(?:\.\d+)?)[ \t,]+(.+)$/;
 
     for(let s of lines){
       const m = s.trim().match(re);
-      if(!m){ continue; } // 跳過非交易行（例如參數區塊）
+      if(!m) continue;
       const t = m[1];
       const p = m[2];
-      let actionRaw = m[3].replace(/\s+/g,'');  // 去空白
+      let a = m[3].replace(/\s+/g,''); // 動作去空白
 
-      let action = null;
-
-      // 1) 新倉
-      if(/買進|做多|多單買進|開多/.test(actionRaw)){ action = '新買'; pos = pos + 1; }
-      else if(/賣出|做空|空單賣出|開空/.test(actionRaw)){ action = '新賣'; pos = pos - 1; }
-
-      // 2) 平倉詞彙
-      else if(/平倉|結算平倉|多單平倉|空單平倉/.test(actionRaw)){
-        if(/多單平倉/.test(actionRaw)){ action = '平賣'; pos = 0; }
-        else if(/空單平倉/.test(actionRaw)){ action = '平買'; pos = 0; }
-        else{
-          // 僅寫「平倉」→ 依持倉方向推斷
-          if(pos > 0){ action = '平賣'; pos = 0; }
-          else if(pos < 0){ action = '平買'; pos = 0; }
-          else{
-            // 若無法判斷，先跳過（避免誤轉）
-            continue;
-          }
+      // 新倉
+      if(/^(買進|做多|多單買進|開多|新買)$/.test(a)){ a='新買'; pos = pos + 1; }
+      else if(/^(賣出|做空|空單賣出|開空|新賣)$/.test(a)){ a='新賣'; pos = pos - 1; }
+      // 平倉
+      else if(/^(多單平倉|空單平倉|平倉|結算平倉|平買|平賣)$/.test(a)){
+        if(a==='多單平倉') a='平賣';
+        else if(a==='空單平倉') a='平買';
+        else if(a==='平倉' || a==='結算平倉'){
+          if(pos>0) a='平賣';
+          else if(pos<0) a='平買';
+          else continue; // 無法判斷持倉，跳過
         }
+        // 平買/平賣都把持倉歸零
+        pos = 0;
+      }else{
+        // 不識別的動作，略過
+        continue;
       }
 
-      // 3) 已是標準詞
-      else if(/新買|新賣|平買|平賣/.test(actionRaw)){
-        action = actionRaw;
-        if(action === '新買') pos = pos + 1;
-        else if(action === '新賣') pos = pos - 1;
-        else pos = 0;
-      }
-
-      if(!action) continue; // 不認得的動作，略過
-
-      // 輸出標準行：時間 價格 動作（以空白分隔）
-      out.push(`${t} ${p} ${action}`);
+      // 輸出：時間,價格,動作（CSV）
+      csv.push(`${t},${p},${a}`);
     }
-
-    return out.join('\n');
+    return csv.join('\n');
   }
 
   /* ===== 列清單 ===== */
   async function listCloudFiles(){
     cloudPreview.textContent = '';
     cloudMeta.textContent = '';
+    cloudNote.textContent = '';
     cloudSelect.innerHTML = `<option value="">載入中...</option>`;
 
     const prefix = (cloudPrefix.value||'').trim();
@@ -231,12 +218,11 @@
     opts.forEach(o => cloudSelect.appendChild(o));
   }
 
-  /* ===== 預覽（智慧解碼 → 顯示繁中） ===== */
+  /* ===== 預覽（智慧解碼） ===== */
   async function previewCloudFile(){
     cloudPreview.textContent = '';
     cloudMeta.textContent = '';
     cloudNote.innerHTML = '';
-
     const path = cloudSelect.value;
     if(!path) return;
 
@@ -247,24 +233,22 @@
     if(!res.ok){ cloudPreview.textContent = `讀取失敗：HTTP ${res.status}`; return; }
 
     const ab   = await res.arrayBuffer();
-    const best = decodeBest(ab);  // ← utf-8/big5/gb18030 智慧解碼
-    cloudTxt.value = best.txt;    // 先存原文；匯入時會再做標準化
+    const best = decodeBest(ab);     // utf-8/big5/gb18030 自動判斷
+    cloudTxt.value = best.txt;       // 保存原文，匯入時會標準化
 
     const meta = parseMetaFromPath(path);
     cloudMeta.innerHTML = `策略：<b>${meta.strategy}</b>　參數：<b>${meta.params}</b>　起訖：<b>${meta.range}</b>　<small class="tiny">（編碼：${best.enc}）</small><br><span class="tiny">${path}</span>`;
 
     const lines = best.txt.split(/\r?\n/);
     cloudPreview.textContent = lines.slice(0, 500).join('\n') + (lines.length>500 ? `\n...（共 ${lines.length} 行）` : ``);
-
-    cloudNote.innerHTML = `<span class="ok">提示：</span>匯入時會將「買進/賣出/平倉(結算平倉)」自動轉為「新買/新賣/平買/平賣」，以符合分析程式。`;
+    cloudNote.innerHTML = `<span class="ok">提示：</span>匯入時會將「買進/賣出/平倉(結算平倉)」自動轉成「新買/新賣/平買/平賣」，並輸出為 <b>時間,價格,動作</b>（CSV）再交給分析程式。`;
   }
 
-  /* ===== 匯入到分析：標準化 → 偽裝檔案 → 觸發 #file 原流程 ===== */
+  /* ===== 匯入到分析（標準化→CSV→偽裝檔案→觸發 #file） ===== */
   async function importToAnalysis(){
     const path = cloudSelect.value;
     if(!path){ alert('請先從清單選擇檔案'); return; }
 
-    // 確保取得文字（若未預覽）
     if(!cloudTxt.value){
       const url = await getFileUrl(path);
       const res = await fetch(url, { cache:'no-store' });
@@ -274,18 +258,15 @@
       cloudTxt.value = best.txt;
     }
 
-    // 1) 標準化動作詞彙與行格式（時間 價格 動作）
-    const normalized = normalizeTradesText(cloudTxt.value);
-
-    if(!normalized.trim()){
-      alert('匯入失敗：未能從檔案辨識出有效的交易行（需包含：時間 價格 動作）。');
+    const csv = normalizeTradesToCSV(cloudTxt.value);
+    if(!csv.trim()){
+      alert('匯入失敗：未能從檔案辨識出有效的交易行（需包含：時間,價格,動作）。');
       return;
     }
 
-    // 2) 打包成檔案（UTF-8），交給你的 single.js 既有流程
     try{
-      const blob = new Blob([normalized], { type:'text/plain;charset=utf-8' });
-      const filename = (path.split('/').pop() || 'cloud.txt').replace(/\.txt$/i,'') + '_normalized.txt';
+      const blob = new Blob([csv], { type:'text/plain;charset=utf-8' });
+      const filename = (path.split('/').pop() || 'cloud').replace(/\.txt$/i,'') + '_normalized.txt';
       const file = new File([blob], filename, { type:'text/plain' });
 
       const dt = new DataTransfer();
@@ -298,9 +279,9 @@
   }
 
   // 綁定
-  btnCloudList.addEventListener('click', listCloudFiles);
-  btnCloudPrev.addEventListener('click', previewCloudFile);
-  btnCloudImp.addEventListener('click', importToAnalysis);
+  document.getElementById('btnCloudList').addEventListener('click', listCloudFiles);
+  document.getElementById('btnCloudPreview').addEventListener('click', previewCloudFile);
+  document.getElementById('btnCloudImport').addEventListener('click', importToAnalysis);
   </script>
 </body>
 </html>
