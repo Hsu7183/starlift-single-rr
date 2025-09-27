@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>單檔分析（機構級｜注入版）</title>
+  <style>
+    body{font-family:ui-sans-serif,system-ui;-webkit-font-smoothing:antialiased;margin:0;padding:16px;background:#f7f7fb}
+    .wrap{max-width:1200px;margin:0 auto}
+    .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+    .card{background:#fff;border:1px solid #e5e7eb;border-radius:12px;box-shadow:0 2px 10px rgba(0,0,0,.03);padding:12px;margin-bottom:16px}
+    .back-link{margin-bottom:12px;display:inline-block}
+    .chip{display:inline-block;background:#eef;padding:6px 10px;border-radius:999px;font-size:12px}
+    #chartBox{height:520px}
+    h1{margin:.2rem 0 0 0}
+    h2{margin:.2rem 0 .6rem 0;font-size:16px;color:#111}
+    .muted{color:#667085}
+    .p-red{color:#ef4444;font-weight:700}
+    .p-green{color:#10b981;font-weight:700}
+    .kpi-grid{
+      display:grid;gap:8px;
+      grid-template-columns: repeat(auto-fit, minmax(180px,1fr));
+    }
+    .kpi{background:#fafafa;border:1px solid #eee;border-radius:10px;padding:10px}
+    .kpi .label{font-size:12px;color:#6b7280;margin-bottom:2px}
+    .kpi .val{font:600 18px/1.2 ui-monospace,Consolas,Menlo}
+    table{width:100%;border-collapse:collapse;background:#fff}
+    th,td{padding:8px 10px;border-bottom:1px solid #e5e7eb;white-space:nowrap;font:13px/1.65 ui-monospace,Consolas,Menlo,monospace}
+    thead th{background:#fafafa;position:sticky;top:0;z-index:2}
+    .param{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .btn{padding:6px 10px;border-radius:8px;border:1px solid #dbe2f0;background:#f6f8ff;cursor:pointer}
+    .btn:hover{background:#eef3ff}
+  </style>
+
+  <!-- 依賴：與既有頁面一致 -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="shared.js?v=full-table-v12"></script>
+</head>
+<body>
+  <div class="wrap">
+    <div class="row" style="justify-content:space-between;align-items:flex-end">
+      <div class="row">
+        <a class="back-link" href="multi-adv.html">← 返回第6分頁（多檔分析進階版）</a>
+      </div>
+      <div class="row">
+        <button id="btn-clear" class="btn">清除暫存</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="row" style="justify-content:space-between;align-items:center">
+        <div>
+          <h1 id="title">單檔分析（機構級｜注入版）</h1>
+          <div class="muted" id="subtitle">請從第6分頁點「開在單檔分析」帶入資料</div>
+        </div>
+        <div class="row">
+          <div class="chip">來源：<span id="src">—</span></div>
+          <div class="chip">載入時間：<span id="importAt">—</span></div>
+        </div>
+      </div>
+      <div class="muted param" id="paramLine" title=""></div>
+    </div>
+
+    <!-- 6線圖 -->
+    <div class="card">
+      <h2>收益曲線（含滑價黑實線、未滑價灰虛線；多紅/空綠）</h2>
+      <div id="chartBox"><canvas id="chart"></canvas></div>
+      <div id="chartCaption" class="muted">（Max/Min 顯示日期，Last 只顯示數值；皆為含滑價累積）</div>
+    </div>
+
+    <!-- KPI 區塊 -->
+    <div class="card">
+      <h2>KPI 指標</h2>
+      <div class="kpi-grid" id="kpiGrid">
+        <!-- 動態填入 -->
+      </div>
+    </div>
+
+    <!-- 交易明細（可選顯示前幾筆） -->
+    <div class="card">
+      <h2>交易摘要（前 20 筆）</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>進場</th><th>出場</th><th class="muted">動作</th>
+            <th class="muted">口數</th><th>含滑價損益</th>
+          </tr>
+        </thead>
+        <tbody id="tradeTbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+<script>
+(function(){
+  const $ = s => document.querySelector(s);
+  let chart;
+
+  // ----------- 小工具 -----------
+  const fmtPct = x => (Number.isFinite(x)? (x*100).toFixed(2) : "0.00")+"%";
+  const fmt2   = x => Number(x||0).toFixed(2);
+  const comma  = n => (Number(n)||0).toLocaleString("zh-TW");
+  const cls    = v => v>0 ? "p-red" : (v<0 ? "p-green" : "");
+  const sum    = a => a.reduce((x,y)=>x+y,0);
+  const avg    = a => a.length? sum(a)/a.length : 0;
+  const stdev  = a => { if(a.length<2) return 0; const m=avg(a); return Math.sqrt(a.reduce((s,x)=>s+(x-m)*(x-m),0)/(a.length-1)); };
+  const tsToDate = ts => { const s=String(ts||""); const y=s.slice(0,4), m=Number(s.slice(4,6)), d=Number(s.slice(6,8)); if(y&&m&&d) return `${y}/${m}/${d}`; return s; };
+  const toDate = ts => { const s=String(ts||""); const y=s.slice(0,4),m=s.slice(4,6),d=s.slice(6,8),hh=s.slice(8,10)||"00",mm=s.slice(10,12)||"00",ss=s.slice(12,14)||"00"; return new Date(`${y}-${m}-${d}T${hh}:${mm}:${ss}`); };
+
+  function nowStr(){
+    const d=new Date(); const p=n=>String(n).padStart(2,"0");
+    return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+  }
+
+  function roundRect(ctx,x,y,w,h,r){
+    const rr=Math.min(r,w/2,h/2);
+    ctx.beginPath();
+    ctx.moveTo(x+rr,y);
+    ctx.arcTo(x+w,y,x+w,y+h,rr);
+    ctx.arcTo(x+w,y+h,x,y+h,rr);
+    ctx.arcTo(x,y+h,x,y,rr);
+    ctx.arcTo(x,y,x+w,y,rr);
+    ctx.closePath();
+  }
+
+  // ----------- RR 計算（與多檔一致）-----------
+  function computeRR(dailySlip,trades,nav=1_000_000,rf=0){
+    let cum=0, peak=-Infinity, maxDD=0;
+    dailySlip.forEach(d=>{ cum+=d.pnl; const nv=nav+cum; if(nv>peak) peak=nv; else maxDD=Math.max(maxDD,peak-nv); });
+    const dailyRet=dailySlip.map(d=>d.pnl/nav);
+    const mean=avg(dailyRet), vol=stdev(dailyRet)*Math.sqrt(252);
+    const downside=stdev(dailyRet.filter(x=>x<(rf/252)))*Math.sqrt(252);
+    const annRet=mean*252;
+    const sharpe = vol?((annRet-rf)/vol):0;
+    const sortino= downside?((annRet-rf)/downside):0;
+    const years=Math.max((dailySlip.length||252)/252,1/365);
+    const totalPnL=cum, cagr=Math.pow((nav+totalPnL)/nav,1/years)-1;
+    const MAR=maxDD? cagr/(maxDD/nav):0;
+
+    const wins=trades.filter(t=>t.gainSlip>0), losses=trades.filter(t=>t.gainSlip<0);
+    const winPnL=sum(wins.map(t=>t.gainSlip)), losePnL=Math.abs(sum(losses.map(t=>t.gainSlip)));
+    const PF=losePnL? winPnL/losePnL : 0;
+
+    let tpm = 0;
+    const first = trades[0], last = trades[trades.length-1];
+    if(first && last){
+      const ms = (toDate(last.tsOut) - toDate(first.pos.tsIn)) / (1000*60*60*24*30.4);
+      tpm = ms>0 ? trades.length/ms : trades.length;
+    }
+    const winRate = trades.length? wins.length/trades.length : 0;
+    return {maxDD,totalPnL,PF,sharpe,sortino,MAR,tradesPerMonth:tpm,annRet,vol,winRate,count:trades.length};
+  }
+
+  // ----------- 繪圖 -----------
+  function drawChart(rep, title){
+    if(chart) chart.destroy();
+    const {tsArr,total,slipCum,longCum,longSlipCum,shortCum,shortSlipCum} = rep;
+
+    const labels = tsArr.map((_,i)=>i);
+    const mkSolid=(data,col,w)=>({data,stepped:true,borderColor:col,borderWidth:w,pointRadius:0});
+    const mkDash =(data,col,w)=>({data,stepped:true,borderColor:col,borderWidth:w,pointRadius:0,borderDash:[6,4]});
+
+    const arr = slipCum || [];
+    const idxLast = Math.max(0, arr.length-1);
+    const idxMax  = arr.reduce((imax,v,i)=> v>(arr[imax]??-Infinity)? i:imax, 0);
+    const idxMin  = arr.reduce((imin,v,i)=> v<(arr[imin]?? Infinity)? i:imin, 0);
+
+    const maxText  = `${comma(Math.round(arr[idxMax]||0))}(${tsToDate(tsArr[idxMax])})`;
+    const minText  = `${comma(Math.round(arr[idxMin]||0))}(${tsToDate(tsArr[idxMin])})`;
+    const lastText = `${comma(Math.round(arr[idxLast]||0))}`;
+
+    const points = [
+      {i:idxMax,  val:arr[idxMax],  color:"#ef4444", text:maxText},
+      {i:idxMin,  val:arr[idxMin],  color:"#10b981", text:minText},
+      {i:idxLast, val:arr[idxLast], color:"#111",    text:lastText},
+    ];
+
+    const anno = {
+      id:"anno",
+      afterDatasetsDraw(c){
+        const {ctx,scales:{x,y}}=c; ctx.save();
+        ctx.font="12px ui-sans-serif,system-ui"; ctx.textBaseline="middle";
+        points.forEach(p=>{
+          if(!Number.isFinite(p.val)) return;
+          const px=x.getPixelForValue(p.i), py=y.getPixelForValue(p.val);
+          ctx.beginPath(); ctx.arc(px,py,6,0,Math.PI*2); ctx.fillStyle=p.color; ctx.fill();
+          const pad=6,h=20,w=ctx.measureText(p.text).width+pad*2, bx=px+12, by=py-h/2;
+          ctx.fillStyle="rgba(255,255,255,.96)";
+          roundRect(ctx,bx,by,w,h,6); ctx.fill(); ctx.strokeStyle="#111"; ctx.stroke();
+          ctx.fillStyle="#111"; ctx.fillText(p.text,bx+pad,by+h/2);
+        });
+        ctx.restore();
+      }
+    };
+
+    chart = new Chart(document.getElementById("chart"), {
+      type:"line",
+      data:{labels,datasets:[
+        mkSolid(slipCum,"#111",3.5),       mkDash(total,"#9aa",2),
+        mkSolid(longSlipCum,"#d32f2f",3),  mkDash(longCum,"#ef9a9a",2),
+        mkSolid(shortSlipCum,"#2e7d32",3), mkDash(shortCum,"#a5d6a7",2)
+      ]},
+      options:{responsive:true,maintainAspectRatio:false,layout:{padding:{right:72}},plugins:{legend:{display:false}}},
+      plugins:[anno]
+    });
+
+    document.getElementById("chartCaption").textContent = `目前：${title}（黑線 Max/Min 顯示日期，Last 僅顯示數值；皆為含滑價累積）`;
+  }
+
+  // ----------- KPI 渲染 -----------
+  function renderKPI(k){
+    const grid = document.getElementById("kpiGrid");
+    grid.innerHTML = "";
+    const items = [
+      ["筆數", k.count],
+      ["勝率", fmtPct(k.winRate)],
+      ["累積淨損益(含滑價)", (k.totalPnL>=0?`<span class="p-red">${comma(k.totalPnL)}</span>`:`<span class="p-green">${comma(k.totalPnL)}</span>`)],
+      ["最大回撤", `-${comma(k.maxDD)}`],
+      ["PF（獲利因子）", fmt2(k.PF)],
+      ["Sharpe（夏普）", fmt2(k.sharpe)],
+      ["Sortino（索提諾）", fmt2(k.sortino)],
+      ["MAR（回報/回撤）", fmt2(k.MAR)],
+      ["交易頻率（筆/月）", fmt2(k.tradesPerMonth)],
+      ["年化報酬", fmtPct(k.annRet)],
+      ["年化波動", fmtPct(k.vol)]
+    ];
+    items.forEach(([label,val])=>{
+      const div = document.createElement("div");
+      div.className = "kpi";
+      div.innerHTML = `<div class="label">${label}</div><div class="val">${val}</div>`;
+      grid.appendChild(div);
+    });
+  }
+
+  // ----------- 交易摘要 -----------
+  function renderTrades(trades){
+    const tb = document.getElementById("tradeTbody");
+    tb.innerHTML = "";
+    trades.slice(0,20).forEach(t=>{
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${t.pos?.tsIn || ""}</td>
+        <td>${t.tsOut || ""}</td>
+        <td class="muted">${t.side || ""}</td>
+        <td class="muted">${t.qty ?? 1}</td>
+        <td class="${cls(t.gainSlip)}">${comma(Math.round(t.gainSlip||0))}</td>
+      `;
+      tb.appendChild(tr);
+    });
+  }
+
+  // ----------- 主流程：從 sessionStorage 注入 -----------
+  async function main(){
+    const url = new URL(location.href);
+    const from = url.searchParams.get("from") || "—";
+    document.getElementById("src").textContent = from;
+
+    const key = "starlift_single_inject";
+    const raw = sessionStorage.getItem(key);
+
+    if(!raw){
+      document.getElementById("subtitle").textContent = "尚未取得注入資料：請回第6分頁按「開在單檔分析」。";
+      return;
+    }
+
+    let name="(unnamed).txt", text="";
+    try{
+      const obj = JSON.parse(raw);
+      name = obj?.name || name;
+      text = (obj?.text || "").trim();
+    }catch(e){
+      console.error(e);
+    }
+
+    // 顯示標題與參數（第一行）
+    const head = (text.split(/\r?\n/)[0] || "").trim();
+    document.getElementById("title").textContent = name.replace(/^.*[\\/]/,"");
+    document.getElementById("subtitle").textContent = "第一行參數（截斷顯示）：";
+    const param = document.getElementById("paramLine");
+    param.textContent = head.length>140 ? head.slice(0,140)+"…" : head;
+    param.title = head;
+    document.getElementById("importAt").textContent = nowStr();
+
+    // 解析 + 報表
+    const {parseTXT, buildReport} = window.SHARED;
+    const parsed = parseTXT(text);
+    const report = buildReport(parsed.rows);
+
+    // 聚合為日損益（含滑價）
+    const m=new Map();
+    for(const t of report.trades){
+      const k = String(t.tsOut).slice(0,8); // YYYYMMDD
+      m.set(k,(m.get(k)||0)+t.gainSlip);
+    }
+    const dailySlip=[...m.entries()].sort((a,b)=>a[0].localeCompare(b[0])).map(([date,pnl])=>({date,pnl}));
+
+    const k = computeRR(dailySlip, report.trades, 1_000_000, 0);
+
+    drawChart(report, name.split(/[\\/]/).pop().replace(/\.[^.]+$/,''));
+    renderKPI(k);
+    renderTrades(report.trades);
+  }
+
+  // 清除暫存（避免舊檔殘留）
+  document.getElementById("btn-clear").addEventListener("click", ()=>{
+    try{ sessionStorage.removeItem("starlift_single_inject"); alert("已清除暫存。"); }catch(e){}
+  });
+
+  main();
+})();
+</script>
+</body>
+</html>
