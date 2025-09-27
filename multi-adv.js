@@ -1,9 +1,8 @@
 /* 檔案：multi-adv.js  ｜ 多檔分析（進階版） adv-v1
-   功能差異：
-   - 表格新增「參數」欄（抓 TXT 第一行；過長自動截斷，完整內容放在 title）
-   - 在檔名前多一個「開在單檔分析」按鈕：
-       將 {name,text} 存到 sessionStorage 後，開新頁 single-inject.html?from=multi-adv
-   - 其餘：沿用 multi.js（排序、點列切換圖、Max/Min/Last 標註、6 線圖呈現）
+   變更：
+   - 新增「參數」欄（抓 TXT 第一行；過長自動截斷，完整內容放在 title）
+   - 在檔名前加「開在單檔分析」按鈕：把 {name,text} 存到 sessionStorage 後，開新頁 single-inject.html?from=multi-adv
+   - 參數欄位數字格式化：把 123.000000 → 123；1.230000 → 1.23
 */
 (function(){
   const $ = s => document.querySelector(s);
@@ -22,6 +21,18 @@
   const nowStr = ()=>{ const d=new Date(); const p=n=>String(n).padStart(2,"0"); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`; };
   const tsToDate = ts => { const s=String(ts||""); const y=s.slice(0,4), m=Number(s.slice(4,6)), d=Number(s.slice(6,8)); if(y&&m&&d) return `${y}/${m}/${d}`; return s; };
   const safeHead = (text) => (text||"").split(/\r?\n/)[0]?.trim() || "";
+
+  // 將 123.000000 → 123；1.230000 → 1.23；保留必要小數
+  function slimNums(s){
+    if(!s) return "";
+    let t = s
+      // 去尾 0，但保留非 0 的小數位
+      .replace(/(-?\d+\.\d*?[1-9])0+\b/g, "$1")
+      // 小數全為 0 時去掉小數點與 0
+      .replace(/(-?\d+)\.0+\b/g, "$1");
+    // 壓縮多個空白
+    return t.replace(/\s{2,}/g, " ");
+  }
 
   // 檔名縮短：抓 YYYYMMDD_HHMMSS → 顯示 MMDD_HHMMSS
   function shortName(name){
@@ -154,7 +165,6 @@
         <td class="num">${fmtPct(r.annRet)}</td>
         <td class="num">${fmtPct(r.vol)}</td>
       `;
-
       // 點整列 → 切換圖
       tr.addEventListener("click", (ev)=>{
         if(ev.target && ev.target.getAttribute("data-open")!=null) return; // 按鈕另處理
@@ -227,15 +237,17 @@
       const dailySlip=[...m.entries()].sort((a,b)=>a[0].localeCompare(b[0])).map(([date,pnl])=>({date,pnl}));
       const k = computeRR(dailySlip, report.trades, 1_000_000, 0);
 
-      const p0 = safeHead(text);               // 第一行
-      const pShow = p0.length>120 ? p0.slice(0,120)+"…" : p0;
+      // 參數：取第一行並去掉多餘 0
+      const p0 = safeHead(text);
+      const pTidy = slimNums(p0);
+      const pShow = pTidy.length>120 ? pTidy.slice(0,120)+"…" : pTidy;
 
       results.push({
         __id: Math.random().toString(36).slice(2),
         name, rawText: text,
         shortName: shortName(name),
         params: pShow,
-        paramsFull: p0,
+        paramsFull: pTidy,
         ...k,
         tsArr:report.tsArr,
         total:report.total,
