@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>多檔分析（進階版）</title>
+  <style>
+    body{font-family:ui-sans-serif,system-ui;-webkit-font-smoothing:antialiased;margin:0;padding:16px;background:#f7f7fb}
+    .wrap{max-width:1440px;margin:0 auto}
+    .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+    .card{background:#fff;border:1px solid #e5e7eb;border-radius:12px;box-shadow:0 2px 10px rgba(0,0,0,.03);padding:12px;margin-bottom:16px}
+    .back-link{margin-bottom:12px;display:inline-block}
+    .chip{display:inline-block;background:#eef;padding:6px 10px;border-radius:999px;font-size:12px}
+    #chartBox{height:520px}
+    table{width:100%;border-collapse:collapse;background:#fff}
+    th,td{padding:8px 10px;border-bottom:1px solid #e5e7eb;white-space:nowrap;font:13px/1.65 ui-monospace,Consolas,Menlo,monospace}
+    thead th{background:#fafafa;position:sticky;top:0;z-index:2;cursor:pointer}
+    .num{text-align:right}
+    .p-red{color:#ef4444;font-weight:700}
+    .p-green{color:#10b981;font-weight:700}
+    .active-row{background:#f1f5ff !important}
+    .hint{opacity:.75}
+    .btn-link{padding:2px 8px;border-radius:6px;border:1px solid #dbe2f0;background:#f6f8ff;cursor:pointer}
+    .btn-link:hover{background:#eef3ff}
+    .param-cell{max-width:520px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  </style>
+
+  <!-- 依賴 -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="shared.js?v=full-table-v12"></script>
+</head>
+<body>
+  <div class="wrap">
+    <a class="back-link" href="index.html">← 返回首頁</a>
+    <h1>多檔分析（進階版）</h1>
+
+    <!-- 控制列 -->
+    <div class="row card">
+      <div class="row">
+        <button id="btn-clip">從剪貼簿貼上多份 TXT</button>
+        <input id="files" type="file" accept=".txt" multiple />
+      </div>
+      <div class="chip">已載入：<span id="fileCount">0</span> 檔</div>
+      <div class="chip">匯入時間：<span id="importAt">—</span></div>
+    </div>
+
+    <!-- 上：6 線圖 -->
+    <div class="card">
+      <div id="chartBox"><canvas id="chart"></canvas></div>
+      <div id="chartCaption" class="hint">
+        （點擊下方任一列，上方圖切換顯示；黑線 Max/Min 顯示日期，Last 僅顯示數值；皆為含滑價累積）
+      </div>
+    </div>
+
+    <!-- 下：彙總表（新增「參數」欄與「開在單檔分析」按鈕） -->
+    <div class="card">
+      <table id="sumTable">
+        <thead>
+          <tr>
+            <th data-k="_open">操作</th>
+            <th data-k="shortName">檔名</th>
+            <th data-k="params">參數</th>
+            <th class="num" data-k="count">筆數</th>
+            <th class="num" data-k="winRate">勝率</th>
+            <th class="num" data-k="totalPnL">累積淨損益(含滑價)</th>
+            <th class="num" data-k="maxDD">最大回撤</th>
+            <th class="num" data-k="PF">PF（獲利因子）</th>
+            <th class="num" data-k="sharpe">Sharpe（夏普）</th>
+            <th class="num" data-k="sortino">Sortino（索提諾）</th>
+            <th class="num" data-k="MAR">MAR（回報/回撤）</th>
+            <th class="num" data-k="tradesPerMonth">交易頻率（筆/月）</th>
+            <th class="num" data-k="annRet">年化報酬</th>
+            <th class="num" data-k="vol">年化波動</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+
+      <div class="hint" style="margin-top:8px">
+        提示：點欄位可升/降序；點擊一整列可切換上方圖。按「開在單檔分析」會把該 TXT 暫存到 sessionStorage 並開啟單檔分析頁。
+      </div>
+    </div>
+  </div>
+
+  <script src="multi-adv.js?v=adv-v1"></script>
+</body>
+</html>
