@@ -21,23 +21,31 @@
     .subtitle{
       text-align:center;
       color:#666;
-      margin:0 0 18px 0;   /* 原本 36px，因為下方多一個區塊，這裡略縮 */
+      margin:0 0 18px 0;
       font-size:14px;
     }
+    hr{
+      border:none;
+      border-top:1px solid #ddd;
+      margin:20px auto;
+      max-width:900px;
+    }
 
-    /* ===== 新增：定版策略抬頭（紅色）與卡片標題覆寫 ===== */
     .section-title-red{
       max-width:1100px;
-      margin: 6px auto 12px;
+      margin: 10px auto 12px;
       font-size:20px;
       font-weight:800;
-      color:#d32f2f;     /* 抬頭紅色 */
+      color:#d32f2f;
       letter-spacing:.5px;
     }
-    .fixed .card-title{  /* 只影響定版策略區塊內的卡片標題 */
-      color:#d32f2f;
+    .subcat{
+      max-width:1100px;
+      margin: 0 auto 8px;
+      font-weight:700;
+      font-size:16px;
+      color:#c62828;
     }
-    /* ================================================== */
 
     .nav{
       display:grid;
@@ -55,6 +63,7 @@
       text-decoration:none;
       color:inherit;
       transition: transform .15s ease, box-shadow .15s ease;
+      text-align:center;
     }
     a.card:hover{
       transform: translateY(-4px);
@@ -63,15 +72,13 @@
     .card-title{
       font-weight:700;
       font-size:18px;
-      color:#0d6efd;   /* 原預設：藍色（保留給下方6個策略分析用） */
-      margin:0 0 6px 0;
+      margin:0;
     }
     .card-desc{
-      margin:0;
-      color:#666;
-      font-size:14px;
-      line-height:1.5;
+      display:none; /* 不顯示摘要 */
     }
+    .card-title.red{ color:#d32f2f; }
+    .card-title.blue{ color:#0d6efd; }
     .tag{
       display:inline-block;
       font-size:12px;
@@ -87,53 +94,64 @@
 <body>
   <h1>三劍客量化科技（籌備中）</h1>
   <p class="subtitle">共同創辦人：許夏睿、何冠緯、張宸</p>
+  <hr>
 
-  <!-- ===== 定版策略（紅色標題；插在共同創辦人與6個策略分析之間） ===== -->
-  <h3 class="section-title-red">定版策略</h3>
-  <div class="nav fixed">
+  <!-- ===== 策略區 ===== -->
+  <h3 class="section-title-red">策略</h3>
+
+  <p class="subcat">順勢</p>
+  <div class="nav">
     <a class="card" href="0807.html">
-      <p class="card-title">0807策略</p>
-      <p class="card-desc">0204/0807 節奏；上一根觸發 → 當根 Open 執行；指標/交易雙版本一致。</p>
-    </a>
-
-    <a class="card" href="1001.html">
-      <p class="card-title">1001策略</p>
-      <p class="card-desc">EMA 觸發 + Donchian/BB 突破 + VWAP/CDP 濾網 + 固定 TP/SL；IND/AT 對齊。</p>
+      <p class="card-title red">0807版本</p>
     </a>
   </div>
-  <!-- ===== /定版策略 ===== -->
 
+  <p class="subcat">逆勢</p>
   <div class="nav">
+    <a class="card" href="1001.html">
+      <p class="card-title red">1001版本</p>
+    </a>
+  </div>
+
+  <p class="subcat">盤整</p>
+  <div class="nav">
+    <a class="card" href="#">
+      <p class="card-title red">（預留）</p>
+    </a>
+  </div>
+  <hr>
+
+  <!-- ===== 分析區 ===== -->
+  <h3 class="section-title-red">分析</h3>
+  <div class="nav" style="grid-template-columns: repeat(3, 1fr);">
     <a class="card" href="single.html">
-      <p class="card-title">單檔分析</p>
+      <p class="card-title blue">單檔分析</p>
       <p class="card-desc">分析單一檔案，輸出收益曲線與 KPI。</p>
     </a>
 
     <a class="card" href="multi.html">
-      <p class="card-title">多檔分析</p>
+      <p class="card-title blue">多檔分析</p>
       <p class="card-desc">同時上傳多個檔案，輸出彙總表與統計。</p>
     </a>
 
     <a class="card" href="monthly.html">
-      <p class="card-title">分月報告</p>
+      <p class="card-title blue">分月報告</p>
       <p class="card-desc">將交易結果依月份拆分，生成月度統計。</p>
     </a>
 
     <a class="card" href="upload.html">
-      <p class="card-title">資料上傳區</p>
+      <p class="card-title blue">資料上傳區</p>
       <p class="card-desc">上傳／檢視／下載／刪除報表檔案。</p>
     </a>
 
-    <!-- 第 5 分頁：雲端單檔分析（可直接從「資料上傳區」讀檔） -->
     <a class="card" href="single-cloud.html">
-      <p class="card-title">雲端單檔分析 <span class="tag">第5分頁</span></p>
-      <p class="card-desc">與「單檔分析」相同，但可直接從第4分頁（資料上傳區）挑選檔案進行分析。</p>
+      <p class="card-title blue">雲端單檔分析 <span class="tag">第5分頁</span></p>
+      <p class="card-desc">與「單檔分析」相同，但可直接從第4分頁挑選檔案進行分析。</p>
     </a>
 
-    <!-- 第 6 分頁：多檔分析進階版（全新頁面，不影響既有分頁） -->
     <a class="card" href="multi-adv.html">
-      <p class="card-title">多檔分析進階版 <span class="tag">第6分頁</span></p>
-      <p class="card-desc">在「多檔分析」基礎上新增「參數」欄與「一鍵開啟單檔分析（機構級）」功能。</p>
+      <p class="card-title blue">多檔分析進階版 <span class="tag">第6分頁</span></p>
+      <p class="card-desc">新增「參數」欄與「一鍵開啟單檔分析（機構級）」功能。</p>
     </a>
   </div>
 </body>
