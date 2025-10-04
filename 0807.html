@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>0807策略｜單檔分析（自動）</title>
+  <title>0807版本</title>
   <style>
     body{font-family:ui-sans-serif,system-ui;-webkit-font-smoothing:antialiased;margin:0;padding:16px;background:#f7f7fb}
     .wrap{max-width:1440px;margin:0 auto}
@@ -20,7 +20,6 @@
     .back-link{margin-bottom:12px;display:inline-block}
     .scroll-x{overflow-x:auto}
     .muted{color:#666;font-size:13px}
-    .hide-on-0807{display:none}
     #autostatus{white-space:pre-wrap}
     .mono{font-family:ui-monospace,Consolas,Menlo,monospace;font-size:12px}
   </style>
@@ -33,10 +32,10 @@
 <body>
   <div class="wrap">
     <a class="back-link" href="index.html">← 返回首頁</a>
-    <h1>0807策略｜單檔分析（自動）</h1>
-    <p class="muted">自動從 <b>reports</b> bucket 抓檔名含 <code>0807</code> 的最新 TXT 分析。可用：<code>?file=URL</code>、<code>?prefix=2025-09-24/</code>。</p>
+    <h1>0807版本</h1>
+    <p class="muted">本頁會自動從 <b>reports</b> bucket 擷取檔名含 <code>0807</code> 的最新 TXT，並以「基準檔的最前/最後日期」為錨點：只將<strong>基準最後日之後</strong>的交易視為「新增」。可用參數：<code>?file=URL</code>、<code>?prefix=2025-09-24/</code>。</p>
 
-    <!-- 差異檢查區 -->
+    <!-- 差異檢查：僅顯示摘要與新增交易清單（不顯示變更明細表） -->
     <div class="card" id="diffCard">
       <div class="row">
         <strong>差異檢查</strong>
@@ -48,18 +47,12 @@
       </div>
       <div id="diffStatus" class="muted" style="margin-top:6px;"></div>
 
-      <div id="appendBox" class="card mono" style="display:none;max-height:180px;overflow:auto;margin-top:10px;"></div>
-
-      <div id="changeTableWrap" class="scroll-x" style="display:none;margin-top:10px;">
-        <table>
-          <thead><tr><th>行號</th><th>基準內容</th><th>最新內容</th></tr></thead>
-          <tbody id="changeTable"></tbody>
-        </table>
-      </div>
+      <!-- 只顯示「基準最後日之後」的新增交易，一行一筆 -->
+      <div id="appendBox" class="card mono" style="display:none;max-height:200px;overflow:auto;margin-top:10px;"></div>
     </div>
 
     <!-- 控制列（保留給 single.js，用不到就隱藏） -->
-    <div class="row card hide-on-0807">
+    <div class="row card" style="display:none">
       <div>
         <button id="btn-clip">從剪貼簿貼上 TXT</button>
         <input id="file" type="file" accept=".txt" />
@@ -81,7 +74,8 @@
     </div>
   </div>
 
-  <script src="single.js?v=full-table-v8"></script>
-  <script src="0807.js?v=diff+manifest"></script>
+  <!-- 建議使用 v14-safe；若仍用舊版請把版本字尾改回你的檔名 -->
+  <script src="single.js?v=full-table-v14-safe"></script>
+  <script src="0807.js?v=anchored-diff"></script>
 </body>
 </html>
