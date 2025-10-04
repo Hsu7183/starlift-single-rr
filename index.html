@@ -49,7 +49,34 @@
       letter-spacing:.5px;
     }
 
-    /* 3欄網格（策略用） */
+    /* 版本狀態 */
+    .status-grid{
+      display:grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap:16px;
+      max-width:1100px;
+      margin: 0 auto 18px;
+    }
+    .status-card{
+      background:#fff;
+      border-radius:var(--card-r);
+      box-shadow:0 2px 8px rgba(0,0,0,.08);
+      padding:14px 16px;
+      border:1px solid #e5e7eb;
+    }
+    .status-title{
+      font-weight:800;
+      font-size:16px;
+      margin:0 0 6px 0;
+      display:flex;align-items:center;gap:8px;
+    }
+    .chip{ display:inline-block; background:#eef4ff; color:#0d6efd; padding:3px 8px; border-radius:999px; font-size:12px }
+    .small{ color:#666; font-size:13px; margin:0 }
+    .dot{ width:8px; height:8px; border-radius:50%; background:#aaa; display:inline-block }
+    .ok{ background:#22c55e; }
+    .warn{ background:#f59e0b; }
+
+    /* 策略（固定三欄） */
     .strategy-grid{
       display:grid;
       grid-template-columns: repeat(3, 1fr);
@@ -70,7 +97,7 @@
       text-align:center;
     }
 
-    /* 一般卡片網格（分析用） */
+    /* 卡片網格（分析區） */
     .nav{
       display:grid;
       grid-template-columns: repeat(3, 1fr);
@@ -90,29 +117,14 @@
       transition: transform .15s ease, box-shadow .15s ease;
       position: relative;
       text-align:center;
+      border:1px solid #e5e7eb;
     }
-    a.card:hover{
-      transform: translateY(-4px);
-      box-shadow:0 10px 22px rgba(0,0,0,.12);
-    }
-    .card-title{
-      font-weight:700;
-      font-size:18px;
-      margin:0 0 6px 0;
-    }
+    a.card:hover{ transform: translateY(-4px); box-shadow:0 10px 22px rgba(0,0,0,.12); }
+    .card-title{ font-weight:700; font-size:18px; margin:0 0 6px 0; }
     .card-title.red{ color:#d32f2f; }
     .card-title.blue{ color:#0d6efd; }
-
-    .card-desc{
-      margin:0;
-      color:#666;
-      font-size:14px;
-      line-height:1.5;
-      text-align:left;
-    }
-
-    /* 策略卡片不顯示摘要 */
-    .strategy-col .card-desc{ display:none; }
+    .card-desc{ margin:0; color:#666; font-size:14px; line-height:1.5; text-align:left; }
+    .strategy-col .card-desc{ display:none; } /* 策略卡不顯示摘要 */
 
     .tag{
       display:inline-block;
@@ -124,58 +136,65 @@
       margin-left:8px;
       vertical-align:middle;
     }
-
-    /* 研發中紅底泡泡 */
+    /* 研發中紅泡泡（若保留預留位） */
     .tag-red{
       display:inline-block;
-      font-size:13px;
+      font-size:12px;
       background:#d32f2f;
       color:#fff;
       border-radius:999px;
-      padding:5px 12px;
+      padding:3px 8px;
+      margin-left:8px;
       vertical-align:middle;
-      font-weight:700;
     }
   </style>
 </head>
 <body>
   <h1>三劍客量化科技（籌備中）</h1>
   <p class="subtitle">共同創辦人：許夏睿、何冠緯、張宸</p>
+
+  <!-- 版本狀態 -->
+  <h3 class="section-title-blue">版本狀態</h3>
+  <div class="status-grid">
+    <div class="status-card">
+      <p class="status-title"><span class="dot" id="dot-0807"></span>0807版本 <span id="chip-0807" class="chip">載入中…</span></p>
+      <p class="small" id="period-0807">期間：—</p>
+      <p class="small" id="updated-0807">最後更新：—</p>
+    </div>
+    <div class="status-card">
+      <p class="status-title"><span class="dot" id="dot-1001"></span>1001版本 <span id="chip-1001" class="chip">載入中…</span></p>
+      <p class="small" id="period-1001">期間：—</p>
+      <p class="small" id="updated-1001">最後更新：—</p>
+    </div>
+  </div>
+
   <hr>
 
-  <!-- ===== 策略（固定 3 欄） ===== -->
+  <!-- 策略（固定三欄） -->
   <h3 class="section-title-red">策略</h3>
   <div class="strategy-grid">
     <!-- 順勢 -->
     <div class="strategy-col">
       <p class="subcat">順勢</p>
-      <a class="card" href="0807.html">
-        <p class="card-title red">0807版本</p>
-      </a>
-      <a class="card" href="1001.html">
-        <p class="card-title red">1001版本</p>
-      </a>
+      <a class="card" href="0807.html"><p class="card-title red">0807版本</p></a>
+      <a class="card" href="1001.html"><p class="card-title red">1001版本</p></a>
     </div>
 
     <!-- 逆勢 -->
     <div class="strategy-col">
       <p class="subcat">逆勢</p>
-      <a class="card" href="#">
-        <span class="tag-red">研發中</span>
-      </a>
+      <a class="card" href="#"><p class="card-title red">研發中</p></a>
     </div>
 
     <!-- 盤整 -->
     <div class="strategy-col">
       <p class="subcat">盤整</p>
-      <a class="card" href="#">
-        <span class="tag-red">研發中</span>
-      </a>
+      <a class="card" href="#"><p class="card-title red">研發中</p></a>
     </div>
   </div>
   <hr>
 
-  <!-- ===== 分析（藍色標題；三欄兩列） ===== -->
+  <!-- 分析（藍色標題；三欄兩列） -->
   <h3 class="section-title-blue">分析</h3>
   <div class="nav">
     <a class="card" href="single.html">
@@ -208,5 +227,99 @@
       <p class="card-desc">進階彙總＋參數欄；支援一鍵開啟單檔分析（機構級）與指標對照。</p>
     </a>
   </div>
+
+  <!-- Supabase SDK（讀取 manifests 與最新檔資訊） -->
+  <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+  <script>
+    (async function(){
+      const SUPABASE_URL = "https://byhbmmnacezzgkwfkozs.supabase.co";
+      const SUPABASE_ANON_KEY = "sb_publishable_xVe8fGbqQ0XGwi4DsmjPMg_Y2RBOD3t";
+      const BUCKET = "reports";
+      const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+        global: { fetch: (u,o={}) => fetch(u,{...o, cache:'no-store'}) }
+      });
+
+      const want = { "0807": /0807/i, "1001": /1001/i };
+
+      function fmtDateTime(iso){
+        if(!iso) return "—";
+        const d = new Date(iso);
+        const pad = n => String(n).padStart(2,"0");
+        return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+      }
+      function parseRangeFromName(name){
+        const base = (name||"").replace(/\.[^.]+$/,'');
+        const parts = base.split(/[-_]+/).filter(Boolean);
+        const dates = parts.filter(s=>/^\d{8}$/.test(s));
+        return { start: dates[0]||"", end: dates[1]||dates[0]||"" };
+      }
+      function setStatus(key, periodText, updatedAt, hasBase){
+        document.getElementById(`period-${key}`).textContent = "期間：" + periodText;
+        document.getElementById(`updated-${key}`).textContent = "最後更新：" + fmtDateTime(updatedAt);
+        const chip = document.getElementById(`chip-${key}`);
+        const dot = document.getElementById(`dot-${key}`);
+        if(hasBase){ chip.textContent = "已設定基準"; dot.classList.add("ok"); }
+        else{ chip.textContent = "未設定基準"; dot.classList.add("warn"); }
+      }
+
+      async function readManifest(name){
+        try{
+          const { data: blob } = await sb.storage.from(BUCKET).download(`manifests/${name}.json`);
+          if(!blob) return null;
+          return JSON.parse(await blob.text());
+        }catch{ return null; }
+      }
+
+      async function getLatestInfo(regex){
+        // 只掃根目錄（和你目前做法一致；若要遞迴可再擴充）
+        const { data, error } = await sb.storage.from(BUCKET).list('', { limit:1000, sortBy:{ column:'name', order:'asc' }});
+        if(error || !data) return null;
+        const files = data.filter(it => it.id !== null && regex.test(it.name));
+        if(files.length === 0) return null;
+
+        // 依檔名「最後日期」→ updated_at → 檔案大小排序
+        const score = n => {
+          const r = parseRangeFromName(n);
+          return Number(r.end)||0;
+        };
+        files.sort((a,b)=>{
+          const sa = score(a.name), sb = score(b.name);
+          if(sa!==sb) return sb-sa;
+          const ta = a.updated_at? Date.parse(a.updated_at):0;
+          const tb = b.updated_at? Date.parse(b.updated_at):0;
+          if(ta!==tb) return tb-ta;
+          return (b.metadata?.size||0) - (a.metadata?.size||0);
+        });
+        return files[0];
+      }
+
+      for(const key of ["0807","1001"]){
+        try{
+          const manifest = await readManifest(key); // 可能為 null（尚未設定）
+          const latest = await getLatestInfo(want[key]);
+          let period = "—";
+          let updatedAt = latest?.updated_at || "";
+
+          if(latest){
+            const latestRange = parseRangeFromName(latest.name);
+            if(manifest?.baseline_path){
+              // 基準檔名取起迄，期間＝基準起日 → 最新檔迄日
+              const baseName = manifest.baseline_path.split("/").pop();
+              const baseRange = parseRangeFromName(baseName||"");
+              const start = baseRange.start || latestRange.start || "";
+              const end   = latestRange.end   || baseRange.end   || start;
+              period = `${start || "—"}～${end || "—"}`;
+            }else{
+              period = `${latestRange.start || "—"}～${latestRange.end || "—"}`;
+            }
+          }
+
+          setStatus(key, period, updatedAt, !!manifest);
+        }catch(e){
+          setStatus(key, "—", "", false);
+        }
+      }
+    })();
+  </script>
 </body>
 </html>
