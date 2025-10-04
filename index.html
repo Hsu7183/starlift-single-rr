@@ -21,15 +21,30 @@
     .subtitle{
       text-align:center;
       color:#666;
-      margin:0 0 36px 0;
+      margin:0 0 18px 0;   /* 原本 36px，因為下方多一個區塊，這裡略縮 */
       font-size:14px;
     }
+
+    /* ===== 新增：定版策略抬頭（紅色）與卡片標題覆寫 ===== */
+    .section-title-red{
+      max-width:1100px;
+      margin: 6px auto 12px;
+      font-size:20px;
+      font-weight:800;
+      color:#d32f2f;     /* 抬頭紅色 */
+      letter-spacing:.5px;
+    }
+    .fixed .card-title{  /* 只影響定版策略區塊內的卡片標題 */
+      color:#d32f2f;
+    }
+    /* ================================================== */
+
     .nav{
       display:grid;
       grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
       gap:20px;
       max-width: 1100px;
-      margin: 0 auto;
+      margin: 0 auto 28px;
     }
     a.card{
       display:block;
@@ -48,7 +63,7 @@
     .card-title{
       font-weight:700;
       font-size:18px;
-      color:#0d6efd;
+      color:#0d6efd;   /* 原預設：藍色（保留給下方6個策略分析用） */
       margin:0 0 6px 0;
     }
     .card-desc{
@@ -72,6 +87,21 @@
 <body>
   <h1>三劍客量化科技（籌備中）</h1>
   <p class="subtitle">共同創辦人：許夏睿、何冠緯、張宸</p>
+
+  <!-- ===== 定版策略（紅色標題；插在共同創辦人與6個策略分析之間） ===== -->
+  <h3 class="section-title-red">定版策略</h3>
+  <div class="nav fixed">
+    <a class="card" href="0807.html">
+      <p class="card-title">0807策略</p>
+      <p class="card-desc">0204/0807 節奏；上一根觸發 → 當根 Open 執行；指標/交易雙版本一致。</p>
+    </a>
+
+    <a class="card" href="1001.html">
+      <p class="card-title">1001策略</p>
+      <p class="card-desc">EMA 觸發 + Donchian/BB 突破 + VWAP/CDP 濾網 + 固定 TP/SL；IND/AT 對齊。</p>
+    </a>
+  </div>
+  <!-- ===== /定版策略 ===== -->
 
   <div class="nav">
     <a class="card" href="single.html">
