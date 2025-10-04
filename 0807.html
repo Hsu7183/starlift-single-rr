@@ -20,12 +20,14 @@
   <!-- 依賴（與 single.html 相同） -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="shared.js?v=full-table-v7"></script>
+  <!-- Supabase（與 upload.html 相同版本） -->
+  <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 </head>
 <body>
   <div class="wrap">
     <a class="back-link" href="index.html">← 返回首頁</a>
     <h1>0807策略｜單檔分析（自動）</h1>
-    <p class="muted">進入本頁會自動尋找 0807 的 TXT 並直接渲染（可用 <code>?file=URL</code> 指定）。</p>
+    <p class="muted">進入本頁會自動尋找 <b>reports</b> bucket 中檔名含 <code>0807</code> 的最新 TXT 並直接渲染。也可用參數：<code>?file=URL</code>、<code>?prefix=2025-09-24/</code>。</p>
 
     <!-- 控制列（保留 DOM 給 single.js 使用，但隱藏） -->
     <div class="row card hide-on-0807">
@@ -60,6 +62,6 @@
 
   <!-- 先載入 single.js，之後用 0807.js 觸發它的 #file 邏輯 -->
   <script src="single.js?v=full-table-v8"></script>
-  <script src="0807.js?v=auto-boot"></script>
+  <script src="0807.js?v=supabase-auto"></script>
 </body>
 </html>
