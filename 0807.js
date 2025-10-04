@@ -1,4 +1,4 @@
-// 0807.js — 自動挑最新 + 智慧解碼 + 逐行正規化/重建 + 差異比對 + 基準 manifest
+// 0807.js — 0807 專用自動分析：智慧解碼 + 正規化/重建 +「時間戳對齊」差異比對 + 基準 manifest
 (function () {
   const $ = s => document.querySelector(s);
   const status = $('#autostatus'); if (status) status.style.whiteSpace = 'pre-wrap';
@@ -18,17 +18,15 @@
 
   // === 偏好/常數 ===
   const WANT = /0807/i;
-  const MANIFEST_PATH = "manifests/0807.json";      // 記錄「基準檔」
-  const STRICT_TRADE = /^\d{14}\.000000\s+\d+\.\d{6}\s+(新買|平賣|新賣|平買|強制平倉)\s*$/;
-
-  // 放寬抽取：容許行前有雜字元、時間戳是否含 .000000、價位 1~6 位小數、尾端雜訊
+  const MANIFEST_PATH = "manifests/0807.json";       // 記錄「基準檔」位置
+  // 嚴格 canonical 行：YYYYMMDDhhmmss.000000 <六位小數> <動作>
+  const STRICT_CANON = /^(\d{14})\.0{6}\s+(\d+\.\d{6})\s+(新買|平賣|新賣|平買|強制平倉)\s*$/;
+  // 放寬抽取：容許 .000000 缺漏、價位 1~6 位、行首行尾雜字
   const EXTRACT_TRADE = /.*?(\d{14})(?:\.0{1,6})?\s+(\d+(?:\.\d{1,6})?)\s*(新買|平賣|新賣|平買|強制平倉)\s*$/;
 
-  // === 小工具 ===
-  function set(msg, bad=false){ if(status){ status.textContent = msg; status.style.color = bad?'#c62828':'#666'; } }
-  function setDiff(msg, bad=false){ if(diffStatus){ diffStatus.textContent = msg; diffStatus.style.color = bad?'#c62828':'#666'; } }
+  function set(msg, bad=false){ if(status){ status.textContent=msg; status.style.color = bad?'#c62828':'#666'; } }
+  function setDiff(msg, bad=false){ if(diffStatus){ diffStatus.textContent=msg; diffStatus.style.color = bad?'#c62828':'#666'; } }
   function pubUrl(path){ const { data } = sb.storage.from(BUCKET).getPublicUrl(path); return data?.publicUrl || '#'; }
-  const encList = ['utf-8','big5','utf-16le','utf-16be'];
 
   async function listOnce(prefix){
     const p = (prefix && !prefix.endsWith('/')) ? (prefix + '/') : (prefix || '');
@@ -43,17 +41,16 @@
   }
   function lastDateScore(name){ const m=String(name).match(/\b(20\d{6})\b/g); return m && m.length ? Math.max(...m.map(s=>+s||0)) : 0; }
 
+  // ========== 解碼 / 正規化 / 重建 ==========
   function normalizeText(raw){
-    // 去掉所有 BOM/零寬等不見字元；清掉控制碼（保留 \n）
+    // 去 BOM、零寬字、控制碼；統一換行、空白
     let s = raw.replace(/\ufeff/gi,'').replace(/\u200b|\u200c|\u200d/gi,'');
-    s = s.replace(/[\x00-\x09\x0B-\x1F\x7F]/g,'');   // 控制碼
+    s = s.replace(/[\x00-\x09\x0B-\x1F\x7F]/g,'');   // 控制碼（保留 \n）
     s = s.replace(/\r\n?/g,'\n').replace(/\u3000/g,' ');
-    // 壓縮空白；trim 每行；去空行
     const lines = s.split('\n').map(l => l.replace(/\s+/g,' ').trim()).filter(Boolean);
     return lines.join('\n');
   }
-
-  // 逐行抽取 → 重建為「標準三欄」格式；回傳 {canon, ok, bad, samples}
+  // 抽取 → canonical 行
   function canonicalize(txt){
     const out=[], lines = txt.split('\n');
     let ok=0, bad=0, samples=[];
@@ -61,54 +58,101 @@
       const m = l.match(EXTRACT_TRADE);
       if(m){
         const ts = m[1];
-        const px = Number(m[2]);
-        const p6 = Number.isFinite(px) ? px.toFixed(6) : m[2];
+        const px = Number(m[2]); const p6 = Number.isFinite(px) ? px.toFixed(6) : m[2];
         const act= m[3];
         const canon = `${ts}.000000 ${p6} ${act}`;
         out.push(canon); ok++;
       }else{
-        // 提供幾個不匹配樣本（避免洩漏過長）
         if (/(\d{14})/.test(l) && samples.length<3) samples.push(l);
         bad++;
       }
     }
     return { canon: out.join('\n'), ok, bad, samples };
   }
-
   async function fetchSmart(url){
     const res = await fetch(url,{cache:'no-store'}); if(!res.ok) throw new Error(`${res.status} ${res.statusText}`);
     const buf = await res.arrayBuffer();
-    let best = { enc:'utf-8', canon:'', ok:-1, bad:0, samples:[] };
-    for (const enc of encList){
+    const encs = ['utf-8','big5','utf-16le','utf-16be'];
+    let best={enc:'utf-8', canon:'', ok:-1, bad:0, samples:[]};
+    for (const enc of encs){
       try{
         const td = new TextDecoder(enc, { fatal:false });
         const norm = normalizeText(td.decode(buf));
         const { canon, ok, bad, samples } = canonicalize(norm);
-        if (ok > best.ok) best = { enc, canon, ok, bad, samples };
+        if (ok > best.ok) best={enc, canon, ok, bad, samples};
         if (ok > 0) return best;
       }catch(e){}
     }
-    return best; // 可能 ok=0，但附樣本
+    return best;
   }
 
-  // 單次覆寫 SHARED.readAsTextAuto，避免 single.js 再猜編碼
-  async function feedToSingle(filename, decodedText){
-    const input = $('#file'); if(!input){ set('找不到 #file（single.js 未載入）', true); return; }
-    if (window.SHARED && typeof window.SHARED.readAsTextAuto === 'function'){
-      const orig = window.SHARED.readAsTextAuto;
-      window.SHARED.readAsTextAuto = async function(){ window.SHARED.readAsTextAuto = orig; return decodedText; };
+  // ========== 以「時間戳」對齊的差異比對 ==========
+  const CANON_RE = /^(\d{14})\.0{6}\s+(\d+\.\d{6})\s+(新買|平賣|新賣|平買|強制平倉)\s*$/;
+  function parseCanonArray(text){
+    const arr=[]; if(!text) return arr;
+    for(const line of text.split('\n')){
+      const m = line.match(CANON_RE);
+      if(!m) continue;
+      arr.push({ ts:m[1], price:m[2], act:m[3], line });
     }
-    const file = new File([decodedText], filename || '0807.txt', { type:'text/plain' });
-    const dt = new DataTransfer(); dt.items.add(file);
-    input.files = dt.files;
-    input.dispatchEvent(new Event('change', { bubbles:true }));
+    // 時間排序（字串排序即可）
+    arr.sort((a,b)=> a.ts.localeCompare(b.ts));
+    return arr;
+  }
+  function computeDeltaTimeAligned(baseText, newText){
+    const A = parseCanonArray(baseText);
+    const B = parseCanonArray(newText);
+    const mapA = new Map(A.map(x=>[x.ts,x]));
+    const mapB = new Map(B.map(x=>[x.ts,x]));
+    const allTs = Array.from(new Set([...mapA.keys(), ...mapB.keys()])).sort((a,b)=>a.localeCompare(b));
+
+    const changed=[], added=[], removed=[];
+    for(const ts of allTs){
+      const a = mapA.get(ts), b = mapB.get(ts);
+      if(a && b){
+        if(a.line !== b.line) changed.push({ ts, old:a.line, neu:b.line });
+      }else if(!a && b){
+        added.push(b.line);
+      }else if(a && !b){
+        removed.push(a.line);
+      }
+    }
+
+    const maxTsA = A.length ? A[A.length-1].ts : '';
+    const pureAppend = (changed.length===0 && removed.length===0 &&
+                        added.every(ln => (ln.match(CANON_RE)?.[1]||'') > maxTsA));
+
+    return { pureAppend, added, changed, removed };
   }
 
-  // ---- 基準 manifest（改用 storage.download，避免 400 噪音）----
+  // ========== 單次包裝 SHARED 以避免 params.map 錯誤 ==========
+  function patchSharedReaders(decodedText){
+    if (window.SHARED) {
+      // readAsTextAuto：下一次直接回傳我們已解碼/正規化好的字串
+      if (typeof window.SHARED.readAsTextAuto === 'function') {
+        const orig = window.SHARED.readAsTextAuto;
+        window.SHARED.readAsTextAuto = async function(){
+          window.SHARED.readAsTextAuto = orig;
+          return decodedText;
+        };
+      }
+      // paramsLabel：保證拿到 Array，避免 params.map 不是函式
+      if (typeof window.SHARED.paramsLabel === 'function') {
+        const origPL = window.SHARED.paramsLabel;
+        window.SHARED.paramsLabel = function(arg){
+          let arr = Array.isArray(arg) ? arg : (arg && Array.isArray(arg.raw) ? arg.raw : []);
+          try { return origPL(arr); }
+          catch { return (arr.slice(0,2).join(' ｜ ')) || '—'; }
+        };
+      }
+    }
+  }
+
+  // ========== manifest：用 download，避免 400 噪音 ==========
   async function readManifest(){
     const { data, error } = await sb.storage.from(BUCKET).download(MANIFEST_PATH);
     if (error || !data) return null;
-    try{ return JSON.parse(await data.text()); } catch { return null; }
+    try { return JSON.parse(await data.text()); } catch { return null; }
   }
   async function writeManifest(obj){
     const blob = new Blob([JSON.stringify(obj,null,2)], { type:'application/json' });
@@ -116,33 +160,26 @@
     if (error) throw new Error(error.message);
   }
 
-  // ---- 差異（判斷是否純追加；否則列出變動）----
-  function computeDelta(baseText, newText){
-    const A = baseText.split('\n'), B = newText.split('\n');
-    const min = Math.min(A.length, B.length);
-    let i=0; while (i<min && A[i]===B[i]) i++;
-    const isPrefix = (i===A.length && B.length>=A.length && A.every((v,k)=>v===B[k]));
-    const appended = isPrefix ? B.slice(A.length) : (B.length>min ? B.slice(min) : []);
-    const changed = [];
-    if(!isPrefix){
-      for(let j=i; j<min; j++){
-        if(A[j]!==B[j]) changed.push({ idx:j+1, old:A[j], neu:B[j] });
-        if (changed.length >= 200) break;
-      }
-    }
-    return { isPrefix, prefixLen:i, appended, changed };
+  // ========== 將文字交給 single.js ==========
+  async function feedToSingle(filename, decodedText){
+    const input = $('#file'); if(!input){ set('找不到 #file（single.js 未載入）', true); return; }
+    patchSharedReaders(decodedText);                 // << 重要：避免二次猜編碼 & params.map 錯誤
+    const file = new File([decodedText], filename || '0807.txt', { type:'text/plain' });
+    const dt = new DataTransfer(); dt.items.add(file);
+    input.files = dt.files;
+    input.dispatchEvent(new Event('change', { bubbles:true }));
   }
 
-  // ---- 主流程 ----
+  // ========== 主流程 ==========
   async function boot(){
     try{
       const url = new URL(location.href);
       const paramFile = url.searchParams.get('file');
 
-      // 1) 決定最新檔
+      // 1) 決定「最新」檔
       let latest=null, list=[];
       if (paramFile){
-        latest = { name: paramFile.split('/').pop() || '0807.txt', fullPath: paramFile, from:'url' };
+        latest = { name:paramFile.split('/').pop()||'0807.txt', fullPath:paramFile, from:'url' };
       } else {
         set('從 Supabase（reports）讀取清單…');
         list = (await listCandidates()).filter(f => WANT.test(f.name) || WANT.test(f.fullPath));
@@ -157,7 +194,7 @@
       if(!latest){ set('找不到檔名含「0807」的 TXT（可用 ?file= 指定）。', true); return; }
       elLatest && (elLatest.textContent = latest.name);
 
-      // 2) 讀基準（manifest）或次新作為基準
+      // 2) 取得「基準」：manifest 指定；否則用次新
       let base=null;
       const manifest = await readManifest();
       if (manifest?.baseline_path){
@@ -167,7 +204,7 @@
       }
       elBase && (elBase.textContent = base ? base.name : '（尚無）');
 
-      // 3) 抓最新檔 → 智慧解碼 → 正規化/重建
+      // 3) 最新檔 → 智慧解碼 → 正規化/重建
       const latestUrl = latest.from==='url' ? latest.fullPath : pubUrl(latest.fullPath);
       const rNew = await fetchSmart(latestUrl);
       if (rNew.ok === 0){
@@ -176,52 +213,65 @@
         return;
       }
 
-      // 4) 若有基準 → 差異比對
+      // 4) 差異比對（時間戳對齊）
       if (base){
         const baseUrl = base.from==='url' ? base.fullPath : pubUrl(base.fullPath);
         const rBase = await fetchSmart(baseUrl);
         if (rBase.ok === 0){
           set(`基準檔解析不到交易（解碼=${rBase.enc}）。先以最新檔跑分析。`, true);
         } else {
-          const d = computeDelta(rBase.canon, rNew.canon);
-          if (d.isPrefix && d.appended.length>0){
-            setDiff(`✅ 僅追加 ${d.appended.length} 行。`);
-            appendBox.style.display='block'; appendBox.textContent = d.appended.join('\n');
-            btnCopy.disabled=false; btnCopy.onclick = async()=>{ await navigator.clipboard.writeText(d.appended.join('\n')); btnCopy.textContent='已複製'; setTimeout(()=>btnCopy.textContent='複製新增交易',1200); };
-          } else if (d.isPrefix && d.appended.length===0){
-            setDiff('ℹ️ 內容與基準相同。');
-          } else {
-            setDiff(`⚠️ 非純追加：從第 ${d.prefixLen+1} 行開始差異；下表列出前 ${d.changed.length} 處。`, true);
+          const d = computeDeltaTimeAligned(rBase.canon, rNew.canon);
+
+          // 純追加
+          if (d.pureAppend && d.added.length>0){
+            setDiff(`✅ 僅追加 ${d.added.length} 行（時間對齊）。`);
+            appendBox.style.display='block'; appendBox.textContent = d.added.join('\n');
+            btnCopy.disabled=false;
+            btnCopy.onclick = async()=>{ await navigator.clipboard.writeText(d.added.join('\n')); btnCopy.textContent='已複製'; setTimeout(()=>btnCopy.textContent='複製新增交易',1200); };
+          } 
+          // 有變更
+          else {
+            const msg = [
+              d.changed.length ? `變更：${d.changed.length}` : null,
+              d.added.length   ? `新增：${d.added.length}`   : null,
+              d.removed.length ? `刪除：${d.removed.length}` : null
+            ].filter(Boolean).join('、');
+            setDiff(`⚠️ 發現內容差異（時間對齊）：${msg || '—'}`, true);
+
+            // 變更明細（按 ts 排序）
             changeWrap.style.display='block'; changeTbody.innerHTML='';
-            for(const row of d.changed){
-              const tr=document.createElement('tr');
-              tr.innerHTML = `<td class="mono">${row.idx}</td><td class="mono">${row.old||''}</td><td class="mono">${row.neu||''}</td>`;
+            d.changed.forEach(row=>{
+              const tr = document.createElement('tr');
+              tr.innerHTML = `<td class="mono">${row.ts}</td><td class="mono">${row.old}</td><td class="mono">${row.neu}</td>`;
               changeTbody.appendChild(tr);
-            }
-            if (d.appended.length){
-              appendBox.style.display='block'; appendBox.textContent = d.appended.join('\n');
-              btnCopy.disabled=false; btnCopy.onclick = async()=>{ await navigator.clipboard.writeText(d.appended.join('\n')); btnCopy.textContent='已複製'; setTimeout(()=>btnCopy.textContent='複製新增交易',1200); };
+            });
+
+            if (d.added.length){
+              appendBox.style.display='block'; appendBox.textContent = d.added.join('\n');
+              btnCopy.disabled=false;
+              btnCopy.onclick = async()=>{ await navigator.clipboard.writeText(d.added.join('\n')); btnCopy.textContent='已複製'; setTimeout(()=>btnCopy.textContent='複製新增交易',1200); };
             }
           }
         }
       } else {
         setDiff('首次建立：目前沒有基準檔。');
         appendBox.style.display='block'; appendBox.textContent = rNew.canon;
-        btnCopy.disabled=false; btnCopy.onclick = async()=>{ await navigator.clipboard.writeText(rNew.canon); btnCopy.textContent='已複製'; setTimeout(()=>btnCopy.textContent='複製新增交易',1200); };
+        btnCopy.disabled=false;
+        btnCopy.onclick = async()=>{ await navigator.clipboard.writeText(rNew.canon); btnCopy.textContent='已複製'; setTimeout(()=>btnCopy.textContent='複製新增交易',1200); };
       }
 
-      // 5) 設為基準
+      // 5) 設最新檔為基準
       btnBase.disabled=false;
       btnBase.onclick = async ()=>{
-        try {
+        try{
           const payload = { baseline_path: latest.from==='url' ? latest.fullPath : latest.fullPath, updated_at: new Date().toISOString() };
           await writeManifest(payload);
           btnBase.textContent='已設為基準';
           setDiff('✅ 已將最新檔標記為基準（manifests/0807.json）');
-        } catch (e) { setDiff('寫入基準失敗：'+(e.message||e), true); }
+        }catch(e){ setDiff('寫入基準失敗：'+(e.message||e), true); }
       };
 
-      // 6) 交給 single.js 繪圖（用我們已重建好的純淨內容）
+      // 6) 交給 single.js 繪圖（用我們已重建好的 canonical 內容）
       set(`已載入最新檔（解碼=${rNew.enc}，有效行=${rNew.ok}），開始分析…`);
       await feedToSingle(latest.name, rNew.canon);
     } catch (err) {
