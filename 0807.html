@@ -7,15 +7,22 @@
   <style>
     body{font-family:ui-sans-serif,system-ui;-webkit-font-smoothing:antialiased;margin:0;padding:16px;background:#f7f7fb}
     .wrap{max-width:1440px;margin:0 auto}
-    .row{display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+    .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
     .chip{display:inline-block;background:#eef;padding:6px 10px;border-radius:999px;font-size:12px}
+    .btn{background:#0d6efd;color:#fff;border:0;border-radius:10px;padding:8px 12px;cursor:pointer}
+    .btn.gray{background:#6c757d}
+    .btn:disabled{opacity:.5;cursor:not-allowed}
     .card{background:#fff;border:1px solid #e5e7eb;border-radius:12px;box-shadow:0 2px 10px rgba(0,0,0,.03);padding:12px;margin-bottom:20px}
     #chartBox{height:520px}
     table{width:100%;border-collapse:collapse}
+    th,td{border-bottom:1px solid #eee;padding:6px 8px;font-size:13px}
+    th{background:#fafafa;text-align:left}
     .back-link{margin-bottom:12px;display:inline-block}
     .scroll-x{overflow-x:auto}
     .muted{color:#666;font-size:13px}
-    .hide-on-0807{display:none;} /* 0807頁面把手動控制藏起來 */
+    .hide-on-0807{display:none}
+    #autostatus{white-space:pre-wrap}
+    .mono{font-family:ui-monospace,Consolas,Menlo,monospace;font-size:12px}
   </style>
   <!-- 依賴（與 single.html 相同） -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -27,9 +34,31 @@
   <div class="wrap">
     <a class="back-link" href="index.html">← 返回首頁</a>
     <h1>0807策略｜單檔分析（自動）</h1>
-    <p class="muted">進入本頁會自動尋找 <b>reports</b> bucket 中檔名含 <code>0807</code> 的最新 TXT 並直接渲染。也可用參數：<code>?file=URL</code>、<code>?prefix=2025-09-24/</code>。</p>
+    <p class="muted">自動從 <b>reports</b> bucket 抓檔名含 <code>0807</code> 的最新 TXT 分析。可用：<code>?file=URL</code>、<code>?prefix=2025-09-24/</code>。</p>
 
-    <!-- 控制列（保留 DOM 給 single.js 使用，但隱藏） -->
+    <!-- 差異檢查區 -->
+    <div class="card" id="diffCard">
+      <div class="row">
+        <strong>差異檢查</strong>
+        <span class="chip">最新：<span id="latestName">—</span></span>
+        <span class="chip">基準：<span id="baseName">—</span></span>
+        <span style="flex:1"></span>
+        <button id="btnCopyNew" class="btn" disabled>複製新增交易</button>
+        <button id="btnSetBaseline" class="btn gray" disabled>設此為基準</button>
+      </div>
+      <div id="diffStatus" class="muted" style="margin-top:6px;"></div>
+
+      <div id="appendBox" class="card mono" style="display:none;max-height:180px;overflow:auto;margin-top:10px;"></div>
+
+      <div id="changeTableWrap" class="scroll-x" style="display:none;margin-top:10px;">
+        <table>
+          <thead><tr><th>行號</th><th>基準內容</th><th>最新內容</th></tr></thead>
+          <tbody id="changeTable"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 控制列（保留給 single.js，用不到就隱藏） -->
     <div class="row card hide-on-0807">
       <div>
         <button id="btn-clip">從剪貼簿貼上 TXT</button>
@@ -38,30 +67,21 @@
       <div class="chip">參數：<span id="paramChip">—</span></div>
     </div>
 
-    <!-- 額外顯示目前狀態 -->
+    <!-- 自動流程狀態 -->
     <div class="card"><span id="autostatus" class="muted">初始化中…</span></div>
 
-    <!-- 6 線圖 -->
+    <!-- 單檔分析區（沿用 single.html 的結構） -->
     <div id="chartBox" class="card"><canvas id="chart"></canvas></div>
-
-    <!-- KPI（合併表格） -->
     <div id="kpiAll" class="card scroll-x"></div>
     <div id="kpiL"></div><div id="kpiS"></div>
-
-    <!-- Risk-Return 表 -->
     <div id="rrLines" class="card scroll-x"></div>
 
-    <!-- 交易明細表 -->
     <div class="card scroll-x">
-      <table id="tradeTable">
-        <thead></thead>
-        <tbody></tbody>
-      </table>
+      <table id="tradeTable"><thead></thead><tbody></tbody></table>
     </div>
   </div>
 
-  <!-- 先載入 single.js，之後用 0807.js 觸發它的 #file 邏輯 -->
   <script src="single.js?v=full-table-v8"></script>
-  <script src="0807.js?v=supabase-auto"></script>
+  <script src="0807.js?v=diff+manifest"></script>
 </body>
 </html>
