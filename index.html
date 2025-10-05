@@ -6,143 +6,49 @@
   <title>三劍客量化科技（籌備中）｜策略分析系統</title>
   <style>
     :root { --card-r:12px; }
-    body{
-      font-family: Arial, "微軟正黑體", sans-serif;
-      margin: 20px;
-      background:#f8f9fa;
-      color:#333;
-    }
-    h1{
-      text-align:center;
-      margin:0 0 6px 0;
-      font-weight: 800;
-      letter-spacing:.5px;
-    }
-    .subtitle{
-      text-align:center;
-      color:#666;
-      margin:0 0 18px 0;
-      font-size:14px;
-    }
-    hr{
-      border:none;
-      border-top:1px solid #ddd;
-      margin:20px auto;
-      max-width:900px;
-    }
+    body{ font-family: Arial, "微軟正黑體", sans-serif; margin: 20px; background:#f8f9fa; color:#333; }
+    h1{ text-align:center; margin:0 0 6px 0; font-weight: 800; letter-spacing:.5px; }
+    .subtitle{ text-align:center; color:#666; margin:0 0 18px 0; font-size:14px; }
+    hr{ border:none; border-top:1px solid #ddd; margin:20px auto; max-width:900px; }
 
-    /* 區塊抬頭 */
-    .section-title-red{
-      max-width:1100px;
-      margin: 10px auto 12px;
-      font-size:20px;
-      font-weight:800;
-      color:#d32f2f;
-      letter-spacing:.5px;
-    }
-    .section-title-blue{
-      max-width:1100px;
-      margin: 10px auto 12px;
-      font-size:20px;
-      font-weight:800;
-      color:#0d6efd;
-      letter-spacing:.5px;
-    }
+    .section-title-red{ max-width:1100px; margin: 10px auto 12px; font-size:20px; font-weight:800; color:#d32f2f; letter-spacing:.5px; }
+    .section-title-blue{ max-width:1100px; margin: 10px auto 12px; font-size:20px; font-weight:800; color:#0d6efd; letter-spacing:.5px; }
 
-    /* 策略（固定三欄） */
-    .strategy-grid{
-      display:grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap:20px;
-      max-width:1100px;
-      margin: 0 auto 28px;
-    }
-    .strategy-col{
-      display:flex;
-      flex-direction:column;
-      gap:12px;
-    }
-    .subcat{
-      font-weight:700;
-      font-size:16px;
-      color:#c62828;
-      margin:0 0 4px 0;
-      text-align:center;
-    }
+    .strategy-grid{ display:grid; grid-template-columns: repeat(3, 1fr); gap:20px; max-width:1100px; margin: 0 auto 28px; }
+    .strategy-col{ display:flex; flex-direction:column; gap:12px; }
+    .subcat{ font-weight:700; font-size:16px; color:#c62828; margin:0 0 4px 0; text-align:center; }
 
-    /* 分析卡片網格 */
-    .nav{
-      display:grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap:20px;
-      max-width: 1100px;
-      margin: 0 auto 28px;
-    }
+    .nav{ display:grid; grid-template-columns: repeat(3, 1fr); gap:20px; max-width: 1100px; margin: 0 auto 28px; }
 
     a.card{
-      display:block;
-      background:#fff;
-      padding:18px 16px;
-      border-radius: var(--card-r);
-      box-shadow:0 2px 8px rgba(0,0,0,.08);
-      text-decoration:none;
-      color:inherit;
-      transition: transform .15s ease, box-shadow .15s ease;
-      position: relative;
-      border:1px solid #e5e7eb;
+      display:block; background:#fff; padding:18px 16px; border-radius: var(--card-r);
+      box-shadow:0 2px 8px rgba(0,0,0,.08); text-decoration:none; color:inherit;
+      transition: transform .15s ease, box-shadow .15s ease; position: relative; border:1px solid #e5e7eb;
     }
     a.card:hover{ transform: translateY(-4px); box-shadow:0 10px 22px rgba(0,0,0,.12); }
     .card-title{ font-weight:700; font-size:18px; margin:0 0 8px 0; text-align:center; }
-    .card-title.red{ color:#d32f2f; }
-    .card-title.blue{ color:#0d6efd; }
-    .card-title.gray{ color:#6c757d; }   /* 研發中=灰色 */
+    .card-title.red{ color:#d32f2f; } .card-title.blue{ color:#0d6efd; } .card-title.gray{ color:#6c757d; }
     .card-desc{ margin:0; color:#666; font-size:14px; line-height:1.5; text-align:left; }
 
-    /* 11 行指標：雙欄各自置中（左：標籤；右：數值） */
     .lines{ margin-top:2px; }
-    .line{
-      display:grid;
-      grid-template-columns: 1fr 1fr;   /* 兩欄 */
-      align-items:center;
-      margin:2px 0;
-      font-size:12px;
-    }
+    .line{ display:grid; grid-template-columns: 1fr 1fr; align-items:center; margin:2px 0; font-size:12px; }
     .label{ text-align:center; color:#111; }
-    .val{
-      text-align:center;
-      font-weight:700;
-    }
-    .val.pos{ color:#d32f2f; }  /* 賺錢：紅色 */
-    .val.neg{ color:#10b981; }  /* 虧損：綠色 */
-    .val.neu{ color:#666; }
+    .val{ text-align:center; font-weight:700; }
+    .val.pos{ color:#d32f2f; } .val.neg{ color:#10b981; } .val.neu{ color:#666; }
 
     .period{ margin-top:6px; color:#666; font-size:12px; text-align:center; }
 
-    /* 策略卡不顯示原本描述 */
     .strategy-col .card-desc{ display:none; }
-
-    .tag{
-      display:inline-block;
-      font-size:12px;
-      background:#eef4ff;
-      color:#0d6efd;
-      border-radius:999px;
-      padding:3px 8px;
-      margin-left:8px;
-      vertical-align:middle;
-    }
+    .tag{ display:inline-block; font-size:12px; background:#eef4ff; color:#0d6efd; border-radius:999px; padding:3px 8px; margin-left:8px; vertical-align:middle; }
   </style>
 </head>
 <body>
   <h1>三劍客量化科技（籌備中）</h1>
   <p class="subtitle">共同創辦人：許夏睿、何冠緯、張宸</p>
-
   <hr>
 
-  <!-- 策略（固定 3 欄） -->
   <h3 class="section-title-red">策略</h3>
   <div class="strategy-grid">
-    <!-- 順勢 -->
     <div class="strategy-col">
       <p class="subcat">順勢</p>
 
@@ -183,13 +89,11 @@
       </a>
     </div>
 
-    <!-- 逆勢 -->
     <div class="strategy-col">
       <p class="subcat">逆勢</p>
       <a class="card" href="#"><p class="card-title gray">研發中</p></a>
     </div>
 
-    <!-- 盤整 -->
     <div class="strategy-col">
       <p class="subcat">盤整</p>
       <a class="card" href="#"><p class="card-title gray">研發中</p></a>
@@ -198,34 +102,28 @@
 
   <hr>
 
-  <!-- 分析（藍色標題；三欄兩列） -->
   <h3 class="section-title-blue">分析</h3>
   <div class="nav">
     <a class="card" href="single.html">
       <p class="card-title blue">單檔分析</p>
       <p class="card-desc">分析單一檔案，輸出收益曲線、KPI、交易統計與關鍵指標。</p>
     </a>
-
     <a class="card" href="multi.html">
       <p class="card-title blue">多檔分析</p>
       <p class="card-desc">同時上傳多個檔案，輸出彙總表、分策略／分年度統計與比較。</p>
     </a>
-
     <a class="card" href="monthly.html">
       <p class="card-title blue">分月報告</p>
       <p class="card-desc">自動按月份拆分績效，提供月度盈虧、勝率、PF、MDD 等報告。</p>
     </a>
-
     <a class="card" href="upload.html">
       <p class="card-title blue">資料上傳區</p>
       <p class="card-desc">上傳／檢視／下載／刪除回測與實倉報表，支援多檔批次處理。</p>
     </a>
-
     <a class="card" href="single-cloud.html">
       <p class="card-title blue">雲端單檔分析 <span class="tag">第5分頁</span></p>
       <p class="card-desc">直接從「資料上傳區」挑選檔案進行單檔分析，免重複上傳。</p>
     </a>
-
     <a class="card" href="multi-adv.html">
       <p class="card-title blue">多檔分析進階版 <span class="tag">第6分頁</span></p>
       <p class="card-desc">進階彙總＋參數欄；支援一鍵開啟單檔分析（機構級）與指標對照。</p>
@@ -247,11 +145,7 @@
 
     const WANT = { "0807": /0807/i, "1001": /1001/i };
 
-    /* Supabase 最新檔 + 可選 manifest */
-    function pubUrl(path){
-      const { data } = sb.storage.from(BUCKET).getPublicUrl(path);
-      return data?.publicUrl || '#';
-    }
+    function pubUrl(path){ const { data } = sb.storage.from(BUCKET).getPublicUrl(path); return data?.publicUrl || '#'; }
     async function latestFile(regex){
       const { data } = await sb.storage.from(BUCKET).list('', { limit:1000, sortBy:{ column:'name', order:'asc' }});
       const files = (data||[]).filter(it => it.id !== null && regex.test(it.name));
@@ -279,10 +173,8 @@
     const EXTRACT_RE = /.*?(\d{14})(?:\.0{1,6})?\s+(\d+(?:\.\d{1,6})?)\s*(新買|平賣|新賣|平買|強制平倉|強平)\s*$/;
     function normalizeText(raw){
       let s = raw.replace(/\ufeff/gi,'').replace(/\u200b|\u200c|\u200d/gi,'');
-      s = s.replace(/[\x00-\x09\x0B-\x1F\x7F]/g,'');
-      s = s.replace(/\r\n?/g,'\n').replace(/\u3000/g,' ');
-      const lines = s.split('\n').map(l=>l.replace(/\s+/g,' ').trim()).filter(Boolean);
-      return lines.join('\n');
+      s = s.replace(/[\x00-\x09\x0B-\x1F\x7F]/g,'').replace(/\r\n?/g,'\n').replace(/\u3000/g,' ');
+      return s.split('\n').map(l=>l.replace(/\s+/g,' ').trim()).filter(Boolean).join('\n');
     }
     function canonicalize(txt){
       const out=[], lines = txt.split('\n'); let ok=0;
@@ -313,38 +205,20 @@
     }
     function parseCanon(text){
       const rows=[]; if(!text) return rows;
-      for(const line of text.split('\n')){
-        const m = line.match(CANON_RE);
-        if (m) rows.push({ ts:m[1], line });
-      }
-      rows.sort((a,b)=> a.ts.localeCompare(b.ts));
-      return rows;
+      for(const line of text.split('\n')){ const m = line.match(CANON_RE); if (m) rows.push({ ts:m[1], line }); }
+      rows.sort((a,b)=> a.ts.localeCompare(b.ts)); return rows;
     }
     function mergeByBaseline(baseText, latestText){
-      const A = parseCanon(baseText); const B = parseCanon(latestText);
+      const A = parseCanon(baseText), B = parseCanon(latestText);
       const baseMin = A.length ? A[0].ts.slice(0,8) : (B.length? B[0].ts.slice(0,8) : '');
       const baseMax = A.length ? A[A.length-1].ts : '';
-      const added   = baseMax ? B.filter(x => x.ts > baseMax).map(x => x.line) : B.map(x => x.line);
+      const added = baseMax ? B.filter(x => x.ts > baseMax).map(x => x.line) : B.map(x => x.line);
       const mergedLines = [...A.map(x => x.line), ...added];
       const endDay = mergedLines.length ? mergedLines[mergedLines.length-1].match(CANON_RE)[1].slice(0,8) : baseMin;
       return { combined: mergedLines.join('\n'), start8: baseMin, end8: endDay };
     }
 
-    /* 日期/報酬工具 */
-    function d8ToDate(d8){ return new Date(`${d8.slice(0,4)}-${d8.slice(4,6)}-${d8.slice(6,8)}T00:00:00`); }
-    function diffDays(a8,b8){ return Math.max(1, Math.round((d8ToDate(b8)-d8ToDate(a8))/86400000)+1); }
-
-    function setVal(id, v){
-      const el = document.getElementById(id);
-      if(!el) return;
-      el.classList.remove('pos','neg','neu');
-      if (v == null) { el.textContent = '---'; el.classList.add('neu'); return; }
-      const s = (v*100).toFixed(2) + '%';
-      el.textContent = s;
-      el.classList.add(v>0 ? 'pos' : (v<0 ? 'neg' : 'neu'));
-    }
-
-    /* 從 shared.js 產生日損益（含滑價） */
+    /* 日報酬（含滑價） */
     function dailySeriesFromMerged(mergedTxt){
       const parsed  = window.SHARED.parseTXT(mergedTxt);
       const report  = window.SHARED.buildReport(parsed.rows);
@@ -355,39 +229,42 @@
       return {days, vals};
     }
 
-    // 以最近 N 天視窗換算「年報酬率」： (1+r)^(365/實際天數)-1
-    function annFromWindow(days, vals, nav, winDays){
-      if(days.length===0) return null;
+    /* 工具 */
+    function d8ToDate(d8){ return new Date(`${d8.slice(0,4)}-${d8.slice(4,6)}-${d8.slice(6,8)}T00:00:00`); }
+    function diffDays(a8,b8){ return Math.max(1, Math.round((d8ToDate(b8)-d8ToDate(a8))/86400000)+1); }
+    function setVal(id, v){
+      const el = document.getElementById(id); if(!el) return;
+      el.classList.remove('pos','neg','neu');
+      if (v == null) { el.textContent='---'; el.classList.add('neu'); return; }
+      el.textContent = (v*100).toFixed(2)+'%';
+      el.classList.add(v>0 ? 'pos' : (v<0 ? 'neg' : 'neu'));
+    }
+
+    /* 視窗單純報酬率：最近 N 天損益合計 / 1,000,000 */
+    function simpleReturn(days, vals, nav, winDays){
+      if(!days.length) return null;
       const end = days[days.length-1];
       const thr = new Date(d8ToDate(end).getTime() - (winDays-1)*86400000);
       let i=0; while(i<days.length && d8ToDate(days[i]) < thr) i++;
-      if (i>=days.length) return null;           // 窗口內沒有資料
-      const start = days[i];
-      const span = diffDays(start, end);
+      if (i>=days.length) return null;                 // 窗口內沒有資料
       const pref=[0]; for(const v of vals) pref.push(pref[pref.length-1]+v);
       const sum = pref[vals.length] - pref[i];
-      const r = sum / nav;
-      if (1+r <= 0) return -1;
-      return Math.pow(1+r, 365/span) - 1;
+      return sum / nav;
     }
 
-    // 以最近 N 天視窗換算 CAGR；若資料期長 < (N - 60) 則回 null
-    function cagrFromWindow(days, vals, nav, winDays){
-      if(days.length===0) return null;
-      const first = days[0], last = days[days.length-1];
-      const cover = diffDays(first, last);
-      if (cover < winDays - 60) return null;     // 不足該窗 − 60 天 → 顯示 ---
-      const end = last;
+    /* 年窗（1/2/3/6 年）—資料不足則顯示 ---：總期長 < 年窗 − 60 天 */
+    function simpleReturnYearWindow(days, vals, nav, winDays){
+      if(!days.length) return null;
+      const cover = diffDays(days[0], days[days.length-1]);
+      if (cover < winDays - 60) return null;          // 不足 → ---
+      // 仍以最近 winDays 視窗取資料（或不足時用全期）
+      const end = days[days.length-1];
       const thr = new Date(d8ToDate(end).getTime() - (winDays-1)*86400000);
       let i=0; while(i<days.length && d8ToDate(days[i]) < thr) i++;
-      if (i>=days.length) i = 0;                 // 若資料比窗短，從最早開始
-      const start = days[i];
-      const span = diffDays(start, end);
+      if (i>=days.length) i=0;
       const pref=[0]; for(const v of vals) pref.push(pref[pref.length-1]+v);
       const sum = pref[vals.length] - pref[i];
-      const r = sum / nav;
-      if (1+r <= 0) return -1;
-      return Math.pow(1+r, 365/span) - 1;
+      return sum / nav;
     }
 
     async function fillCard(key){
@@ -396,13 +273,10 @@
 
       try{
         const latest = await latestFile(WANT[key]);
-        if(!latest){
-          ['wk1y','wk2y','m1y','m2y','m3y','m6y','y1','y2','y3','y6'].forEach(x=> set(`${x}`, null));
-          setPeriod('—');
-          return;
-        }
-        const latestText = (await fetchSmart(pubUrl(latest.name))).canon;
+        if(!latest){ ['wk1y','wk2y','m1y','m2y','m3y','m6y','y1','y2','y3','y6'].forEach(x=> set(x, null)); setPeriod('—'); return; }
 
+        // 合併（若有基準）
+        const latestText = (await fetchSmart(pubUrl(latest.name))).canon;
         const manifest = await readManifest(key);
         let merged = latestText, start8='', end8='';
         if(manifest?.baseline_path){
@@ -418,25 +292,23 @@
         const {days, vals} = dailySeriesFromMerged(merged);
         const nav = 1_000_000;
 
-        // 近 1/2 週 → 年報酬率
-        set('wk1y', annFromWindow(days, vals, nav, 7));
-        set('wk2y', annFromWindow(days, vals, nav, 14));
+        // 1/2 週 & 1/2/3/6 月：單純報酬率（最近 N 天合計 / NAV）
+        set('wk1y', simpleReturn(days, vals, nav, 7));
+        set('wk2y', simpleReturn(days, vals, nav, 14));
+        set('m1y',  simpleReturn(days, vals, nav, 30));
+        set('m2y',  simpleReturn(days, vals, nav, 60));
+        set('m3y',  simpleReturn(days, vals, nav, 90));
+        set('m6y',  simpleReturn(days, vals, nav, 180));
 
-        // 近 1/2/3/6 月 → 年報酬率
-        set('m1y', annFromWindow(days, vals, nav, 30));
-        set('m2y', annFromWindow(days, vals, nav, 60));
-        set('m3y', annFromWindow(days, vals, nav, 90));
-        set('m6y', annFromWindow(days, vals, nav, 180));
-
-        // 近 1/2/3/6 年 → CAGR（不足「年窗−60天」→ ---）
-        set('y1', cagrFromWindow(days, vals, nav, 365));
-        set('y2', cagrFromWindow(days, vals, nav, 730));
-        set('y3', cagrFromWindow(days, vals, nav, 1095));
-        set('y6', cagrFromWindow(days, vals, nav, 2190));
+        // 1/2/3/6 年：單純報酬率（近年窗合計 / NAV）；不足「年窗 − 60 天」→ ---
+        set('y1', simpleReturnYearWindow(days, vals, nav, 365));
+        set('y2', simpleReturnYearWindow(days, vals, nav, 730));
+        set('y3', simpleReturnYearWindow(days, vals, nav, 1095));
+        set('y6', simpleReturnYearWindow(days, vals, nav, 2190));
 
         setPeriod(`${start8||'—'} ～ ${end8||'—'}`);
       }catch(e){
-        ['wk1y','wk2y','m1y','m2y','m3y','m6y','y1','y2','y3','y6'].forEach(x=> set(`${x}`, null));
+        ['wk1y','wk2y','m1y','m2y','m3y','m6y','y1','y2','y3','y6'].forEach(x=> set(x, null));
         setPeriod('—');
       }
     }
