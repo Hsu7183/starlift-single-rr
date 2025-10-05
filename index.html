@@ -31,18 +31,21 @@
     .card-title.red{ color:#d32f2f; } .card-title.blue{ color:#0d6efd; } .card-title.gray{ color:#6c757d; } .card-title.black{ color:#111; }
     .card-desc{ margin:0; color:#666; font-size:14px; line-height:1.5; text-align:left; }
 
-    /* 三欄：左=標籤、中=期間（同一行、較小）、右=數值；全部置中 */
+    /* 三欄：左=標籤、中=期間（同一行、不換行、較小）、右=數值；全部置中 */
     .lines{ margin-top:2px; }
     .line{
       display:grid;
-      grid-template-columns: 1fr 1.2fr 1fr;  /* 標籤 / 期間 / 數值 */
+      grid-template-columns: 1fr 1.8fr 1fr;  /* 加寬期間欄避免換行 */
       align-items:center;
       margin:2px 0;
       font-size:12px;
       column-gap:6px;
     }
     .label{ text-align:center; color:#111; }
-    .range{ text-align:center; color:#999; font-size:11px; }
+    .range{
+      text-align:center; color:#999; font-size:10px;
+      white-space: nowrap;       /* <— 關鍵：期間同一行顯示 */
+    }
     .val{ text-align:center; font-weight:700; }
     .val.pos{ color:#d32f2f; } .val.neg{ color:#10b981; } .val.neu{ color:#666; }
 
@@ -217,7 +220,7 @@
       return { combined: mergedLines.join('\n'), start8: baseMin, end8: endDay };
     }
 
-    /* 從 shared.js 產生日損益（含滑價） */
+    /* 產生日損益（含滑價） */
     function dailySeriesFromMerged(mergedTxt){
       const parsed  = window.SHARED.parseTXT(mergedTxt);
       const report  = window.SHARED.buildReport(parsed.rows);
@@ -295,12 +298,7 @@
           end8   = rows.length ? rows[rows.length-1].ts.slice(0,8) : '';
         }
 
-        const parsed = window.SHARED.parseTXT(merged);
-        const report = window.SHARED.buildReport(parsed.rows);
-        const dm=new Map();
-        for(const t of report.trades){ const d=String(t.tsOut).slice(0,8); dm.set(d,(dm.get(d)||0)+t.gainSlip); }
-        const days=[...dm.keys()].sort();
-        const vals=days.map(d=>dm.get(d));
+        const {days, vals} = dailySeriesFromMerged(merged);
 
         // 週 / 月（每行都有期間）
         const r_wk1 = simpleReturnWithRange(days, vals, 7);   set('wk1', r_wk1.ret); setR('wk1', r_wk1.range);
