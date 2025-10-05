@@ -28,20 +28,23 @@
     }
     a.card:hover{ transform: translateY(-4px); box-shadow:0 10px 22px rgba(0,0,0,.12); }
     .card-title{ font-weight:700; font-size:18px; margin:0 0 8px 0; text-align:center; }
-    .card-title.red{ color:#d32f2f; } .card-title.blue{ color:#0d6efd; } .card-title.gray{ color:#6c757d; } .card-title.black{ color:#111; }
+    .card-title.red{ color:#d32f2f; } .card-title.blue{ color:#0d6efd; } .card-title.gray{ color:#6c757d; }
+    .card-title.black{ color:#111; }
     .card-desc{ margin:0; color:#666; font-size:14px; line-height:1.5; text-align:left; }
 
-    /* 指標行：雙欄置中（左：標籤；右：數值） */
+    /* 三欄：左=標籤、中=期間、右=數值；全部置中 */
     .lines{ margin-top:2px; }
-    .line{ display:grid; grid-template-columns: 1fr 1fr; align-items:center; margin:2px 0; font-size:12px; }
+    .line{
+      display:grid;
+      grid-template-columns: 1fr 1fr 1fr;  /* 標籤 / 期間 / 數值 */
+      align-items:center;
+      margin:2px 0;
+      font-size:12px;
+    }
     .label{ text-align:center; color:#111; }
+    .range{ text-align:center; color:#999; font-size:11px; }
     .val{ text-align:center; font-weight:700; }
-    .val.pos{ color:#d32f2f; }  /* 賺錢：紅色 */
-    .val.neg{ color:#10b981; }  /* 虧損：綠色 */
-    .val.neu{ color:#666; }
-
-    /* 近1週的視窗日期（置中、灰字） */
-    .subperiod{ text-align:center; font-size:11px; color:#999; margin:-2px 0 2px; }
+    .val.pos{ color:#d32f2f; } .val.neg{ color:#10b981; } .val.neu{ color:#666; }
 
     .period{ margin-top:6px; color:#666; font-size:12px; text-align:center; }
 
@@ -63,17 +66,16 @@
       <a class="card" href="0807.html">
         <p class="card-title red">0807版本</p>
         <div class="lines">
-          <p class="line"><span class="label">近1週報酬率</span> <span id="wk1-0807" class="val neu">—</span></p>
-          <p id="wk1-range-0807" class="subperiod">—</p>
-          <p class="line"><span class="label">近2週報酬率</span> <span id="wk2-0807" class="val neu">—</span></p>
-          <p class="line"><span class="label">近1月報酬率</span> <span id="m1-0807" class="val neu">—</span></p>
-          <p class="line"><span class="label">近2月報酬率</span> <span id="m2-0807" class="val neu">—</span></p>
-          <p class="line"><span class="label">近3月報酬率</span> <span id="m3-0807" class="val neu">—</span></p>
-          <p class="line"><span class="label">近6月報酬率</span> <span id="m6-0807" class="val neu">—</span></p>
-          <p class="line"><span class="label">近1年報酬率</span> <span id="y1-0807" class="val neu">—</span></p>
-          <p class="line"><span class="label">近2年報酬率</span> <span id="y2-0807" class="val neu">—</span></p>
-          <p class="line"><span class="label">近3年報酬率</span> <span id="y3-0807" class="val neu">—</span></p>
-          <p class="line"><span class="label">近6年報酬率</span> <span id="y6-0807" class="val neu">—</span></p>
+          <p class="line"><span class="label">近1週報酬率</span> <span id="wk1-range-0807" class="range">—</span> <span id="wk1-0807" class="val neu">—</span></p>
+          <p class="line"><span class="label">近2週報酬率</span> <span id="wk2-range-0807" class="range">—</span> <span id="wk2-0807" class="val neu">—</span></p>
+          <p class="line"><span class="label">近1月報酬率</span> <span id="m1-range-0807"  class="range">—</span> <span id="m1-0807"  class="val neu">—</span></p>
+          <p class="line"><span class="label">近2月報酬率</span> <span id="m2-range-0807"  class="range">—</span> <span id="m2-0807"  class="val neu">—</span></p>
+          <p class="line"><span class="label">近3月報酬率</span> <span id="m3-range-0807"  class="range">—</span> <span id="m3-0807"  class="val neu">—</span></p>
+          <p class="line"><span class="label">近6月報酬率</span> <span id="m6-range-0807"  class="range">—</span> <span id="m6-0807"  class="val neu">—</span></p>
+          <p class="line"><span class="label">近1年報酬率</span> <span id="y1-range-0807"  class="range">—</span> <span id="y1-0807"  class="val neu">—</span></p>
+          <p class="line"><span class="label">近2年報酬率</span> <span id="y2-range-0807"  class="range">—</span> <span id="y2-0807"  class="val neu">—</span></p>
+          <p class="line"><span class="label">近3年報酬率</span> <span id="y3-range-0807"  class="range">—</span> <span id="y3-0807"  class="val neu">—</span></p>
+          <p class="line"><span class="label">近6年報酬率</span> <span id="y6-range-0807"  class="range">—</span> <span id="y6-0807"  class="val neu">—</span></p>
           <p class="period">期間：<span id="period-0807">—</span></p>
         </div>
       </a>
@@ -82,17 +84,16 @@
       <a class="card" href="1001.html">
         <p class="card-title red">1001版本</p>
         <div class="lines">
-          <p class="line"><span class="label">近1週報酬率</span> <span id="wk1-1001" class="val neu">—</span></p>
-          <p id="wk1-range-1001" class="subperiod">—</p>
-          <p class="line"><span class="label">近2週報酬率</span> <span id="wk2-1001" class="val neu">—</span></p>
-          <p class="line"><span class="label">近1月報酬率</span> <span id="m1-1001" class="val neu">—</span></p>
-          <p class="line"><span class="label">近2月報酬率</span> <span id="m2-1001" class="val neu">—</span></p>
-          <p class="line"><span class="label">近3月報酬率</span> <span id="m3-1001" class="val neu">—</span></p>
-          <p class="line"><span class="label">近6月報酬率</span> <span id="m6-1001" class="val neu">—</span></p>
-          <p class="line"><span class="label">近1年報酬率</span> <span id="y1-1001" class="val neu">—</span></p>
-          <p class="line"><span class="label">近2年報酬率</span> <span id="y2-1001" class="val neu">—</span></p>
-          <p class="line"><span class="label">近3年報酬率</span> <span id="y3-1001" class="val neu">—</span></p>
-          <p class="line"><span class="label">近6年報酬率</span> <span id="y6-1001" class="val neu">—</span></p>
+          <p class="line"><span class="label">近1週報酬率</span> <span id="wk1-range-1001" class="range">—</span> <span id="wk1-1001" class="val neu">—</span></p>
+          <p class="line"><span class="label">近2週報酬率</span> <span id="wk2-range-1001" class="range">—</span> <span id="wk2-1001" class="val neu">—</span></p>
+          <p class="line"><span class="label">近1月報酬率</span> <span id="m1-range-1001"  class="range">—</span> <span id="m1-1001"  class="val neu">—</span></p>
+          <p class="line"><span class="label">近2月報酬率</span> <span id="m2-range-1001"  class="range">—</span> <span id="m2-1001"  class="val neu">—</span></p>
+          <p class="line"><span class="label">近3月報酬率</span> <span id="m3-range-1001"  class="range">—</span> <span id="m3-1001"  class="val neu">—</span></p>
+          <p class="line"><span class="label">近6月報酬率</span> <span id="m6-range-1001"  class="range">—</span> <span id="m6-1001"  class="val neu">—</span></p>
+          <p class="line"><span class="label">近1年報酬率</span> <span id="y1-range-1001"  class="range">—</span> <span id="y1-1001"  class="val neu">—</span></p>
+          <p class="line"><span class="label">近2年報酬率</span> <span id="y2-range-1001"  class="range">—</span> <span id="y2-1001"  class="val neu">—</span></p>
+          <p class="line"><span class="label">近3年報酬率</span> <span id="y3-range-1001"  class="range">—</span> <span id="y3-1001"  class="val neu">—</span></p>
+          <p class="line"><span class="label">近6年報酬率</span> <span id="y6-range-1001"  class="range">—</span> <span id="y6-1001"  class="val neu">—</span></p>
           <p class="period">期間：<span id="period-1001">—</span></p>
         </div>
       </a>
@@ -244,18 +245,19 @@
       return { ret: sum/1_000_000, range: `${fmtD8(startDay)} ~ ${fmtD8(end)}` };
     }
 
-    // 年窗：不足年窗-60天則回 null
-    function simpleReturnYearWindow(days, vals, winDays){
-      if(!days.length) return null;
+    // 年窗：不足年窗-60天則回 null 與 ---
+    function simpleReturnYearWindowWithRange(days, vals, winDays){
+      if(!days.length) return {ret:null, range:'---'};
       const cover = diffDays(days[0], days[days.length-1]);
-      if (cover < winDays - 60) return null;
+      if (cover < winDays - 60) return {ret:null, range:'---'};
       const end = days[days.length-1];
       const thr = new Date(d8(end).getTime() - (winDays-1)*86400000);
       let i=0; while(i<days.length && d8(days[i]) < thr) i++;
       if (i>=days.length) i=0;
+      const startDay = days[i];
       const pref=[0]; for(const v of vals) pref.push(pref[pref.length-1]+v);
       const sum = pref[vals.length] - pref[i];
-      return sum/1_000_000;
+      return { ret: sum/1_000_000, range: `${fmtD8(startDay)} ~ ${fmtD8(end)}` };
     }
 
     function setVal(id, v){
@@ -265,17 +267,18 @@
       el.textContent = (v*100).toFixed(2)+'%';
       el.classList.add(v>0 ? 'pos' : (v<0 ? 'neg' : 'neu'));
     }
+    function setText(id, text){ const el=document.getElementById(id); if(el) el.textContent=text||'---'; }
 
     async function fillCard(key){
       const set = (suf, v)=>setVal(`${suf}-${key}`, v);
-      const setText = (id, text)=>{ const el=document.getElementById(`${id}-${key}`); if(el) el.textContent=text; };
+      const setR = (suf, r)=>setText(`${suf}-range-${key}`, r);
       const setPeriod = (text)=>{ const el=document.getElementById(`period-${key}`); if(el) el.textContent=text; };
 
       try{
         const latest = await latestFile(WANT[key]);
         if(!latest){
-          ['wk1','wk2','m1','m2','m3','m6','y1','y2','y3','y6'].forEach(x=> set(x, null));
-          setText('wk1-range','---'); setPeriod('—'); return;
+          ['wk1','wk2','m1','m2','m3','m6','y1','y2','y3','y6'].forEach(x=> { set(x,null); setR(x,'---'); });
+          setPeriod('—'); return;
         }
         const latestText = (await fetchSmart(pubUrl(latest.name))).canon;
 
@@ -294,27 +297,24 @@
 
         const {days, vals} = dailySeriesFromMerged(merged);
 
-        // 近1週：顯示期間
-        const r1 = simpleReturnWithRange(days, vals, 7);
-        set('wk1', r1.ret); setText('wk1-range', r1.range);
+        // 週 / 月：每行都有期間
+        const r_wk1 = simpleReturnWithRange(days, vals, 7);   set('wk1', r_wk1.ret); setR('wk1', r_wk1.range);
+        const r_wk2 = simpleReturnWithRange(days, vals, 14);  set('wk2', r_wk2.ret); setR('wk2', r_wk2.range);
+        const r_m1  = simpleReturnWithRange(days, vals, 30);  set('m1',  r_m1.ret);  setR('m1',  r_m1.range);
+        const r_m2  = simpleReturnWithRange(days, vals, 60);  set('m2',  r_m2.ret);  setR('m2',  r_m2.range);
+        const r_m3  = simpleReturnWithRange(days, vals, 90);  set('m3',  r_m3.ret);  setR('m3',  r_m3.range);
+        const r_m6  = simpleReturnWithRange(days, vals, 180); set('m6',  r_m6.ret);  setR('m6',  r_m6.range);
 
-        // 近2週 / 近1~6月
-        set('wk2', simpleReturnWithRange(days, vals, 14).ret);
-        set('m1',  simpleReturnWithRange(days, vals, 30).ret);
-        set('m2',  simpleReturnWithRange(days, vals, 60).ret);
-        set('m3',  simpleReturnWithRange(days, vals, 90).ret);
-        set('m6',  simpleReturnWithRange(days, vals, 180).ret);
-
-        // 近1/2/3/6年（不足年窗-60天 → ---）
-        set('y1', simpleReturnYearWindow(days, vals, 365));
-        set('y2', simpleReturnYearWindow(days, vals, 730));
-        set('y3', simpleReturnYearWindow(days, vals, 1095));
-        set('y6', simpleReturnYearWindow(days, vals, 2190));
+        // 年窗：不足「年窗-60天」→ 顯示 --- 與 ---
+        const r_y1  = simpleReturnYearWindowWithRange(days, vals, 365);  set('y1', r_y1.ret); setR('y1', r_y1.range);
+        const r_y2  = simpleReturnYearWindowWithRange(days, vals, 730);  set('y2', r_y2.ret); setR('y2', r_y2.range);
+        const r_y3  = simpleReturnYearWindowWithRange(days, vals, 1095); set('y3', r_y3.ret); setR('y3', r_y3.range);
+        const r_y6  = simpleReturnYearWindowWithRange(days, vals, 2190); set('y6', r_y6.ret); setR('y6', r_y6.range);
 
         setPeriod(`${start8||'—'} ～ ${end8||'—'}`);
       }catch(e){
-        ['wk1','wk2','m1','m2','m3','m6','y1','y2','y3','y6'].forEach(x=> set(x, null));
-        setText('wk1-range','---'); setPeriod('—');
+        ['wk1','wk2','m1','m2','m3','m6','y1','y2','y3','y6'].forEach(x=> { set(x,null); setR(x,'---'); });
+        setPeriod('—');
       }
     }
 
