@@ -70,7 +70,7 @@
       text-align:center;
     }
 
-    /* 卡片網格（分析用，三欄兩列） */
+    /* 卡片網格（分析區） */
     .nav{
       display:grid;
       grid-template-columns: repeat(3, 1fr);
@@ -96,9 +96,10 @@
     .card-title{ font-weight:700; font-size:18px; margin:0 0 6px 0; }
     .card-title.red{ color:#d32f2f; }
     .card-title.blue{ color:#0d6efd; }
+    .card-title.gray{ color:#6c757d; }   /* 研發中=灰色 */
     .card-desc{ margin:0; color:#666; font-size:14px; line-height:1.5; text-align:left; }
 
-    /* 兩行資訊：年均報酬率＆期間（置中） */
+    /* 兩行資訊：年均報酬率＆期間（置中顯示） */
     .card-sub{
       margin:4px 0 0; font-size:14px; text-align:center; color:#111; font-weight:700;
     }
@@ -119,7 +120,6 @@
       margin-left:8px;
       vertical-align:middle;
     }
-    /* 研發中紅泡泡（保留預留位） */
     .tag-red{
       display:inline-block;
       font-size:12px;
@@ -163,13 +163,13 @@
     <!-- 逆勢 -->
     <div class="strategy-col">
       <p class="subcat">逆勢</p>
-      <a class="card" href="#"><p class="card-title red">研發中</p></a>
+      <a class="card" href="#"><p class="card-title gray">研發中</p></a>
     </div>
 
     <!-- 盤整 -->
     <div class="strategy-col">
       <p class="subcat">盤整</p>
-      <a class="card" href="#"><p class="card-title red">研發中</p></a>
+      <a class="card" href="#"><p class="card-title gray">研發中</p></a>
     </div>
   </div>
 
@@ -209,7 +209,7 @@
     </a>
   </div>
 
-  <!-- 依賴：Supabase + 你的 shared.js（直接用 single.html 那套） -->
+  <!-- 依賴：Supabase + 你的 shared.js（沿用 single.html 那套） -->
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
   <script src="shared.js?v=full-table-v7"></script>
   <script>
@@ -316,8 +316,7 @@
       const rateEl   = document.getElementById(`rate-${key}`);
       const periodEl = document.getElementById(`period-${key}`);
       try{
-        const want = WANT[key];
-        const latest = await latestFile(want);
+        const latest = await latestFile(WANT[key]);
         if(!latest){ rateEl.textContent = '年均報酬率：—'; periodEl.textContent='期間：—'; return; }
 
         const latestText = (await fetchSmart(pubUrl(latest.name))).canon;
@@ -334,7 +333,7 @@
           end8   = rows.length ? rows[rows.length-1].ts.slice(0,8) : '';
         }
 
-        // 用 shared.js 解析 → 建 report → 以日聚合求 CAGR
+        // 用 shared.js 解析 → 以日聚合求 CAGR
         const parsed  = window.SHARED.parseTXT(merged);
         const report  = window.SHARED.buildReport(parsed.rows);
 
