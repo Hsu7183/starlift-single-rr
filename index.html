@@ -70,7 +70,7 @@
       text-align:center;
     }
 
-    /* 卡片網格（分析區） */
+    /* 分析卡片網格 */
     .nav{
       display:grid;
       grid-template-columns: repeat(3, 1fr);
@@ -82,7 +82,7 @@
     a.card{
       display:block;
       background:#fff;
-      padding:20px;
+      padding:18px 16px;
       border-radius: var(--card-r);
       box-shadow:0 2px 8px rgba(0,0,0,.08);
       text-decoration:none;
@@ -92,17 +92,17 @@
       border:1px solid #e5e7eb;
     }
     a.card:hover{ transform: translateY(-4px); box-shadow:0 10px 22px rgba(0,0,0,.12); }
-    .card-title{ font-weight:700; font-size:18px; margin:0 0 6px 0; text-align:center; }
+    .card-title{ font-weight:700; font-size:18px; margin:0 0 8px 0; text-align:center; }
     .card-title.red{ color:#d32f2f; }
     .card-title.blue{ color:#0d6efd; }
     .card-title.gray{ color:#6c757d; }   /* 研發中=灰色 */
     .card-desc{ margin:0; color:#666; font-size:14px; line-height:1.5; text-align:left; }
 
-    /* 9行資訊（置中） */
-    .lines{ margin-top:8px; }
+    /* 四行月報酬率 + 期間（置中） */
+    .lines{ margin-top:2px; }
     .line{ margin:2px 0; font-size:12px; color:#111; text-align:center; }
     .line .val{ font-weight:700; }
-    .period{ margin-top:4px; color:#666; }
+    .period{ margin-top:6px; color:#666; font-size:12px; text-align:center; }
 
     /* 策略卡不顯示原本描述 */
     .strategy-col .card-desc{ display:none; }
@@ -136,15 +136,11 @@
       <a class="card" href="0807.html">
         <p class="card-title red">0807版本</p>
         <div class="lines">
-          <p class="line">近1個月年化報酬率：<span id="w1m-0807" class="val">—</span></p>
-          <p class="line">近2個月年化報酬率：<span id="w2m-0807" class="val">—</span></p>
-          <p class="line">近3個月年化報酬率：<span id="w3m-0807" class="val">—</span></p>
-          <p class="line">近6個月年化報酬率：<span id="w6m-0807" class="val">—</span></p>
-          <p class="line">近1年年化報酬率：<span id="w1y-0807" class="val">—</span></p>
-          <p class="line">近2年年化報酬率：<span id="w2y-0807" class="val">—</span></p>
-          <p class="line">近3年年化報酬率：<span id="w3y-0807" class="val">—</span></p>
-          <p class="line">近6年年化報酬率：<span id="w6y-0807" class="val">—</span></p>
-          <p class="line period">期間：<span id="period-0807">—</span></p>
+          <p class="line">近1個月月報酬率：<span id="m1-0807" class="val">—</span></p>
+          <p class="line">近2個月月報酬率：<span id="m2-0807" class="val">—</span></p>
+          <p class="line">近3個月月報酬率：<span id="m3-0807" class="val">—</span></p>
+          <p class="line">近6個月月報酬率：<span id="m6-0807" class="val">—</span></p>
+          <p class="period">期間：<span id="period-0807">—</span></p>
         </div>
       </a>
 
@@ -152,15 +148,11 @@
       <a class="card" href="1001.html">
         <p class="card-title red">1001版本</p>
         <div class="lines">
-          <p class="line">近1個月年化報酬率：<span id="w1m-1001" class="val">—</span></p>
-          <p class="line">近2個月年化報酬率：<span id="w2m-1001" class="val">—</span></p>
-          <p class="line">近3個月年化報酬率：<span id="w3m-1001" class="val">—</span></p>
-          <p class="line">近6個月年化報酬率：<span id="w6m-1001" class="val">—</span></p>
-          <p class="line">近1年年化報酬率：<span id="w1y-1001" class="val">—</span></p>
-          <p class="line">近2年年化報酬率：<span id="w2y-1001" class="val">—</span></p>
-          <p class="line">近3年年化報酬率：<span id="w3y-1001" class="val">—</span></p>
-          <p class="line">近6年年化報酬率：<span id="w6y-1001" class="val">—</span></p>
-          <p class="line period">期間：<span id="period-1001">—</span></p>
+          <p class="line">近1個月月報酬率：<span id="m1-1001" class="val">—</span></p>
+          <p class="line">近2個月月報酬率：<span id="m2-1001" class="val">—</span></p>
+          <p class="line">近3個月月報酬率：<span id="m3-1001" class="val">—</span></p>
+          <p class="line">近6個月月報酬率：<span id="m6-1001" class="val">—</span></p>
+          <p class="period">期間：<span id="period-1001">—</span></p>
         </div>
       </a>
     </div>
@@ -228,14 +220,37 @@
     });
 
     const WANT = { "0807": /0807/i, "1001": /1001/i };
-    const CANON_RE   = /^(\d{14})\.0{6}\s+(\d+\.\d{6})\s+(新買|平賣|新賣|平買|強制平倉|強平)\s*$/;
-    const EXTRACT_RE = /.*?(\d{14})(?:\.0{1,6})?\s+(\d+(?:\.\d{1,6})?)\s*(新買|平賣|新賣|平買|強制平倉|強平)\s*$/;
 
+    /* 抓 Supabase 最新檔與（可選）manifest 基準檔 */
     function pubUrl(path){
       const { data } = sb.storage.from(BUCKET).getPublicUrl(path);
       return data?.publicUrl || '#';
     }
+    async function latestFile(regex){
+      const { data } = await sb.storage.from(BUCKET).list('', { limit:1000, sortBy:{ column:'name', order:'asc' }});
+      const files = (data||[]).filter(it => it.id !== null && regex.test(it.name));
+      if(files.length===0) return null;
+      const score = n => { const m=(n||'').match(/\b(20\d{6})\b/g); return m? Math.max(...m.map(s=>+s)):0; };
+      files.sort((a,b)=>{
+        const sa=score(a.name), sb=score(b.name);
+        if(sa!==sb) return sb-sa;
+        const ta=a.updated_at? Date.parse(a.updated_at):0, tb=b.updated_at? Date.parse(b.updated_at):0;
+        if(ta!==tb) return tb-ta;
+        return (b.metadata?.size||0)-(a.metadata?.size||0);
+      });
+      return files[0];
+    }
+    async function readManifest(name){
+      try{
+        const { data } = await sb.storage.from(BUCKET).download(`manifests/${name}.json`);
+        if (!data) return null;
+        return JSON.parse(await data.text());
+      }catch{ return null; }
+    }
 
+    /* 將 TXT 轉 canonical（沿用你頁面用的解析器） */
+    const CANON_RE   = /^(\d{14})\.0{6}\s+(\d+\.\d{6})\s+(新買|平賣|新賣|平買|強制平倉|強平)\s*$/;
+    const EXTRACT_RE = /.*?(\d{14})(?:\.0{1,6})?\s+(\d+(?:\.\d{1,6})?)\s*(新買|平賣|新賣|平買|強制平倉|強平)\s*$/;
     function normalizeText(raw){
       let s = raw.replace(/\ufeff/gi,'').replace(/\u200b|\u200c|\u200d/gi,'');
       s = s.replace(/[\x00-\x09\x0B-\x1F\x7F]/g,'');
@@ -288,56 +303,42 @@
       const endDay = mergedLines.length ? mergedLines[mergedLines.length-1].match(CANON_RE)[1].slice(0,8) : baseMin;
       return { combined: mergedLines.join('\n'), start8: baseMin, end8: endDay };
     }
-    async function latestFile(regex){
-      const { data } = await sb.storage.from(BUCKET).list('', { limit:1000, sortBy:{ column:'name', order:'asc' }});
-      const files = (data||[]).filter(it => it.id !== null && regex.test(it.name));
-      if(files.length===0) return null;
-      const score = n => { const m=(n||'').match(/\b(20\d{6})\b/g); return m? Math.max(...m.map(s=>+s)):0; };
-      files.sort((a,b)=>{
-        const sa=score(a.name), sb=score(b.name);
-        if(sa!==sb) return sb-sa;
-        const ta=a.updated_at? Date.parse(a.updated_at):0, tb=b.updated_at? Date.parse(b.updated_at):0;
-        if(ta!==tb) return tb-ta;
-        return (b.metadata?.size||0)-(a.metadata?.size||0);
-      });
-      return files[0];
-    }
-    async function readManifest(name){
-      try{
-        const { data } = await sb.storage.from(BUCKET).download(`manifests/${name}.json`);
-        if (!data) return null;
-        return JSON.parse(await data.text());
-      }catch{ return null; }
-    }
 
-    // 轉日期工具
+    /* 轉日期工具 */
     function d8ToDate(d8){ return new Date(`${d8.slice(0,4)}-${d8.slice(4,6)}-${d8.slice(6,8)}T00:00:00`); }
     function diffDays(a8,b8){ return Math.max(1, Math.round((d8ToDate(b8)-d8ToDate(a8))/86400000)+1); }
-    function fmtPct(x){ return Number.isFinite(x)? (x*100).toFixed(2)+'%' : '—'; }
+    function fmtPct(x){ return (x==null || !Number.isFinite(x)) ? '---' : (x*100).toFixed(2)+'%'; }
 
-    // 從 trades 轉日序列（含滑價）
-    function dailySeries(trades){
+    /* 從 shared.js 產生日損益（含滑價） */
+    function dailySeriesFromMerged(mergedTxt){
+      const parsed  = window.SHARED.parseTXT(mergedTxt);
+      const report  = window.SHARED.buildReport(parsed.rows);
       const m=new Map();
-      for(const t of trades){ const d=String(t.tsOut).slice(0,8); m.set(d,(m.get(d)||0)+t.gainSlip); }
+      for(const t of report.trades){ const d=String(t.tsOut).slice(0,8); m.set(d,(m.get(d)||0)+t.gainSlip); }
       const days=[...m.keys()].sort();
       const vals=days.map(d=>m.get(d));
       return {days, vals};
     }
 
-    // 計算窗口年化
-    function windowCAGR(days, vals, nav, winDays){
-      if(days.length===0) return null;
+    /* 計算「近N個月月報酬率」：
+       取最近 N*30 天內的日損益合計 = R_total / NAV，若沒有資料 → null（顯示 ---）；
+       然後月化到 30 天：（1+R_total)^(30/實際天數) − 1 */
+    function monthlyReturn(days, vals, nav, months){
+      const winDays = months*30;
+      if(!days.length) return null;
       const end = days[days.length-1];
       const thr = new Date(d8ToDate(end).getTime() - (winDays-1)*86400000);
-      // 找到 >= thr 的第一個索引
       let i=0; while(i<days.length && d8ToDate(days[i]) < thr) i++;
-      const ndStart = i<days.length ? days[i] : days[0];
-      const spanDays = diffDays(ndStart, end);
+      if (i>=days.length) return null;          // 窗口內沒有資料 → ---
+      const start = days[i];
+      const span = diffDays(start, end);
       // 前綴和
       const pref=[0]; for(const v of vals) pref.push(pref[pref.length-1]+v);
       const sum = pref[vals.length] - pref[i];
       const r = sum / nav;
-      return Math.pow(1+r, 365/spanDays) - 1;
+      // 強制檢查：1+r 必須 > 0 才能開根
+      if (1+r <= 0) return -1;                  // 若整月回撤超過100%，顯示 -100%（理論上很難發生）
+      return Math.pow(1+r, 30/span) - 1;
     }
 
     async function fillCard(key){
@@ -345,7 +346,7 @@
       try{
         const latest = await latestFile(WANT[key]);
         if(!latest){
-          ['w1m','w2m','w3m','w6m','w1y','w2y','w3y','w6y','period'].forEach(x=> el(x).textContent='—');
+          ['m1','m2','m3','m6','period'].forEach(x=> el(x).textContent='---');
           return;
         }
         const latestText = (await fetchSmart(pubUrl(latest.name))).canon;
@@ -362,23 +363,16 @@
           end8   = rows.length ? rows[rows.length-1].ts.slice(0,8) : '';
         }
 
-        // 用 shared.js 解析 → 交易 → 日序列（含滑價）
-        const parsed  = window.SHARED.parseTXT(merged);
-        const report  = window.SHARED.buildReport(parsed.rows);
-        const {days, vals} = dailySeries(report.trades);
+        const {days, vals} = dailySeriesFromMerged(merged);
         const nav = 1_000_000;
 
-        const mapWin = {
-          'w1m': 30, 'w2m': 60, 'w3m': 90, 'w6m': 180,
-          'w1y': 365, 'w2y': 730, 'w3y': 1095, 'w6y': 2190
-        };
-        for(const [id,win] of Object.entries(mapWin)){
-          const c = windowCAGR(days, vals, nav, win);
-          el(id).textContent = fmtPct(c);
-        }
+        el('m1').textContent = fmtPct(monthlyReturn(days, vals, nav, 1));
+        el('m2').textContent = fmtPct(monthlyReturn(days, vals, nav, 2));
+        el('m3').textContent = fmtPct(monthlyReturn(days, vals, nav, 3));
+        el('m6').textContent = fmtPct(monthlyReturn(days, vals, nav, 6));
         el('period').textContent = `${start8||'—'} ～ ${end8||'—'}`;
       }catch(e){
-        ['w1m','w2m','w3m','w6m','w1y','w2y','w3y','w6y','period'].forEach(x=> { const t=el(x); if(t) t.textContent='—'; });
+        ['m1','m2','m3','m6','period'].forEach(x=> { const t=el(x); if(t) t.textContent='---'; });
       }
     }
 
