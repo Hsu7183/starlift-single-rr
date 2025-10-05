@@ -1,4 +1,4 @@
-/* shared.js ── TXT 解析 + 報表彙整（TX：手續費單邊45、期交稅雙邊 ×0.00002、含滑價-800）
+/* shared.js ── TXT 解析 + 報表彙整（TX：手續費單邊45、期交稅雙邊×0.00002、含滑價-800）
    - 多編碼：UTF-8 / Big5 / UTF-16LE/BE / ANSI 自動辨識
    - TXT 解析：參數列（數字一行 or 多行 key:value）、交易列允許 .000000 與 1~6 位小數
    - 動作詞：新買 / 平賣 / 新賣 / 平買 / 強制平倉（允許「強制 平倉」「強平」→ 正規化為 強制平倉）
@@ -7,7 +7,7 @@
        * 手續費 = 45/邊 × 2 = 90
        * 期交稅 = round(買價×200×0.00002) + round(賣價×200×0.00002)
        * 理論淨損益 = 點差金額 − 手續費 − 期交稅
-       * 實際淨損益(含滑價) = 理論淨損益 − 800（固定滑價：進出各 -2 點）
+       * 實際淨損益(含滑價) = 理論淨損益 − 800（進出各 -2 點）
 */
 
 (function () {
@@ -15,10 +15,10 @@
 
   /* ===== 常數 ===== */
   SHARED.MULT = 200;     // 台指期乘數
-  SHARED.FEE  = 45;      // 單邊手續費（你與期貨商約定值）—表格若自行計算時會用到（=45）
-  SHARED.TAX  = 0;       // 保留舊欄位；實際稅額改由 buildReport 依政府規定計雙邊
+  SHARED.FEE  = 45;      // 單邊手續費（與期貨商約定）
+  SHARED.TAX  = 0;       // 保留舊欄位；實際稅額由 buildReport 依政府規定計雙邊
   const TX_TAX_RATE = 0.00002;           // 期交稅率（股價類期貨）
-  const SLIP_MONEY  = 4 * SHARED.MULT;   // 固定滑價：進/出各 -2 點 → -4點=800
+  const SLIP_MONEY  = 4 * SHARED.MULT;   // 固定滑價：進/出各 -2 點 → -4 點 = 800
 
   /* ===== 格式化 ===== */
   SHARED.fmtMoney = n => Math.round(Number(n)||0).toLocaleString("zh-TW");
@@ -114,7 +114,7 @@
       // 點差金額
       const gross = pts * MULT;
 
-      // 手續費（你與期貨商約定：單邊45 → 來回90）
+      // 手續費（與期貨商約定：單邊45 → 來回90）
       const feeRT = 45 * 2;
 
       // 期交稅（政府規定、雙邊課）：round(買×200×0.00002) + round(賣×200×0.00002)
@@ -132,9 +132,9 @@
         pos:{ side, tsIn:pos.tsIn, pIn:pos.pIn },
         tsOut, priceOut:pOut,
         pts,
-        fee: feeRT,     // 供表格顯示
-        tax: taxRT,     // 供表格顯示
-        gain: net,      // 理論淨損益
+        fee: feeRT,        // 供表格顯示
+        tax: taxRT,        // 供表格顯示
+        gain: net,         // 理論淨損益
         gainSlip: netSlip, // 實際淨損益(含滑價)
         actOut: actOut || (side==='L'?'平賣':'平買')
       });
@@ -175,7 +175,7 @@
       tsArr.push(dstr(t.tsOut));
     }
 
-    // KPI（維持原本：以含滑價序列做）
+    // KPI（以含滑價序列計）
     const statsFrom = arr=>{
       const count=arr.length, wins=arr.filter(t=>t.gainSlip>0).length, loses=arr.filter(t=>t.gainSlip<0).length;
       const winRate=count? wins/count : 0, loseRate=count? loses/count: 0;
