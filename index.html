@@ -49,33 +49,6 @@
       letter-spacing:.5px;
     }
 
-    /* 版本狀態 */
-    .status-grid{
-      display:grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap:16px;
-      max-width:1100px;
-      margin: 0 auto 18px;
-    }
-    .status-card{
-      background:#fff;
-      border-radius:var(--card-r);
-      box-shadow:0 2px 8px rgba(0,0,0,.08);
-      padding:14px 16px;
-      border:1px solid #e5e7eb;
-    }
-    .status-title{
-      font-weight:800;
-      font-size:16px;
-      margin:0 0 6px 0;
-      display:flex;align-items:center;gap:8px;
-    }
-    .chip{ display:inline-block; background:#eef4ff; color:#0d6efd; padding:3px 8px; border-radius:999px; font-size:12px }
-    .small{ color:#666; font-size:13px; margin:0 }
-    .dot{ width:8px; height:8px; border-radius:50%; background:#aaa; display:inline-block }
-    .ok{ background:#22c55e; }
-    .warn{ background:#f59e0b; }
-
     /* 策略（固定三欄） */
     .strategy-grid{
       display:grid;
@@ -97,7 +70,7 @@
       text-align:center;
     }
 
-    /* 卡片網格（分析區） */
+    /* 卡片網格（分析用，三欄兩列） */
     .nav{
       display:grid;
       grid-template-columns: repeat(3, 1fr);
@@ -124,7 +97,17 @@
     .card-title.red{ color:#d32f2f; }
     .card-title.blue{ color:#0d6efd; }
     .card-desc{ margin:0; color:#666; font-size:14px; line-height:1.5; text-align:left; }
-    .strategy-col .card-desc{ display:none; } /* 策略卡不顯示摘要 */
+
+    /* 兩行資訊：年均報酬率＆期間（置中） */
+    .card-sub{
+      margin:4px 0 0; font-size:14px; text-align:center; color:#111; font-weight:700;
+    }
+    .card-sub2{
+      margin:2px 0 0; font-size:12px; text-align:center; color:#666;
+    }
+
+    /* 策略卡不顯示原本描述 */
+    .strategy-col .card-desc{ display:none; }
 
     .tag{
       display:inline-block;
@@ -136,7 +119,7 @@
       margin-left:8px;
       vertical-align:middle;
     }
-    /* 研發中紅泡泡（若保留預留位） */
+    /* 研發中紅泡泡（保留預留位） */
     .tag-red{
       display:inline-block;
       font-size:12px;
@@ -153,31 +136,28 @@
   <h1>三劍客量化科技（籌備中）</h1>
   <p class="subtitle">共同創辦人：許夏睿、何冠緯、張宸</p>
 
-  <!-- 版本狀態 -->
-  <h3 class="section-title-blue">版本狀態</h3>
-  <div class="status-grid">
-    <div class="status-card">
-      <p class="status-title"><span class="dot" id="dot-0807"></span>0807版本 <span id="chip-0807" class="chip">載入中…</span></p>
-      <p class="small" id="period-0807">期間：—</p>
-      <p class="small" id="updated-0807">最後更新：—</p>
-    </div>
-    <div class="status-card">
-      <p class="status-title"><span class="dot" id="dot-1001"></span>1001版本 <span id="chip-1001" class="chip">載入中…</span></p>
-      <p class="small" id="period-1001">期間：—</p>
-      <p class="small" id="updated-1001">最後更新：—</p>
-    </div>
-  </div>
-
   <hr>
 
-  <!-- 策略（固定三欄） -->
+  <!-- 策略（固定 3 欄） -->
   <h3 class="section-title-red">策略</h3>
   <div class="strategy-grid">
     <!-- 順勢 -->
     <div class="strategy-col">
       <p class="subcat">順勢</p>
-      <a class="card" href="0807.html"><p class="card-title red">0807版本</p></a>
-      <a class="card" href="1001.html"><p class="card-title red">1001版本</p></a>
+
+      <!-- 0807 -->
+      <a class="card" href="0807.html">
+        <p class="card-title red">0807版本</p>
+        <p id="rate-0807"   class="card-sub">年均報酬率：載入中…</p>
+        <p id="period-0807" class="card-sub2">期間：—</p>
+      </a>
+
+      <!-- 1001 -->
+      <a class="card" href="1001.html">
+        <p class="card-title red">1001版本</p>
+        <p id="rate-1001"   class="card-sub">年均報酬率：載入中…</p>
+        <p id="period-1001" class="card-sub2">期間：—</p>
+      </a>
     </div>
 
     <!-- 逆勢 -->
@@ -192,6 +172,7 @@
       <a class="card" href="#"><p class="card-title red">研發中</p></a>
     </div>
   </div>
+
   <hr>
 
   <!-- 分析（藍色標題；三欄兩列） -->
@@ -228,98 +209,156 @@
     </a>
   </div>
 
-  <!-- Supabase SDK（讀取 manifests 與最新檔資訊） -->
+  <!-- 依賴：Supabase + 你的 shared.js（直接用 single.html 那套） -->
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+  <script src="shared.js?v=full-table-v7"></script>
   <script>
-    (async function(){
-      const SUPABASE_URL = "https://byhbmmnacezzgkwfkozs.supabase.co";
-      const SUPABASE_ANON_KEY = "sb_publishable_xVe8fGbqQ0XGwi4DsmjPMg_Y2RBOD3t";
-      const BUCKET = "reports";
-      const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-        global: { fetch: (u,o={}) => fetch(u,{...o, cache:'no-store'}) }
-      });
+  (async function(){
+    // ===== Supabase 設定（與 upload/0807/1001 同步） =====
+    const SUPABASE_URL = "https://byhbmmnacezzgkwfkozs.supabase.co";
+    const SUPABASE_ANON_KEY = "sb_publishable_xVe8fGbqQ0XGwi4DsmjPMg_Y2RBOD3t";
+    const BUCKET = "reports";
+    const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      global: { fetch: (u,o={}) => fetch(u,{...o, cache:'no-store'}) }
+    });
 
-      const want = { "0807": /0807/i, "1001": /1001/i };
+    // ===== 工具 =====
+    const WANT = { "0807": /0807/i, "1001": /1001/i };
+    const CANON_RE   = /^(\d{14})\.0{6}\s+(\d+\.\d{6})\s+(新買|平賣|新賣|平買|強制平倉)\s*$/;
+    const EXTRACT_RE = /.*?(\d{14})(?:\.0{1,6})?\s+(\d+(?:\.\d{1,6})?)\s*(新買|平賣|新賣|平買|強制平倉)\s*$/;
 
-      function fmtDateTime(iso){
-        if(!iso) return "—";
-        const d = new Date(iso);
-        const pad = n => String(n).padStart(2,"0");
-        return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-      }
-      function parseRangeFromName(name){
-        const base = (name||"").replace(/\.[^.]+$/,'');
-        const parts = base.split(/[-_]+/).filter(Boolean);
-        const dates = parts.filter(s=>/^\d{8}$/.test(s));
-        return { start: dates[0]||"", end: dates[1]||dates[0]||"" };
-      }
-      function setStatus(key, periodText, updatedAt, hasBase){
-        document.getElementById(`period-${key}`).textContent = "期間：" + periodText;
-        document.getElementById(`updated-${key}`).textContent = "最後更新：" + fmtDateTime(updatedAt);
-        const chip = document.getElementById(`chip-${key}`);
-        const dot = document.getElementById(`dot-${key}`);
-        if(hasBase){ chip.textContent = "已設定基準"; dot.classList.add("ok"); }
-        else{ chip.textContent = "未設定基準"; dot.classList.add("warn"); }
-      }
+    function pubUrl(path){ const { data } = sb.storage.from(BUCKET).getPublicUrl(path); return data?.publicUrl || '#'; }
 
-      async function readManifest(name){
-        try{
-          const { data: blob } = await sb.storage.from(BUCKET).download(`manifests/${name}.json`);
-          if(!blob) return null;
-          return JSON.parse(await blob.text());
-        }catch{ return null; }
-      }
-
-      async function getLatestInfo(regex){
-        // 只掃根目錄（和你目前做法一致；若要遞迴可再擴充）
-        const { data, error } = await sb.storage.from(BUCKET).list('', { limit:1000, sortBy:{ column:'name', order:'asc' }});
-        if(error || !data) return null;
-        const files = data.filter(it => it.id !== null && regex.test(it.name));
-        if(files.length === 0) return null;
-
-        // 依檔名「最後日期」→ updated_at → 檔案大小排序
-        const score = n => {
-          const r = parseRangeFromName(n);
-          return Number(r.end)||0;
-        };
-        files.sort((a,b)=>{
-          const sa = score(a.name), sb = score(b.name);
-          if(sa!==sb) return sb-sa;
-          const ta = a.updated_at? Date.parse(a.updated_at):0;
-          const tb = b.updated_at? Date.parse(b.updated_at):0;
-          if(ta!==tb) return tb-ta;
-          return (b.metadata?.size||0) - (a.metadata?.size||0);
-        });
-        return files[0];
-      }
-
-      for(const key of ["0807","1001"]){
-        try{
-          const manifest = await readManifest(key); // 可能為 null（尚未設定）
-          const latest = await getLatestInfo(want[key]);
-          let period = "—";
-          let updatedAt = latest?.updated_at || "";
-
-          if(latest){
-            const latestRange = parseRangeFromName(latest.name);
-            if(manifest?.baseline_path){
-              // 基準檔名取起迄，期間＝基準起日 → 最新檔迄日
-              const baseName = manifest.baseline_path.split("/").pop();
-              const baseRange = parseRangeFromName(baseName||"");
-              const start = baseRange.start || latestRange.start || "";
-              const end   = latestRange.end   || baseRange.end   || start;
-              period = `${start || "—"}～${end || "—"}`;
-            }else{
-              period = `${latestRange.start || "—"}～${latestRange.end || "—"}`;
-            }
-          }
-
-          setStatus(key, period, updatedAt, !!manifest);
-        }catch(e){
-          setStatus(key, "—", "", false);
+    function normalizeText(raw){
+      let s = raw.replace(/\ufeff/gi,'').replace(/\u200b|\u200c|\u200d/gi,'');
+      s = s.replace(/[\x00-\x09\x0B-\x1F\x7F]/g,'');
+      s = s.replace(/\r\n?/g,'\n').replace(/\u3000/g,' ');
+      const lines = s.split('\n').map(l=>l.replace(/\s+/g,' ').trim()).filter(Boolean);
+      return lines.join('\n');
+    }
+    function canonicalize(txt){
+      const out=[], lines = txt.split('\n'); let ok=0;
+      for(const l of lines){
+        const m = l.match(EXTRACT_RE);
+        if(m){
+          const ts = m[1], px = Number(m[2]); const p6 = Number.isFinite(px) ? px.toFixed(6) : m[2];
+          const act= m[3];
+          out.push(`${ts}.000000 ${p6} ${act}`); ok++;
         }
       }
-    })();
+      return { canon: out.join('\n'), ok };
+    }
+    async function fetchSmart(url){
+      const res = await fetch(url,{cache:'no-store'}); if(!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+      const buf = await res.arrayBuffer();
+      for (const enc of ['utf-8','big5','utf-16le','utf-16be']){
+        try{
+          const td=new TextDecoder(enc,{fatal:false});
+          const norm = normalizeText(td.decode(buf));
+          const { canon, ok } = canonicalize(norm);
+          if (ok>0) return { canon, ok };
+        }catch(e){}
+      }
+      const td=new TextDecoder('utf-8'); const norm=normalizeText(td.decode(buf));
+      const { canon, ok } = canonicalize(norm);
+      return { canon, ok };
+    }
+    function parseCanon(text){
+      const rows=[]; if(!text) return rows;
+      for(const line of text.split('\n')){
+        const m = line.match(CANON_RE);
+        if (m) rows.push({ ts:m[1], line });
+      }
+      rows.sort((a,b)=> a.ts.localeCompare(b.ts));
+      return rows;
+    }
+    function mergeByBaseline(baseText, latestText){
+      const A = parseCanon(baseText); const B = parseCanon(latestText);
+      const baseMin = A.length ? A[0].ts.slice(0,8) : (B.length? B[0].ts.slice(0,8) : '');
+      const baseMax = A.length ? A[A.length-1].ts : '';
+      const added   = baseMax ? B.filter(x => x.ts > baseMax).map(x => x.line) : B.map(x => x.line);
+      const mergedLines = [...A.map(x => x.line), ...added];
+      const endDay = mergedLines.length ? mergedLines[mergedLines.length-1].match(CANON_RE)[1].slice(0,8) : baseMin;
+      return { combined: mergedLines.join('\n'), start8: baseMin, end8: endDay };
+    }
+    function ymd(date8){ return `${date8.slice(0,4)}-${date8.slice(4,6)}-${date8.slice(6,8)}`; }
+    function yearsBetween(start8, end8){
+      if(!start8 || !end8) return 1/365;
+      const a=new Date(`${ymd(start8)}T00:00:00`), b=new Date(`${ymd(end8)}T00:00:00`);
+      const days=Math.max(1, Math.round((b-a)/86400000)+1);
+      return days/365;
+    }
+    function formatPct(x){ return Number.isFinite(x) ? (x*100).toFixed(2)+'%' : '—'; }
+
+    async function latestFile(regex){
+      const { data } = await sb.storage.from(BUCKET).list('', { limit:1000, sortBy:{ column:'name', order:'asc' }});
+      const files = (data||[]).filter(it => it.id !== null && regex.test(it.name));
+      if(files.length===0) return null;
+      const score = n => { const m=(n||'').match(/\b(20\d{6})\b/g); return m? Math.max(...m.map(s=>+s)):0; };
+      files.sort((a,b)=>{
+        const sa=score(a.name), sb=score(b.name);
+        if(sa!==sb) return sb-sa;
+        const ta=a.updated_at? Date.parse(a.updated_at):0, tb=b.updated_at? Date.parse(b.updated_at):0;
+        if(ta!==tb) return tb-ta;
+        return (b.metadata?.size||0)-(a.metadata?.size||0);
+      });
+      return files[0];
+    }
+    async function readManifest(name){
+      try{
+        const { data } = await sb.storage.from(BUCKET).download(`manifests/${name}.json`);
+        if (!data) return null;
+        return JSON.parse(await data.text());
+      }catch{ return null; }
+    }
+
+    async function fillCard(key){ // key = "0807" | "1001"
+      const rateEl   = document.getElementById(`rate-${key}`);
+      const periodEl = document.getElementById(`period-${key}`);
+      try{
+        const want = WANT[key];
+        const latest = await latestFile(want);
+        if(!latest){ rateEl.textContent = '年均報酬率：—'; periodEl.textContent='期間：—'; return; }
+
+        const latestText = (await fetchSmart(pubUrl(latest.name))).canon;
+
+        const manifest = await readManifest(key);
+        let merged = latestText, start8='', end8='';
+        if(manifest?.baseline_path){
+          const baseText = (await fetchSmart(pubUrl(manifest.baseline_path))).canon;
+          const m = mergeByBaseline(baseText, latestText);
+          merged = m.combined; start8 = m.start8; end8 = m.end8;
+        }else{
+          const rows = parseCanon(latestText);
+          start8 = rows.length ? rows[0].ts.slice(0,8) : '';
+          end8   = rows.length ? rows[rows.length-1].ts.slice(0,8) : '';
+        }
+
+        // 用 shared.js 解析 → 建 report → 以日聚合求 CAGR
+        const parsed  = window.SHARED.parseTXT(merged);
+        const report  = window.SHARED.buildReport(parsed.rows);
+
+        const dailyMap=new Map();
+        for(const t of (report.trades||[])){
+          const d=String(t.tsOut).slice(0,8);
+          dailyMap.set(d,(dailyMap.get(d)||0)+(t.gainSlip??0));
+        }
+        const days = [...dailyMap.keys()].sort();
+        const totalPnL = [...dailyMap.values()].reduce((a,b)=>a+b,0);
+        const nav = 1000000;
+        const yrs = yearsBetween(days[0]||start8, days[days.length-1]||end8);
+        const cagr = Math.pow((nav+totalPnL)/nav, 1/Math.max(yrs,1/365)) - 1;
+
+        rateEl.textContent   = `年均報酬率：${formatPct(cagr)}`;
+        periodEl.textContent = `期間：${(days[0]||start8)||'—'} ～ ${(days[days.length-1]||end8)||'—'}`;
+      }catch(e){
+        rateEl.textContent   = '年均報酬率：—';
+        periodEl.textContent = '期間：—';
+      }
+    }
+
+    await Promise.all([fillCard("0807"), fillCard("1001")]);
+  })();
   </script>
 </body>
 </html>
