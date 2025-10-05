@@ -22,19 +22,18 @@
     .muted{color:#666;font-size:13px}
     #autostatus{white-space:pre-wrap}
   </style>
-  <!-- 依賴（與 single.html 相同） -->
+  <!-- 依賴 -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="shared.js?v=full-table-v7"></script>
-  <!-- Supabase -->
+  <script src="shared.js?v=txfee45tax2"></script>
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 </head>
 <body>
   <div class="wrap">
     <a class="back-link" href="index.html">← 返回首頁</a>
     <h1>0807版本</h1>
-    <p class="muted">本頁自動擷取檔名含 <code>0807</code> 的最新 TXT，並以「基準檔的最前／最後日期」為錨點：實際分析資料＝基準檔全段 + 基準之後的新增。</p>
+    <p class="muted">本頁將自動擷取檔名含 <code>0807</code> 的最新 TXT，並以「基準檔的最前／最後日期」為錨點：實際分析資料＝基準檔全段 + 基準之後的新增。</p>
 
-    <!-- 差異檢查（只顯示期間與檔名摘要） -->
+    <!-- 期間摘要 -->
     <div class="card" id="diffCard">
       <div class="row">
         <strong>差異檢查</strong>
@@ -69,7 +68,9 @@
     </div>
   </div>
 
-  <script src="single.js?v=full-table-v14-safe"></script>
-  <script src="0807.js?v=anchored-merge"></script>
+  <!-- 主分析（帶版本號清快取） -->
+  <script src="single.js?v=full-table-v14-safe-tx2"></script>
+  <!-- 0807 自動合併/期間摘要（帶版本號清快取） -->
+  <script src="0807.js?v=anchored-merge-tx2"></script>
 </body>
 </html>
