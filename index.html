@@ -9,10 +9,11 @@
     body{ font-family: Arial, "微軟正黑體", sans-serif; margin: 20px; background:#f8f9fa; color:#333; }
     h1{ text-align:center; margin:0 0 6px 0; font-weight: 800; letter-spacing:.5px; }
     .subtitle{ text-align:center; color:#666; margin:0 0 18px 0; font-size:14px; }
-    hr{ border:none; border-top:1px solid #ddd; margin:20px auto; max-width:900px; }
+    hr{ border:none; border-top:1px solid #ddd; margin:20px auto; max-width:1100px; }
 
     .section-title-red{ max-width:1100px; margin: 10px auto 12px; font-size:20px; font-weight:800; color:#d32f2f; letter-spacing:.5px; }
     .section-title-blue{ max-width:1100px; margin: 10px auto 12px; font-size:20px; font-weight:800; color:#0d6efd; letter-spacing:.5px; }
+    .section-title-black{ max-width:1100px; margin: 10px auto 12px; font-size:20px; font-weight:800; color:#111; letter-spacing:.5px; }
 
     .strategy-grid{ display:grid; grid-template-columns: repeat(3, 1fr); gap:20px; max-width:1100px; margin: 0 auto 28px; }
     .strategy-col{ display:flex; flex-direction:column; gap:12px; }
@@ -27,14 +28,20 @@
     }
     a.card:hover{ transform: translateY(-4px); box-shadow:0 10px 22px rgba(0,0,0,.12); }
     .card-title{ font-weight:700; font-size:18px; margin:0 0 8px 0; text-align:center; }
-    .card-title.red{ color:#d32f2f; } .card-title.blue{ color:#0d6efd; } .card-title.gray{ color:#6c757d; }
+    .card-title.red{ color:#d32f2f; } .card-title.blue{ color:#0d6efd; } .card-title.gray{ color:#6c757d; } .card-title.black{ color:#111; }
     .card-desc{ margin:0; color:#666; font-size:14px; line-height:1.5; text-align:left; }
 
+    /* 指標行：雙欄置中（左：標籤；右：數值） */
     .lines{ margin-top:2px; }
     .line{ display:grid; grid-template-columns: 1fr 1fr; align-items:center; margin:2px 0; font-size:12px; }
     .label{ text-align:center; color:#111; }
     .val{ text-align:center; font-weight:700; }
-    .val.pos{ color:#d32f2f; } .val.neg{ color:#10b981; } .val.neu{ color:#666; }
+    .val.pos{ color:#d32f2f; }  /* 賺錢：紅色 */
+    .val.neg{ color:#10b981; }  /* 虧損：綠色 */
+    .val.neu{ color:#666; }
+
+    /* 近1週的視窗日期（置中、灰字） */
+    .subperiod{ text-align:center; font-size:11px; color:#999; margin:-2px 0 2px; }
 
     .period{ margin-top:6px; color:#666; font-size:12px; text-align:center; }
 
@@ -57,6 +64,7 @@
         <p class="card-title red">0807版本</p>
         <div class="lines">
           <p class="line"><span class="label">近1週報酬率</span> <span id="wk1-0807" class="val neu">—</span></p>
+          <p id="wk1-range-0807" class="subperiod">—</p>
           <p class="line"><span class="label">近2週報酬率</span> <span id="wk2-0807" class="val neu">—</span></p>
           <p class="line"><span class="label">近1月報酬率</span> <span id="m1-0807" class="val neu">—</span></p>
           <p class="line"><span class="label">近2月報酬率</span> <span id="m2-0807" class="val neu">—</span></p>
@@ -75,6 +83,7 @@
         <p class="card-title red">1001版本</p>
         <div class="lines">
           <p class="line"><span class="label">近1週報酬率</span> <span id="wk1-1001" class="val neu">—</span></p>
+          <p id="wk1-range-1001" class="subperiod">—</p>
           <p class="line"><span class="label">近2週報酬率</span> <span id="wk2-1001" class="val neu">—</span></p>
           <p class="line"><span class="label">近1月報酬率</span> <span id="m1-1001" class="val neu">—</span></p>
           <p class="line"><span class="label">近2月報酬率</span> <span id="m2-1001" class="val neu">—</span></p>
@@ -107,9 +116,18 @@
     <a class="card" href="single.html"><p class="card-title blue">單檔分析</p><p class="card-desc">分析單一檔案，輸出收益曲線、KPI、交易統計與關鍵指標。</p></a>
     <a class="card" href="multi.html"><p class="card-title blue">多檔分析</p><p class="card-desc">同時上傳多個檔案，輸出彙總表、分策略／分年度統計與比較。</p></a>
     <a class="card" href="monthly.html"><p class="card-title blue">分月報告</p><p class="card-desc">自動按月份拆分績效，提供月度盈虧、勝率、PF、MDD 等報告。</p></a>
-    <a class="card" href="upload.html"><p class="card-title blue">資料上傳區</p><p class="card-desc">上傳／檢視／下載／刪除回測與實倉報表，支援多檔批次處理。</p></a>
     <a class="card" href="single-cloud.html"><p class="card-title blue">雲端單檔分析 <span class="tag">第5分頁</span></p><p class="card-desc">直接從「資料上傳區」挑選檔案進行單檔分析，免重複上傳。</p></a>
     <a class="card" href="multi-adv.html"><p class="card-title blue">多檔分析進階版 <span class="tag">第6分頁</span></p><p class="card-desc">進階彙總＋參數欄；支援一鍵開啟單檔分析（機構級）與指標對照。</p></a>
+  </div>
+
+  <hr>
+
+  <h3 class="section-title-black">資料</h3>
+  <div class="nav">
+    <a class="card" href="upload.html">
+      <p class="card-title black">上傳檔案</p>
+      <p class="card-desc">上傳／檢視／下載／刪除回測與實倉報表，支援多檔批次處理。</p>
+    </a>
   </div>
 
   <!-- 依賴 -->
@@ -150,6 +168,7 @@
 
     const CANON_RE   = /^(\d{14})\.0{6}\s+(\d+\.\d{6})\s+(新買|平賣|新賣|平買|強制平倉|強平)\s*$/;
     const EXTRACT_RE = /.*?(\d{14})(?:\.0{1,6})?\s+(\d+(?:\.\d{1,6})?)\s*(新買|平賣|新賣|平買|強制平倉|強平)\s*$/;
+
     function normalizeText(raw){
       let s = raw.replace(/\ufeff/gi,'').replace(/\u200b|\u200c|\u200d/gi,'');
       s = s.replace(/[\x00-\x09\x0B-\x1F\x7F]/g,'').replace(/\r\n?/g,'\n').replace(/\u3000/g,' ');
@@ -197,6 +216,7 @@
       return { combined: mergedLines.join('\n'), start8: baseMin, end8: endDay };
     }
 
+    /* 從 shared.js 產生日損益（含滑價） */
     function dailySeriesFromMerged(mergedTxt){
       const parsed  = window.SHARED.parseTXT(mergedTxt);
       const report  = window.SHARED.buildReport(parsed.rows);
@@ -207,30 +227,24 @@
       return {days, vals};
     }
 
-    function d8(d8){ return new Date(`${d8.slice(0,4)}-${d8.slice(4,6)}-${d8.slice(6,8)}T00:00:00`); }
+    function d8(s){ return new Date(`${s.slice(0,4)}-${s.slice(4,6)}-${s.slice(6,8)}T00:00:00`); }
+    function fmtD8(s){ return `${s.slice(0,4)}/${s.slice(4,6)}/${s.slice(6,8)}`; }
     function diffDays(a8,b8){ return Math.max(1, Math.round((d8(b8)-d8(a8))/86400000)+1); }
 
-    function setVal(id, v){
-      const el = document.getElementById(id); if(!el) return;
-      el.classList.remove('pos','neg','neu');
-      if (v == null) { el.textContent='---'; el.classList.add('neu'); return; }
-      el.textContent = (v*100).toFixed(2)+'%';
-      el.classList.add(v>0 ? 'pos' : (v<0 ? 'neg' : 'neu'));
-    }
-
-    // 最近 N 天的單純報酬率（合計損益 / 100萬）
-    function simpleReturn(days, vals, winDays){
-      if(!days.length) return null;
+    // 視窗近 N 天的單純報酬率（合計 / 100萬），並回傳起訖範圍
+    function simpleReturnWithRange(days, vals, winDays){
+      if(!days.length) return {ret:null, range:'---'};
       const end = days[days.length-1];
       const thr = new Date(d8(end).getTime() - (winDays-1)*86400000);
       let i=0; while(i<days.length && d8(days[i]) < thr) i++;
-      if (i>=days.length) return null;
+      if (i>=days.length) return {ret:null, range:'---'};
+      const startDay = days[i];
       const pref=[0]; for(const v of vals) pref.push(pref[pref.length-1]+v);
       const sum = pref[vals.length] - pref[i];
-      return sum / 1_000_000;
+      return { ret: sum/1_000_000, range: `${fmtD8(startDay)} ~ ${fmtD8(end)}` };
     }
 
-    // 年窗報酬率：若資料期長 < 年窗 − 60 天 → null（顯示 ---）
+    // 年窗：不足年窗-60天則回 null
     function simpleReturnYearWindow(days, vals, winDays){
       if(!days.length) return null;
       const cover = diffDays(days[0], days[days.length-1]);
@@ -241,18 +255,31 @@
       if (i>=days.length) i=0;
       const pref=[0]; for(const v of vals) pref.push(pref[pref.length-1]+v);
       const sum = pref[vals.length] - pref[i];
-      return sum / 1_000_000;
+      return sum/1_000_000;
+    }
+
+    function setVal(id, v){
+      const el = document.getElementById(id); if(!el) return;
+      el.classList.remove('pos','neg','neu');
+      if (v == null) { el.textContent='---'; el.classList.add('neu'); return; }
+      el.textContent = (v*100).toFixed(2)+'%';
+      el.classList.add(v>0 ? 'pos' : (v<0 ? 'neg' : 'neu'));
     }
 
     async function fillCard(key){
       const set = (suf, v)=>setVal(`${suf}-${key}`, v);
+      const setText = (id, text)=>{ const el=document.getElementById(`${id}-${key}`); if(el) el.textContent=text; };
       const setPeriod = (text)=>{ const el=document.getElementById(`period-${key}`); if(el) el.textContent=text; };
 
       try{
         const latest = await latestFile(WANT[key]);
-        if(!latest){ ['wk1','wk2','m1','m2','m3','m6','y1','y2','y3','y6'].forEach(x=> set(x, null)); setPeriod('—'); return; }
-
+        if(!latest){
+          ['wk1','wk2','m1','m2','m3','m6','y1','y2','y3','y6'].forEach(x=> set(x, null));
+          setText('wk1-range','---'); setPeriod('—'); return;
+        }
         const latestText = (await fetchSmart(pubUrl(latest.name))).canon;
+
+        // 合併（若有基準）
         const manifest = await readManifest(key);
         let merged = latestText, start8='', end8='';
         if(manifest?.baseline_path){
@@ -267,15 +294,18 @@
 
         const {days, vals} = dailySeriesFromMerged(merged);
 
-        // 週 / 月（單純報酬）
-        set('wk1', simpleReturn(days, vals, 7));
-        set('wk2', simpleReturn(days, vals, 14));
-        set('m1',  simpleReturn(days, vals, 30));
-        set('m2',  simpleReturn(days, vals, 60));
-        set('m3',  simpleReturn(days, vals, 90));
-        set('m6',  simpleReturn(days, vals, 180));
+        // 近1週：顯示期間
+        const r1 = simpleReturnWithRange(days, vals, 7);
+        set('wk1', r1.ret); setText('wk1-range', r1.range);
 
-        // 年窗（不足年窗 - 60 天 → ---）
+        // 近2週 / 近1~6月
+        set('wk2', simpleReturnWithRange(days, vals, 14).ret);
+        set('m1',  simpleReturnWithRange(days, vals, 30).ret);
+        set('m2',  simpleReturnWithRange(days, vals, 60).ret);
+        set('m3',  simpleReturnWithRange(days, vals, 90).ret);
+        set('m6',  simpleReturnWithRange(days, vals, 180).ret);
+
+        // 近1/2/3/6年（不足年窗-60天 → ---）
         set('y1', simpleReturnYearWindow(days, vals, 365));
         set('y2', simpleReturnYearWindow(days, vals, 730));
         set('y3', simpleReturnYearWindow(days, vals, 1095));
@@ -284,7 +314,7 @@
         setPeriod(`${start8||'—'} ～ ${end8||'—'}`);
       }catch(e){
         ['wk1','wk2','m1','m2','m3','m6','y1','y2','y3','y6'].forEach(x=> set(x, null));
-        setPeriod('—');
+        setText('wk1-range','---'); setPeriod('—');
       }
     }
 
