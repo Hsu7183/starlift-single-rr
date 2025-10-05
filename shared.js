@@ -16,7 +16,7 @@
   /* ===== 常數 ===== */
   SHARED.MULT = 200;     // 台指期乘數
   SHARED.FEE  = 45;      // 單邊手續費（與期貨商約定；供其他地方需要時參考）
-  SHARED.TAX  = 0;       // 保留舊欄位；實際期交稅由 buildReport 依規定計雙邊
+  SHARED.TAX  = 0;       // 舊欄位保留；實際期交稅由 buildReport 依規定計雙邊
   const TX_TAX_RATE = 0.00002;           // 期交稅率（股價類期貨）
   const SLIP_MONEY  = 4 * SHARED.MULT;   // 固定滑價：進/出各 -2 點 → -4 點 = 800
 
