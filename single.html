@@ -15,9 +15,10 @@
     .back-link{margin-bottom:12px;display:inline-block}
     .scroll-x{overflow-x:auto}
   </style>
-  <!-- 依賴 -->
+  <!-- 第三方依賴 -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="shared.js?v=full-table-v7"></script>
+  <!-- 用新版參數清快取 -->
+  <script src="shared.js?v=txfee45tax2"></script>
 </head>
 <body>
   <div class="wrap">
@@ -38,7 +39,7 @@
 
     <!-- KPI（合併表格） -->
     <div id="kpiAll" class="card scroll-x"></div>
-    <div id="kpiL"></div><div id="kpiS"></div> <!-- 不再使用，但保留避免報錯 -->
+    <div id="kpiL"></div><div id="kpiS"></div>
 
     <!-- Risk-Return 表 -->
     <div id="rrLines" class="card scroll-x"></div>
@@ -52,7 +53,7 @@
     </div>
   </div>
 
-  <!-- 主檔 -->
-  <script src="single.js?v=full-table-v8"></script>
+  <!-- 主檔（帶版本號清快取） -->
+  <script src="single.js?v=full-table-v14-safe-tx2"></script>
 </body>
 </html>
