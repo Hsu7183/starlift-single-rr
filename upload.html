@@ -6,41 +6,38 @@
   <title>資料上傳區（第4分頁）</title>
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
   <style>
-    body { font-family: Arial,"微軟正黑體",sans-serif; background:#f8f9fa; color:#333; margin:20px; }
-    h1 { margin:8px 0; }
-    .topbar{display:flex;align-items:center;gap:10px;margin-bottom:8px;}
-    .home{ text-decoration:none; color:#0d6efd; font-weight:700; }
-    .home::before{ content:"← "; }
-    .badge{ margin-left:auto; background:#eef4ff; color:#0d6efd; padding:4px 8px; border-radius:999px; font-size:12px; }
-
-    .panel{ background:#fff; padding:16px; border-radius:10px; box-shadow:0 2px 6px rgba(0,0,0,.08); margin-bottom:16px; }
-    .row{ display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
-    input[type="file"]{ padding:6px; }
-    input[type="text"]{ padding:8px; border:1px solid #ddd; border-radius:8px; }
-    button{ padding:8px 14px; border:0; border-radius:8px; cursor:pointer; }
-    .primary{ background:#0d6efd; color:#fff; }
-    .danger{ background:#dc3545; color:#fff; }
-    .link{ background:transparent; color:#0d6efd; text-decoration:underline; padding:0; }
-    .muted{ color:#666; }
-    .hint{ font-size:12px; color:#777; }
-
-    table{ width:100%; border-collapse:collapse; background:#fff; border-radius:10px; overflow:hidden; }
-    th,td{ border-bottom:1px solid #eee; padding:10px; text-align:left; font-size:14px; }
-    th{ background:#fafafa; }
-    .right{ text-align:right; }
-    .warn{ color:#b90; }
-    .ok{ color:#128a27; }
+    body{font-family:Arial,"微軟正黑體",sans-serif;background:#f8f9fa;color:#333;margin:20px}
+    h1{margin:8px 0}
+    .topbar{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+    .home{text-decoration:none;color:#0d6efd;font-weight:700}.home::before{content:"← "}
+    .badge{margin-left:auto;background:#eef4ff;color:#0d6efd;padding:4px 8px;border-radius:999px;font-size:12px}
+    .panel{background:#fff;padding:16px;border-radius:10px;box-shadow:0 2px 6px rgba(0,0,0,.08);margin-bottom:16px}
+    .row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+    input[type="file"]{padding:6px}
+    input[type="text"]{padding:8px;border:1px solid #ddd;border-radius:8px}
+    button{padding:8px 14px;border:0;border-radius:8px;cursor:pointer}
+    .primary{background:#0d6efd;color:#fff}.danger{background:#dc3545;color:#fff}
+    .link{background:transparent;color:#0d6efd;text-decoration:underline;padding:0}
+    .muted{color:#666}.hint{font-size:12px;color:#777}
+    table{width:100%;border-collapse:collapse;background:#fff;border-radius:10px;overflow:hidden}
+    th,td{border-bottom:1px solid #eee;padding:10px;text-align:left;font-size:14px}
+    th{background:#fafafa}.right{text-align:right}.warn{color:#b90}.ok{color:#128a27}
+    .op a{margin-right:8px}
   </style>
 </head>
 <body>
   <!-- 頂部導覽 -->
   <div class="topbar">
     <a class="home" href="index.html">回首頁</a>
-    <span class="badge">Bucket: reports（Public）</span>
+    <span id="projBadge" class="badge">Bucket: reports（Public）</span>
   </div>
 
   <h1>資料上傳區</h1>
-  <p class="muted" style="margin-top:-6px;">上傳／檢視／下載／刪除（完全公開）。命名建議：<code>策略-參數-起始日-結束日.ext</code>（例：<code>0807-ATR20x2-FITX-1m-20231002-20250923.txt</code>）。</p>
+  <p class="muted" style="margin-top:-6px;">
+    上傳／檢視／下載／刪除（完全公開）。命名建議：
+    <code>策略-參數-起始日-結束日.ext</code>
+    （例：<code>0807-ATR20x2-FITX-1m-20231002-20250923.txt</code>）。
+  </p>
 
   <!-- 上傳 -->
   <div class="panel">
@@ -87,13 +84,27 @@
   </div>
 
 <script>
-/* ===== Supabase 設定（免登入版） ===== */
-const SUPABASE_URL = "https://byhbmmnacezzgkwfkozs.supabase.co";
-const SUPABASE_ANON_KEY = "sb_publishable_xVe8fGbqQ0XGwi4DsmjPMg_Y2RBOD3t";
+/* ===== Supabase 設定（把這兩個換成你的專案值；anon key 會以 eyJ... 開頭） ===== */
+const SUPABASE_URL     = "https://byhbmmnacezzgkwfkozs.supabase.co";   // ← 換成你的
+const SUPABASE_ANON_KEY= "eyJ...你的AnonPublicKey...";                  // ← 換成你的（不是 sb_publishable_）
+
+/* 掛到 window 方便你在 Console 檢查 */
+window.SUPABASE_URL = SUPABASE_URL;
+window.SUPABASE_ANON_KEY = SUPABASE_ANON_KEY;
+
+/* 其它設定 */
 const BUCKET_NAME = "reports";
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-  global: { fetch: (url, opts={}) => fetch(url, { ...opts, cache:'no-store' }) }
+  global:{ fetch:(url,opts={})=>fetch(url,{...opts,cache:'no-store'}) }
 });
+
+/* 顯示目前連線到哪個專案 */
+(function(){
+  const u = new URL(SUPABASE_URL);
+  const proj = (u.hostname||"").split(".")[0]; // byhbmmnacezzgkwfkozs
+  document.getElementById("projBadge").textContent =
+    `Bucket: ${BUCKET_NAME}（Public）｜Project: ${proj}`;
+})();
 
 /* DOM */
 const fileInput   = document.getElementById('fileInput');
@@ -105,11 +116,9 @@ const uploadMsg   = document.getElementById('uploadMsg');
 /* 工具 */
 function withDownload(url){ return url ? url + (url.includes('?')?'&':'?') + 'download' : '#'; }
 function sanitizeSeg(s){ return (s||'').normalize('NFKD').replace(/[^\w.\-]+/g,'-').replace(/-+/g,'-').replace(/^-+|-+$/g,''); }
-function makeSafePath(folder, name){
-  const segs = [];
-  if(folder && folder.trim()){ for(const raw of folder.split('/')){ const c=sanitizeSeg(raw.trim()); if(c) segs.push(c); } }
-  const safeName = sanitizeSeg(name);
-  return (segs.length?segs.join('/')+'/':'') + safeName;
+function makeSafePath(folder,name){
+  const segs=[]; if(folder&&folder.trim()){ for(const raw of folder.split('/')){ const c=sanitizeSeg(raw.trim()); if(c) segs.push(c); } }
+  const safeName=sanitizeSeg(name); return (segs.length?segs.join('/')+'/':'')+safeName;
 }
 function normalizePrefix(v){ v=(v||'').trim(); if(v && !v.endsWith('/')) v+='/'; return v; }
 function parseMeta(fullPath){
@@ -124,20 +133,30 @@ function parseMeta(fullPath){
   else{ if(segs.length>=1) strategy=segs[0]; if(segs.length>=2) params=segs.slice(1).join('-'); }
   return {strategy,params,range};
 }
-function formatBytes(bytes){ if(!bytes) return '0 B'; const k=1024, dm=1, sizes=['B','KB','MB','GB','TB']; const i=Math.floor(Math.log(bytes)/Math.log(k)); return parseFloat((bytes/Math.pow(k,i)).toFixed(dm))+' '+sizes[i]; }
+function formatBytes(bytes){ if(!(bytes>0)) return '0 B'; const k=1024, dm=1, sizes=['B','KB','MB','GB','TB']; const i=Math.floor(Math.log(bytes)/Math.log(k)); return parseFloat((bytes/Math.pow(k,i)).toFixed(dm))+' '+sizes[i]; }
+function toLocal(dt){ try{ return new Date(dt).toLocaleString(); }catch{ return '—'; } }
+function copy(txt){ navigator.clipboard?.writeText(txt); }
 
-/* 清單（所有人可載入） */
+/* 清單（匿名可讀） */
 async function refreshList(){
   tbody.innerHTML = '<tr><td colspan="6" class="muted">載入中...</td></tr>';
   const path = normalizePrefix(prefixEl.value);
-  const { data, error } = await sb.storage.from(BUCKET_NAME).list(path, { limit:1000, sortBy:{column:'name',order:'asc'} });
 
-  if(error){ tbody.innerHTML = `<tr><td colspan="6" class="muted">讀取失敗：${error.message}</td></tr>`; return; }
-  if(!data || data.length===0){ tbody.innerHTML = `<tr><td colspan="6" class="muted">（沒有檔案）</td></tr>`; return; }
+  const { data, error } = await sb.storage.from(BUCKET_NAME).list(path, { limit:1000, sortBy:{column:'name',order:'asc'} });
+  if(error){
+    tbody.innerHTML = `<tr><td colspan="6" class="muted">讀取失敗：${error.message}（請檢查 anon key、Storage Policies）</td></tr>`;
+    return;
+  }
+  if(!data || data.length===0){
+    tbody.innerHTML = `<tr><td colspan="6" class="muted">（沒有檔案）</td></tr>`;
+    return;
+  }
 
   tbody.innerHTML = '';
   for(const item of data){
-    if(item.id===null && !item.metadata) continue; // 跳過資料夾
+    // Supabase 的資料夾列通常 metadata 為 null（視為資料夾），跳過
+    if(!item.id && !item.metadata){ continue; }
+
     const fullPath = (path?path:'') + item.name;
     const meta = parseMeta(fullPath);
 
@@ -147,7 +166,7 @@ async function refreshList(){
     const dlUrl   = withDownload(viewUrl);
 
     const sizeStr = item.metadata?.size ? formatBytes(item.metadata.size) : '—';
-    const updated = item.updated_at ? new Date(item.updated_at).toLocaleString() : '—';
+    const updated = item.updated_at ? toLocal(item.updated_at) : '—';
 
     const tr = document.createElement('tr');
     tr.innerHTML = `
@@ -156,29 +175,40 @@ async function refreshList(){
       <td>${meta.range}</td>
       <td class="right">${sizeStr}</td>
       <td>${updated}</td>
-      <td class="right">
+      <td class="right op">
         <a class="link" href="${viewUrl}" target="_blank" rel="noopener">檢視</a>
-        &nbsp;|&nbsp;
         <a class="link" href="${dlUrl}">下載</a>
-        &nbsp;|&nbsp;
+        <a class="link" href="#" data-copy="${viewUrl}">複製連結</a>
+        <a class="link" href="#" data-copy="INDEX?file=${encodeURIComponent(viewUrl)}">複製分析連結</a>
         <button class="danger" data-path="${fullPath}">刪除</button>
       </td>`;
     tbody.appendChild(tr);
   }
 
-  // 綁定刪除
+  // 綁定刪除與複製
   tbody.querySelectorAll('button.danger').forEach(btn=>{
     btn.onclick = async ()=>{
       const p = btn.getAttribute('data-path');
       if(!confirm(`確定刪除「${p}」？`)) return;
       const { error } = await sb.storage.from(BUCKET_NAME).remove([p]);
-      if(error) alert('刪除失敗：'+error.message);
+      if(error){ alert('刪除失敗：'+error.message); return; }
       refreshList();
+    };
+  });
+  tbody.querySelectorAll('a[data-copy]').forEach(a=>{
+    a.onclick = (e)=>{
+      e.preventDefault();
+      let v = a.getAttribute('data-copy');
+      if(v.startsWith('INDEX?file=')){
+        const idx = new URL('./index.html', location.href).href;
+        v = idx + '?' + v.split('?')[1];
+      }
+      copy(v); a.textContent = '已複製'; setTimeout(()=>a.textContent='複製連結',1200);
     };
   });
 }
 
-/* 上傳（所有人可上傳） */
+/* 上傳（匿名可上傳） */
 document.getElementById('btnUpload').onclick = async ()=>{
   const files = fileInput.files;
   const folder = subfolderEl.value?.trim();
@@ -192,7 +222,7 @@ document.getElementById('btnUpload').onclick = async ()=>{
     });
     if(error){ uploadMsg.innerHTML = `<span class="warn">上傳失敗：${error.message}</span>`; return; }
   }
-  uploadMsg.innerHTML = '✅ 上傳完成';
+  uploadMsg.innerHTML = '<span class="ok">✅ 上傳完成</span>';
   fileInput.value=''; refreshList();
 };
 
