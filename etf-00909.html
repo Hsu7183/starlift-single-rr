@@ -8,7 +8,7 @@
   :root{ --wrap:1100px; --r:12px; }
   body{
     font-family:Arial,"微軟正黑體",sans-serif;
-    font-variant-numeric: tabular-nums;  /* 等寬數字，避免忽大忽小 */
+    font-variant-numeric: tabular-nums;
     margin:20px; background:#f8f9fa; color:#333;
   }
   h1{ margin:0 0 6px 0; font-weight:800; letter-spacing:.5px; }
@@ -17,9 +17,8 @@
   .toolbar{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
   .home{ display:inline-block; padding:6px 10px; border-radius:10px; border:1px solid #aaa; color:#333; text-decoration:none; font-size:12px; }
   .home:hover{ background:#f2f2f2; }
-  .card{ background:#fff; border:1px solid #e5e7eb; border-radius:var(--r); box-shadow:0 2px 8px rgba(0,0,0,.06); padding:16px 18px; margin:14px 0; }
-  .card.wide{ width:100vw; margin-left:calc(50% - 50vw); padding-left:24px; padding-right:24px; overflow-x:auto; }
 
+  .card{ background:#fff; border:1px solid #e5e7eb; border-radius:var(--r); box-shadow:0 2px 8px rgba(0,0,0,.06); padding:16px 18px; margin:14px 0; }
   .meta{ color:#666; font-size:12px; }
   .btn{ display:inline-block; padding:6px 10px; border-radius:10px; border:1px solid #0d6efd; color:#0d6efd; text-decoration:none; font-size:12px; }
   .btn.secondary{ border-color:#aaa; color:#555; }
@@ -28,28 +27,30 @@
   .kpi{ background:#fafafa; border:1px solid #eee; border-radius:10px; padding:10px 12px; }
   .kpi .t{ font-size:12px; color:#666; margin:0; }
   .kpi .v{ font-size:20px; font-weight:800; margin:4px 0 0; color:#111; }
-  .kpi .v.green{ color:#10b981; }  /* 一般正值 → 綠 */
-  .kpi .v.red{   color:#d32f2f; }  /* 獲利類正值 → 紅 */
+  .kpi .v.green{ color:#10b981; }
+  .kpi .v.red{   color:#d32f2f; }
   .kpi .v.muted{ color:#666; }
 
   .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
   .chartbox{ height:340px; }
   canvas{ width:100%; height:100%; background:#fff; border:1px solid #eee; border-radius:10px; }
 
-  /* ====== 交易明細：固定欄寬、不換行、零間隔（只留底線） ====== */
+  /* ====== 交易明細：固定欄寬、不換行、置中、零間隔 ====== */
+  .card.tablecard{ padding-left:0; padding-right:0; }
+  .table-wrap{ display:flex; justify-content:center; }
   .simple-table{
-    table-layout:fixed !important;     /* 用 colgroup 決定寬度，禁止自動重算 */
-    width:1802px;                      /* 20 欄固定總寬（等於下方 colgroup 寬度總和） */
+    table-layout:fixed !important;
+    width:1802px; /* 等於下方 colgroup 寬度總和 */
     border-collapse:collapse;
     font-size:11px;
     font-variant-numeric: tabular-nums;
   }
   .simple-table th,.simple-table td{
-    box-sizing:border-box;             /* padding 不再撐寬 */
+    box-sizing:border-box;
     padding:4px 6px;
-    white-space:nowrap;                /* 禁止換行 */
-    overflow:hidden;                   /* 超出裁切 */
-    text-overflow:ellipsis;            /* 以省略號處理 */
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
     border-bottom:1px solid #eee;
     text-align:right;
   }
@@ -78,27 +79,17 @@
     </div>
   </div>
 
-  <!-- 建議投資方式 -->
-  <div class="card">
-    <h3>建議投資方式（本金 100 萬，單位規則 1-1-2）</h3>
-    <table class="simple-table">
-      <tbody>
-        <tr><th style="width:160px;text-align:left;">最近一次買進時間</th><td id="plan-lastBuy">—</td></tr>
-        <tr><th style="text-align:left;">當時買進價（元）</th><td id="plan-lastPx">—</td></tr>
-        <tr><th style="text-align:left;">一張金額（元）</th><td id="plan-lotAmt">—</td></tr>
-        <tr><th style="text-align:left;">極限可買張數（本金 ÷ 一張）</th><td id="plan-maxLots">—</td></tr>
-        <tr><th style="text-align:left;">單位配置（1-1-2）</th><td id="plan-units">—</td></tr>
-        <tr><th style="text-align:left;">計畫張數（合計）</th><td id="plan-planLots">—</td></tr>
-        <tr><th style="text-align:left;">參考獲利（最近完成一筆每張損益 × 計畫張數）</th><td id="plan-profit">—</td></tr>
-      </tbody>
-    </table>
-  </div>
-
-  <!-- KPI 區 -->
-  <div class="card"><h3>核心績效</h3><div id="kpi-core" class="kpi-grid"></div></div>
-  <div class="card"><h3>風險與風險調整</h3><div id="kpi-risk" class="kpi-grid"></div></div>
-  <div class="card"><h3>交易層與執行品質</h3><div id="kpi-trade" class="kpi-grid"></div></div>
-  <div class="card"><h3>容量與參與率</h3><div id="kpi-cap" class="kpi-grid"></div></div>
+  <!-- KPI 區：10 大類 -->
+  <div class="card"><h3>核心績效（Performance）</h3><div id="kpi-core" class="kpi-grid"></div></div>
+  <div class="card"><h3>風險（Risk）</h3><div id="kpi-risk" class="kpi-grid"></div></div>
+  <div class="card"><h3>風險調整後報酬（Risk-Adjusted）</h3><div id="kpi-ra" class="kpi-grid"></div></div>
+  <div class="card"><h3>下行風險（Downside Risk）</h3><div id="kpi-down" class="kpi-grid"></div></div>
+  <div class="card"><h3>交易品質（Trade Quality）</h3><div id="kpi-trade" class="kpi-grid"></div></div>
+  <div class="card"><h3>執行品質（Execution Quality）</h3><div id="kpi-exe" class="kpi-grid"></div></div>
+  <div class="card"><h3>穩健性（Stability / Robustness）</h3><div id="kpi-stab" class="kpi-grid"></div></div>
+  <div class="card"><h3>資金效率（Capital Efficiency）</h3><div id="kpi-capital" class="kpi-grid"></div></div>
+  <div class="card"><h3>容量與流動性（Capacity & Liquidity）</h3><div id="kpi-cap" class="kpi-grid"></div></div>
+  <div class="card"><h3>延伸統計（Extended Stats）</h3><div id="kpi-ext" class="kpi-grid"></div></div>
 
   <!-- 圖表 -->
   <div class="card"><h3>收益曲線（每百萬 %）</h3><div class="chartbox"><canvas id="eq"></canvas></div></div>
@@ -108,44 +99,46 @@
   </div>
 </div>
 
-<!-- 交易明細（滿寬、固定欄寬、不換行） -->
-<div class="card wide">
-  <h3>交易明細</h3>
-  <table class="simple-table" id="tblTrade">
-    <colgroup>
-      <col style="width:50px;"><!-- 筆數 -->
-      <col style="width:64px;"><!-- 股票名稱 -->
-      <col style="width:84px;"><!-- 成交日 -->
-      <col style="width:56px;"><!-- 種類 -->
-      <col style="width:86px;"><!-- 交易數量 -->
-      <col style="width:64px;"><!-- 單價 -->
-      <col style="width:64px;"><!-- 手續費 -->
-      <col style="width:110px;"><!-- 買進金額 -->
-      <col style="width:110px;"><!-- 賣出金額 -->
-      <col style="width:96px;"><!-- 損益 -->
-      <col style="width:72px;"><!-- 獲利率 -->
-      <col style="width:120px;"><!-- 累計損益 -->
-      <col style="width:110px;"><!-- 建議交易數量(股) -->
-      <col style="width:64px;"><!-- 單價 -->
-      <col style="width:90px;"><!-- 手續費(估) -->
-      <col style="width:120px;"><!-- 買進金額(估) -->
-      <col style="width:120px;"><!-- 賣出金額(估) -->
-      <col style="width:110px;"><!-- 損益試算 -->
-      <col style="width:72px;"><!-- 獲利率(試) -->
-      <col style="width:140px;"><!-- 累計損益(含試算) -->
-    </colgroup>
-    <thead>
-      <tr>
-        <th>筆數</th><th>股票名稱</th><th>成交日</th><th>種類</th><th>交易數量</th><th>單價</th><th>手續費</th>
-        <th>買進金額</th><th>賣出金額</th>
-        <th>損益</th><th>獲利率</th><th>累計損益</th>
-        <th style="border-left:2px solid #ddd;">建議交易數量(股)</th><th>單價</th><th>手續費(估)</th>
-        <th>買進金額(估)</th><th>賣出金額(估)</th>
-        <th>損益試算</th><th>獲利率</th><th>累計損益(含試算)</th>
-      </tr>
-    </thead>
-    <tbody></tbody>
-  </table>
+<!-- 交易明細：置中顯示 -->
+<div class="card tablecard">
+  <h3 style="padding-left:18px;">交易明細</h3>
+  <div class="table-wrap">
+    <table class="simple-table" id="tblTrade">
+      <colgroup>
+        <col style="width:50px;"><!-- 筆數 -->
+        <col style="width:64px;"><!-- 股票名稱 -->
+        <col style="width:84px;"><!-- 成交日 -->
+        <col style="width:56px;"><!-- 種類 -->
+        <col style="width:86px;"><!-- 交易數量 -->
+        <col style="width:64px;"><!-- 單價 -->
+        <col style="width:64px;"><!-- 手續費 -->
+        <col style="width:110px;"><!-- 買進金額 -->
+        <col style="width:110px;"><!-- 賣出金額 -->
+        <col style="width:96px;"><!-- 損益 -->
+        <col style="width:72px;"><!-- 獲利率 -->
+        <col style="width:120px;"><!-- 累計損益 -->
+        <col style="width:110px;"><!-- 建議交易數量(股) -->
+        <col style="width:64px;"><!-- 單價 -->
+        <col style="width:90px;"><!-- 手續費(估) -->
+        <col style="width:120px;"><!-- 買進金額(估) -->
+        <col style="width:120px;"><!-- 賣出金額(估) -->
+        <col style="width:110px;"><!-- 損益試算 -->
+        <col style="width:72px;"><!-- 獲利率(試) -->
+        <col style="width:140px;"><!-- 累計損益(含試算) -->
+      </colgroup>
+      <thead>
+        <tr>
+          <th>筆數</th><th>股票名稱</th><th>成交日</th><th>種類</th><th>交易數量</th><th>單價</th><th>手續費</th>
+          <th>買進金額</th><th>賣出金額</th>
+          <th>損益</th><th>獲利率</th><th>累計損益</th>
+          <th style="border-left:2px solid #ddd;">建議交易數量(股)</th><th>單價</th><th>手續費(估)</th>
+          <th>買進金額(估)</th><th>賣出金額(估)</th>
+          <th>損益試算</th><th>獲利率</th><th>累計損益(含試算)</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
 </div>
 
 <!-- 依賴 -->
@@ -210,14 +203,21 @@
       d.appendChild(t); d.appendChild(v); el.appendChild(d);
     });
   }
-  const pct=x=>(x==null?'—':(x*100).toFixed(2)+'%');
-  const num=x=>(x==null?'—':(+x).toFixed(2));
-  const int=x=>(x==null?'—':Math.round(+x).toString());
+  const pct=x=>(x==null||!isFinite(x)?'—':(x*100).toFixed(2)+'%');
+  const num=x=>(x==null||!isFinite(x)?'—':(+x).toFixed(2));
+  const int=x=>(x==null||!isFinite(x)?'—':Math.round(+x).toString());
 
   // 依法：手續費單邊 0.1425%（最低20）；ETF 證交稅 0.1%（賣出）
   const FEE_RATE=ETFEngine.FEE_RATE||0.001425, FEE_MIN=ETFEngine.FEE_MIN||20, TAX_RATE=ETFEngine.TAX_RATE||0.001;
   const fee = amt => Math.max(Math.round(amt*FEE_RATE), FEE_MIN);
-  const taxOnSell = amt => Math.round(amt*TAX_RATE);
+
+  // === 統計小工具（頁面端額外 KPI 用） ===
+  const mean=a=>a.length? a.reduce((s,v)=>s+v,0)/a.length : 0;
+  const std=(a)=>{ if(a.length<2) return 0; const m=mean(a); let s=0; for(const v of a){ const d=v-m; s+=d*d; } return Math.sqrt(s/(a.length-1)); };
+  const quant=(a,q)=>{ if(!a.length) return 0; const b=a.slice().sort((x,y)=>x-y); const i=Math.min(b.length-1,Math.max(0,Math.floor(q*(b.length-1)))); return b[i]; };
+  const downsideDev=(rets)=>{ const neg=rets.map(r=>Math.min(0,r)); return std(neg); };
+  const skew=(a)=>{ if(a.length<3) return null; const m=mean(a), s=std(a); if(!s) return 0; const n=a.length; return (n/((n-1)*(n-2))) * a.reduce((acc,x)=>acc+Math.pow((x-m)/s,3),0); };
+  const kurt=(a)=>{ if(a.length<4) return null; const m=mean(a), s=std(a); if(!s) return 0; const n=a.length; const sum4=a.reduce((acc,x)=>acc+Math.pow((x-m)/s,4),0); return (n*(n+1)/((n-1)*(n-2)*(n-3)))*sum4 - (3*(n-1)*(n-1))/((n-2)*(n-3)); };
 
   try{
     metaEl.textContent='正在抓取最新 00909 檔…';
@@ -232,80 +232,115 @@
     dlRaw.download = latest.name || '00909_raw.txt';
 
     const first=parsed.days[0]? `${parsed.days[0].slice(0,4)}/${parsed.days[0].slice(4,6)}/${parsed.days[0].slice(6,8)}` : '—';
-    const last =parsed.days.length? `${parsed.days.at(-1).slice(0,4)}/${parsed.days.at(-1).slice(6,8)}` : '—';
     const lastFmt = parsed.days.length? `${parsed.days.at(-1).slice(0,4)}/${parsed.days.at(-1).slice(4,6)}/${parsed.days.at(-1).slice(6,8)}` : '—';
     metaEl.textContent=`✅ 已載入：${latest.name}（解碼：${enc}）｜交易筆數=${parsed.trades.length}｜期間：${first} ~ ${lastFmt}`;
 
-    // KPI
-    const kpis=ETFEngine.calcEtfKpis(parsed);
+    // 由引擎取得基礎 KPI
+    const k = ETFEngine.calcEtfKpis(parsed);
+
+    // ===== 進一步在頁面端推算的機構級指標 =====
+    const rets = parsed.rets || [];              // 每百萬日報酬
+    const pnl  = parsed.pnl  || [];              // 每日損益（元）
+    const eq   = parsed.equity || [];            // 每百萬累積
+    // 風險延伸
+    const volAnn = std(rets)*Math.sqrt(252);
+    const ddv = downsideDev(rets)*Math.sqrt(252);
+    const meanDaily = mean(rets);
+    const annMean = meanDaily*252;
+    const MAR = k.risk.MDD>0 ? ( (k.core.CAGR!=null?k.core.CAGR:annMean) / k.risk.MDD ) : null;
+    // 交易統計延伸
+    const gains = parsed.trades.map(t=>t.gainSlip).filter(v=>v!=null);
+    const wins  = gains.filter(v=>v>0);
+    const losses= gains.filter(v=>v<0).map(v=>-v);
+    const avgWin = wins.length? mean(wins):0;
+    const avgLoss= losses.length? mean(losses):0;
+    const p = gains.length? wins.length/gains.length : 0;
+    const b = avgLoss>0 ? (avgWin/avgLoss) : 0;       // 勝負比
+    const expectancy = gains.length? mean(gains):0;   // 每筆期望（元）
+    const expectancyPct = (expectancy/ETFEngine.BASE_CAP); // 每筆/百萬
+    const kelly = (b>0) ? Math.max(0, p - (1-p)/b) : 0;    // Kelly Fraction（簡化版）
+    // 分布延伸
+    const skewness   = skew(rets);
+    const kurtosis   = kurt(rets);
+    const omega      = (()=>{ const pos=rets.filter(x=>x>0); const neg=rets.filter(x=>x<0).map(x=>-x); const sPos=sumArr(pos), sNeg=sumArr(neg); return sNeg>0? sPos/sNeg : null; })();
+    function sumArr(a){ return a.reduce((s,v)=>s+v,0); }
+
+    // ===== 渲染 KPI =====
     putKPIs('kpi-core', [
-      {label:'累積報酬（每百萬）', value:kpis.core.totalReturn, fmt:pct, pos:'profit'},
-      {label:'CAGR',              value:kpis.core.CAGR,        fmt:pct, pos:'profit'},
-      {label:'涵蓋日數',           value:kpis.core.coverDays,   fmt:int, pos:null},
-      {label:'交易筆數',           value:kpis.core.trades,      fmt:int, pos:null},
+      {label:'累積報酬（每百萬）', value:k.core.totalReturn, fmt:pct, pos:'profit'},
+      {label:'年化報酬 CAGR',    value:k.core.CAGR,        fmt:pct, pos:'profit'},
+      {label:'涵蓋日數',         value:k.core.coverDays,   fmt:int, pos:null},
+      {label:'交易筆數',         value:k.core.trades,      fmt:int, pos:null},
     ]);
+
     putKPIs('kpi-risk', [
-      {label:'年化波動',  value:kpis.risk.volAnn,   fmt:pct, pos:'down'},
-      {label:'最大回撤',  value:kpis.risk.MDD,      fmt:pct, pos:'down'},
-      {label:'回撤持續（日）', value:kpis.risk.ddDuration, fmt:int, pos:null},
-      {label:'Ulcer Index', value:(kpis.risk.UlcerIndex/100), fmt:pct, pos:'down'},
-      {label:'Sharpe',     value:kpis.risk.Sharpe,   fmt:num, pos:'profit'},
-      {label:'Sortino',    value:kpis.risk.Sortino,  fmt:num, pos:'profit'},
-      {label:'Calmar',     value:kpis.risk.Calmar,   fmt:num, pos:'profit'},
-      {label:'VaR(95%) / 日',  value:kpis.risk.VaR95,  fmt:pct, pos:'down'},
-      {label:'CVaR(95%) / 日', value:kpis.risk.CVaR95, fmt:pct, pos:'down'},
+      {label:'年化波動', value:k.risk.volAnn, fmt:pct, pos:'down'},
+      {label:'最大回撤', value:k.risk.MDD,    fmt:pct, pos:'down'},
+      {label:'平均回撤（近似）', value:null,   fmt:()=> '—', pos:'down'},
+      {label:'回撤持續（日）', value:k.risk.ddDuration, fmt:int, pos:null},
+      {label:'Ulcer Index', value:(k.risk.UlcerIndex/100), fmt:pct, pos:'down'},
     ]);
+
+    putKPIs('kpi-ra', [
+      {label:'Sharpe',  value:k.risk.Sharpe,  fmt:num, pos:'profit'},
+      {label:'Sortino', value:k.risk.Sortino, fmt:num, pos:'profit'},
+      {label:'Calmar',  value:k.risk.Calmar,  fmt:num, pos:'profit'},
+      {label:'MAR (CAGR/MDD)', value:MAR,     fmt:num, pos:'profit'},
+      {label:'Omega',   value:omega,          fmt:num, pos:'profit'},
+      {label:'Information Ratio', value:null, fmt:()=> '—', pos:'profit'},
+      {label:'Treynor', value:null,           fmt:()=> '—', pos:'profit'},
+    ]);
+
+    putKPIs('kpi-down', [
+      {label:'VaR(95%) / 日',  value:k.risk.VaR95,  fmt:pct, pos:'down'},
+      {label:'CVaR(95%) / 日', value:k.risk.CVaR95, fmt:pct, pos:'down'},
+      {label:'Downside Deviation(年化)', value:ddv, fmt:pct, pos:'down'},
+    ]);
+
     putKPIs('kpi-trade', [
-      {label:'勝率',              value:kpis.trade.winRate,   fmt:pct,  pos:'profit'},
-      {label:'Profit Factor',    value:kpis.trade.PF,        fmt:num,  pos:'profit'},
-      {label:'均單報酬（每筆/百萬）', value:kpis.trade.avgTrade, fmt:pct,  pos:'profit'},
-      {label:'平均持有時間(分)', value:kpis.trade.avgHoldMin,fmt:int,   pos:null},
-      {label:'中位持有時間(分)', value:kpis.trade.medHoldMin,fmt:int,   pos:null},
-      {label:'平均 MAE',         value:kpis.trade.avgMAEpct/100, fmt:pct, pos:'down'},
-      {label:'平均 MFE',         value:kpis.trade.avgMFEpct/100, fmt:pct, pos:'profit'},
-      {label:'平均 ISbps',       value:kpis.trade.avgISbps,  fmt:num,  pos:'down'},
+      {label:'勝率',           value:k.trade.winRate,   fmt:pct, pos:'profit'},
+      {label:'Profit Factor',  value:k.trade.PF,        fmt:num, pos:'profit'},
+      {label:'期望值/筆（元）',  value:expectancy,        fmt:(v)=> (v==null?'—':v.toLocaleString()), pos:'profit'},
+      {label:'均單報酬（每筆/百萬）', value:k.trade.avgTrade, fmt:pct, pos:'profit'},
+      {label:'平均持有(分)',   value:k.trade.avgHoldMin, fmt:int, pos:null},
+      {label:'中位持有(分)',   value:k.trade.medHoldMin, fmt:int, pos:null},
+      {label:'平均 MAE',       value:k.trade.avgMAEpct/100, fmt:pct, pos:'down'},
+      {label:'平均 MFE',       value:k.trade.avgMFEpct/100, fmt:pct, pos:'profit'},
     ]);
+
+    putKPIs('kpi-exe', [
+      {label:'平均 ISbps', value:k.trade.avgISbps, fmt:num, pos:'down'},
+      {label:'滑價（近似）', value:null, fmt:()=> '—', pos:'down'},
+      {label:'成交率', value:null, fmt:()=> '—', pos:'up'},
+      {label:'委託執行率', value:null, fmt:()=> '—', pos:'up'},
+    ]);
+
+    putKPIs('kpi-stab', [
+      {label:'Beta', value:null, fmt:()=> '—', pos:null},
+      {label:'Alpha', value:null, fmt:()=> '—', pos:'profit'},
+      {label:'R²', value:null, fmt:()=> '—', pos:'up'},
+      {label:'策略一致性', value:null, fmt:()=> '—', pos:'up'},
+    ]);
+
+    putKPIs('kpi-capital', [
+      {label:'預估槓桿', value:null, fmt:()=> '—', pos:'down'},
+      {label:'平均曝險', value:null, fmt:()=> '—', pos:'down'},
+      {label:'資金週轉率', value:null, fmt:()=> '—', pos:'up'},
+    ]);
+
     putKPIs('kpi-cap', [
-      {label:'平均參與率',  value:kpis.capacity?.avgParticipation ?? 0, fmt:pct, pos:'down'},
-      {label:'P75 參與率',  value:kpis.capacity?.p75Participation ?? 0, fmt:pct, pos:'down'},
-      {label:'基準資金（萬）', value:100, fmt:num, pos:null},
-      {label:'涵蓋期間(起-迄)', value:0, fmt:()=>((kpis.meta?.firstDay||'—')+' ~ '+(kpis.meta?.lastDay||'—')), pos:null},
+      {label:'平均參與率',  value:k.capacity?.avgParticipation ?? 0, fmt:pct, pos:'down'},
+      {label:'P75 參與率',  value:k.capacity?.p75Participation ?? 0, fmt:pct, pos:'down'},
     ]);
 
-    // ===== 建議投資方式（本金 100 萬，單位 1-1-2）=====
-    (function renderPlan(){
-      const CAPITAL = 1_000_000;
-      const lastBuyEv = parsed.events
-        .filter(e => e.action==='BUY' || e.action==='ADD1' || e.action==='ADD2')
-        .sort((a,b)=> b.ts.localeCompare(a.ts))[0];
-
-      const lastSellTr = parsed.trades.at(-1);
-      const lastPx = lastBuyEv ? +lastBuyEv.price : null;
-      const lotAmt = lastPx ? Math.round(lastPx*1000 + fee(lastPx*1000)) : 0;
-      const maxLots = lotAmt ? Math.floor(CAPITAL / lotAmt) : 0;
-      const unit = maxLots ? Math.floor(maxLots/4) : 0; // 1-1-2
-      const planLots = unit*1 + unit*1 + unit*2;
-
-      // 參考獲利：抓最近一筆完成交易「每張損益」× 計畫張數（保守）
-      let perLotGain = 0;
-      if (lastSellTr && lastSellTr.qtyLots) {
-        perLotGain = Math.round(lastSellTr.gainSlip / lastSellTr.qtyLots);
-      }
-      const planProfit = perLotGain * planLots;
-
-      const fmtInt = v => (v==null? '—' : (+v).toLocaleString());
-      const fmtDate = ts => ts ? `${ts.slice(0,4)}/${ts.slice(4,6)}/${ts.slice(6,8)} ${ts.slice(8,10)}:${ts.slice(10,12)}` : '—';
-
-      document.getElementById('plan-lastBuy').textContent = fmtDate(lastBuyEv?.ts);
-      document.getElementById('plan-lastPx').textContent  = lastPx? lastPx.toFixed(2) : '—';
-      document.getElementById('plan-lotAmt').textContent  = fmtInt(lotAmt);
-      document.getElementById('plan-maxLots').textContent = fmtInt(maxLots);
-      document.getElementById('plan-units').textContent   = unit ? `1(${unit}) - 1(${unit}) - 2(${unit*2})` : '—';
-      document.getElementById('plan-planLots').textContent= fmtInt(planLots);
-      document.getElementById('plan-profit').innerHTML    = planProfit>0
-        ? `<span class="gain-red">+${fmtInt(planProfit)}</span>`
-        : `<span class="${planProfit<0?'loss-green':''}">${fmtInt(planProfit)}</span>`;
-    })();
+    putKPIs('kpi-ext', [
+      {label:'年化均值', value:annMean, fmt:pct, pos:'profit'},
+      {label:'年化波動(頁端計)', value:volAnn, fmt:pct, pos:'down'},
+      {label:'偏態 Skew', value:skewness, fmt:num, pos:null},
+      {label:'峰度 Kurtosis', value:kurtosis, fmt:num, pos:null},
+      {label:'Kelly Fraction', value:kelly, fmt:pct, pos:'profit'},
+      {label:'勝/負平均(元)', value:avgWin-avgLoss, fmt:(v)=> (isFinite(v)? v.toLocaleString():'—'), pos:'profit'},
+    ]);
 
     // ===== 圖表 =====
     ETFChart.drawEquityCurve(
@@ -313,15 +348,12 @@
       parsed.days.map(d=>`${d.slice(0,4)}/${d.slice(4,6)}/${d.slice(6,8)}`),
       parsed.equity
     );
-
-    // MAE/MFE 成對
     {
       const pairs = parsed.trades
         .filter(t => t.maePct != null && t.mfePct != null)
         .map(t => ({ x: t.maePct, y: t.mfePct }));
       ETFChart.drawMaeMfeScatter(document.getElementById('maeMfe'), pairs);
     }
-
     ETFChart.drawIsHist(
       document.getElementById('isHist'),
       parsed.trades.map(t=>t.ISbps).filter(v=>v!=null),
@@ -331,11 +363,11 @@
     // ===== 交易明細 =====
     const tbody=document.querySelector('#tblTrade tbody');
     const CAPITAL=1_000_000;
+    const taxOnSell = amt => Math.round(amt*TAX_RATE);
 
     const tradeByTid={}; parsed.trades.forEach(t=> tradeByTid[String(t.tid)]=t);
-    const suggBuyLotsByTid={};   // SELL 使用：同 tid 累計建議買進張數
-    let accGain=0;               // 左欄「累計損益」（實際，只在 SELL 累加）
-    let cumWithPlan=0;           // 右欄「累計損益(含試算)」（只在 SELL 累加）
+    const suggBuyLotsByTid={};
+    let accGain=0, cumWithPlan=0;
 
     const rows = parsed.events
       .filter(e=>['BUY','ADD1','ADD2','SELL'].includes(e.action))
@@ -350,12 +382,11 @@
         const sharesRaw = lotsRaw*1000;
         const grossRaw  = px*sharesRaw;
 
-        // 依法手續費/稅 & 淨額（買列顯示買進金額；賣列顯示賣出金額）
         const feeRaw = fee(grossRaw);
         const buyAmt = !isSell? Math.round(grossRaw + feeRaw) : null;
-        const sellAmt=  isSell? Math.round(grossRaw - feeRaw - Math.round(grossRaw*TAX_RATE)) : null;
+        const sellAmt=  isSell? Math.round(grossRaw - feeRaw - taxOnSell(grossRaw)) : null;
 
-        // 實際損益 / 獲利率（獲利率 = 損益 ÷ 1,000,000）
+        // 實際損益 / 獲利率（損益 ÷ 1,000,000）
         let gain=null, roi=null, accHtml='';
         if(isSell){
           const tr=tradeByTid[e.kv.tid];
@@ -366,35 +397,24 @@
                     accGain<0? `<span class="loss-green">${accGain.toLocaleString()}</span>` : '';
         }
 
-        // 建議張數（1-1-2）：SELL＝同 tid 累計的建議買進張數
+        // 建議張數（1-1-2）
         const oneLotEst = Math.round(px*1000 + fee(px*1000));
         const maxLotsEst= oneLotEst>0? Math.floor(CAPITAL/oneLotEst) : 0;
         const unitSize  = maxLotsEst? Math.floor(maxLotsEst/4) : 0;
-
         let suggLots=0;
         if(e.action==='BUY'||e.action==='ADD1') suggLots=unitSize;
         else if(e.action==='ADD2')             suggLots=unitSize*2;
         else if(e.action==='SELL')             suggLots=(suggBuyLotsByTid[e.kv.tid]||0);
-
         if(!isSell) suggBuyLotsByTid[e.kv.tid]=(suggBuyLotsByTid[e.kv.tid]||0)+suggLots;
 
-        // 「股」顯示
         const sharesSugg = (suggLots||0)*1000;
 
-        // === 試算區 ===
+        // 試算（賣列顯示）
         const tr=tradeByTid[e.kv.tid];
         const pxInAvg=tr?.pxInAvg ?? px;
-
-        // 買進側估值（僅在「買進列」顯示）
-        const grossBuyEstNow = px * sharesSugg;
-        const feeBuyEstNow   = fee(grossBuyEstNow);
-        const buyNetEstNow   = Math.round(grossBuyEstNow + feeBuyEstNow);
-
-        // 賣出側估值（僅在「賣出列」顯示；買成本用 pxInAvg）
         const grossBuyAvg=pxInAvg*sharesSugg;
         const feeBuyAvg=fee(grossBuyAvg);
         const buyNetAvg=Math.round(grossBuyAvg + feeBuyAvg);
-
         const grossSellEst=px*sharesSugg;
         const feeSellEst=fee(grossSellEst);
         const taxEst=Math.round(grossSellEst*TAX_RATE);
@@ -403,7 +423,7 @@
         let planGain=null, planRoi=null, showCumPlan='';
         if(isSell){
           planGain = sellNetEst - buyNetAvg;
-          planRoi  = planGain / 1_000_000;  // 試算獲利率也改為 / 百萬
+          planRoi  = planGain / 1_000_000;
           cumWithPlan += (planGain||0);
           showCumPlan = cumWithPlan>0? `<span class="gain-red">+${cumWithPlan.toLocaleString()}</span>` :
                         cumWithPlan<0? `<span class="loss-green">${cumWithPlan.toLocaleString()}</span>` : '';
@@ -428,12 +448,8 @@
           <td>${accHtml}</td>
           <td style="border-left:2px solid #ddd;">${sharesSugg? sharesSugg.toLocaleString(): ''}</td>
           <td>${px? px.toFixed(2): ''}</td>
-          <td>${
-              isSell
-                ? (sharesSugg? feeSellEst.toLocaleString(): '')
-                : (sharesSugg? feeBuyEstNow.toLocaleString(): '')
-            }</td>
-          <td>${!isSell && sharesSugg? buyNetEstNow.toLocaleString(): ''}</td>
+          <td>${ isSell ? (sharesSugg? feeSellEst.toLocaleString(): '') : (sharesSugg? fee(grossBuyAvg).toLocaleString(): '') }</td>
+          <td>${!isSell && sharesSugg? Math.round(px*sharesSugg + fee(px*sharesSugg)).toLocaleString(): ''}</td>
           <td>${ isSell && sharesSugg? sellNetEst.toLocaleString(): ''}</td>
           <td>${money(planGain)}</td>
           <td>${rate(planRoi)}</td>
@@ -441,8 +457,7 @@
         </tr>`;
       });
 
-    document.querySelector('#tblTrade tbody').innerHTML =
-      rows.join('') || '<tr><td colspan="20" style="text-align:center;color:#777;">（無資料）</td></tr>';
+    tbody.innerHTML = rows.join('') || '<tr><td colspan="20" style="text-align:center;color:#777;">（無資料）</td></tr>';
 
   }catch(err){
     metaEl.textContent='❌ 載入或解析失敗：'+(err?.message||err);
