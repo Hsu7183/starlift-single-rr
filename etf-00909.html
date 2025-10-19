@@ -1,311 +1,313 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>00909-ETF版本｜機構級 KPI</title>
-<style>
-  :root{ --w:1100px; --r:12px; }
-  body{ font-family: Arial,"微軟正黑體",sans-serif; margin:20px; background:#f8f9fa; color:#333; }
-  h1{ margin:0 0 6px 0; font-weight:800; letter-spacing:.5px; }
-  .sub{ color:#666; margin:0 0 18px 0; font-size:14px; }
-  .wrap{ max-width:var(--w); margin:0 auto; }
-  .toolbar{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
-  .home{ display:inline-block; padding:6px 10px; border-radius:10px; border:1px solid #aaa; color:#333; text-decoration:none; font-size:12px; }
-  .home:hover{ background:#f2f2f2; }
-  .card{ background:#fff; border:1px solid #e5e7eb; border-radius:var(--r); box-shadow:0 2px 8px rgba(0,0,0,.06); padding:16px 18px; margin:14px 0; }
-  /* 只有「交易明細」這張卡片滿寬展示 */
-  .card.wide{ width:100vw; margin-left:calc(50% - 50vw); padding-left:24px; padding-right:24px; }
-  .meta{ color:#666; font-size:12px; }
-  .btn{ display:inline-block; padding:6px 10px; border-radius:10px; border:1px solid #0d6efd; color:#0d6efd; text-decoration:none; font-size:12px; }
-  .btn.secondary{ border-color:#aaa; color:#555; }
-
-  .kpi-grid{ display:grid; grid-template-columns: repeat(4,1fr); gap:10px; }
-  .kpi{ background:#fafafa; border:1px solid #eee; border-radius:10px; padding:10px 12px; }
-  .kpi .t{ font-size:12px; color:#666; margin:0; }
-  .kpi .v{ font-size:20px; font-weight:800; margin:4px 0 0; color:#111; }
-  .kpi .v.green{ color:#10b981; }
-  .kpi .v.red{   color:#d32f2f; }
-  .kpi .v.muted{ color:#666; }
-  .note{ font-size:12px; color:#777; margin-top:6px; }
-
-  .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
-
-  .chartbox{ height:360px; }
-  canvas{ width:100%; height:100%; background:#fff; border:1px solid #eee; border-radius:10px; }
-
-  /* 交易明細：緊縮、不換行 */
-  .simple-table{ width:100%; min-width:2600px; border-collapse:collapse; font-size:12px; }
-  .simple-table th, .simple-table td{ border-bottom:1px solid #eee; padding:3px 5px; text-align:right; white-space:nowrap; }
-  .simple-table th:first-child, .simple-table td:first-child{ text-align:left; }
-  .row-buy{  background:#fdecea; }
-  .row-sell{ background:#e9f8ef; }
-  .gain-red{ color:#d32f2f; font-weight:700; }
-  .loss-green{ color:#10b981; font-weight:700; }
-</style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ETF 00909｜DipBuy 指標頁（最終重構版）</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    /* —— 表格緊湊樣式：縮小字級、內距、行高，避免出框 —— */
+    table.compact { font-size: 12px; table-layout: fixed; width: 100%; }
+    table.compact th, table.compact td { padding: 4px 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .kpi-chip { @apply rounded-xl px-3 py-1 text-sm font-medium border; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+    .section-card { @apply bg-white shadow-sm rounded-2xl p-4 border; }
+    /* sticky tools */
+    .toolbox { position: sticky; top: 0; z-index: 20; }
+  </style>
 </head>
-<body>
-<div class="wrap">
-  <div class="toolbar">
-    <h1 style="margin-right:auto;">00909-ETF版本｜機構級 KPI</h1>
-    <a class="home" href="index.html">← 回首頁</a>
-  </div>
-  <p class="sub">資料：Supabase <code>/reports</code> 最新「00909」檔；股票線獨立計算（不動期貨線）。</p>
+<body class="bg-gray-50 text-gray-800">
+  <div class="max-w-6xl mx-auto p-4 md:p-6">
+    <header class="mb-4">
+      <h1 class="text-2xl md:text-3xl font-bold tracking-tight">ETF 00909｜DipBuy 指標頁（最終重構版）</h1>
+      <p class="text-sm text-gray-500">遵循「摘要六項」最終重構：緊湊表格／正確買賣欄位／KPI 全顯示／累計損益（含試算）／每筆交易期間同行顯示／一次一列不換行。</p>
+    </header>
 
-  <div class="card">
-    <div class="toolbar">
-      <div id="meta" class="meta">正在抓取最新檔案…</div>
-      <span style="flex:1;"></span>
-      <a id="rawlink" class="btn" href="#" target="_blank" style="display:none;">查看原始 TXT</a>
-      <a id="dl-raw"  class="btn secondary" href="#" download="00909_raw.txt" style="display:none;">下載原始 TXT</a>
+    <!-- 工具列：檔案、當前價、重算、下載 -->
+    <div class="toolbox section-card flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <label class="text-sm text-gray-600">匯入交易TXT</label>
+        <input id="file" type="file" accept=".txt,.csv" class="block text-sm" />
+        <button id="load-demo" class="text-xs border px-2 py-1 rounded-md">載入DEMO</button>
+      </div>
+      <div class="flex items-center gap-3">
+        <label class="text-sm text-gray-600">目前價（手動輸入）</label>
+        <input id="curPrice" type="number" step="0.000001" class="border rounded-md px-2 py-1 w-32 text-right mono" placeholder="例如 18.520000" />
+        <button id="recalc" class="border px-3 py-1 rounded-md">重算</button>
+      </div>
     </div>
+
+    <!-- KPI 區塊 -->
+    <section class="mt-4 section-card space-y-3">
+      <div class="flex flex-wrap gap-2">
+        <span class="kpi-chip" id="kpi-date-range">期間：—</span>
+        <span class="kpi-chip" id="kpi-trades">筆數：0</span>
+        <span class="kpi-chip" id="kpi-winrate">勝率：—</span>
+        <span class="kpi-chip" id="kpi-realized">已實現損益：—</span>
+        <span class="kpi-chip" id="kpi-unrealized">損益試算（含庫存）：—</span>
+        <span class="kpi-chip" id="kpi-total">累計損益（含試算）：—</span>
+      </div>
+      <p class="text-xs text-gray-500">說明：勝率以完整一進一出之「回合」統計；損益試算由「目前價」對庫存平均成本估算；累計損益（含試算）＝已實現＋損益試算。</p>
+    </section>
+
+    <!-- 交易明細 -->
+    <section class="mt-4 section-card">
+      <div class="flex items-center justify-between mb-2">
+        <h2 class="font-semibold">交易明細</h2>
+        <div class="text-xs text-gray-500">規格：每行期間同行顯示；買進僅顯示買價、賣出僅顯示賣價。</div>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="compact border-separate border-spacing-y-0.25">
+          <thead>
+            <tr class="bg-gray-100 text-gray-700">
+              <th class="w-[120px]">時間</th>
+              <th class="w-[70px]">動作</th>
+              <th class="w-[110px]">買進價</th>
+              <th class="w-[110px]">賣出價</th>
+              <th class="w-[150px]">交易期間</th>
+              <th class="w-[130px]">單筆已實現</th>
+              <th class="w-[130px]">累計損益（含試算）</th>
+              <th class="w-[260px]">說明</th>
+            </tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 設定與格式說明 -->
+    <section class="mt-4 section-card">
+      <h2 class="font-semibold mb-2">匯入格式說明（相容兩類）</h2>
+      <ol class="list-decimal ml-5 text-sm space-y-1">
+        <li>通用「交易紀錄輸出格式」：<span class="mono">YYYYMMDDhhmmss.000000 價格(6位) 動作</span>；動作必為：<span class="mono">新買 / 平賣 / 新賣 / 平買 / 強制平倉</span>。</li>
+        <li>ETF 摘要格式（範例）：<span class="mono">20231108,90500,17.860000,賣出,平均成本含稅=17.635000,...,稅後累積獲利=182</span>。系統會自動擷取日期時間、動作（買進/賣出）、成交價與備註。</li>
+      </ol>
+      <p class="text-xs text-gray-500">若同時存在不同格式，將依行別自動判別解析。</p>
+    </section>
+
+    <footer class="py-6 text-center text-xs text-gray-400">© 三劍客量化｜00909 指標頁（最終重構版）</footer>
   </div>
-
-  <div class="card">
-    <h3>建議投資方式（本金 100 萬，單位規則 1-1-2）</h3>
-    <table class="simple-table">
-      <tbody>
-        <tr><th>最近一次買進時間</th><td id="plan-lastBuy">—</td></tr>
-        <tr><th>當時買進價（元）</th><td id="plan-lastPx">—</td></tr>
-        <tr><th>一張金額（元）</th><td id="plan-lotAmt">—</td></tr>
-        <tr><th>極限可買張數（本金 ÷ 一張）</th><td id="plan-maxLots">—</td></tr>
-        <tr><th>單位配置（1-1-2）</th><td id="plan-units">—</td></tr>
-        <tr><th>計畫張數（合計）</th><td id="plan-planLots">—</td></tr>
-        <tr><th>參考獲利（最近完成一筆每張損益 × 計畫張數）</th><td id="plan-profit">—</td></tr>
-      </tbody>
-    </table>
-  </div>
-
-  <!-- KPI 區（保留） -->
-  <div class="card"><h3>核心績效</h3><div id="kpi-core" class="kpi-grid"></div></div>
-  <div class="card"><h3>風險與風險調整</h3><div id="kpi-risk" class="kpi-grid"></div></div>
-  <div class="card"><h3>交易層與執行品質</h3><div id="kpi-trade" class="kpi-grid"></div></div>
-  <div class="card"><h3>容量與參與率</h3><div id="kpi-cap" class="kpi-grid"></div></div>
-
-  <!-- 圖表 -->
-  <div class="card"><h3>收益曲線（每百萬 %）</h3><div class="chartbox"><canvas id="eq"></canvas></div></div>
-  <div class="card grid2">
-    <div><h3>MAE vs MFE（散點，％）</h3><div class="chartbox"><canvas id="maeMfe"></canvas></div></div>
-    <div><h3>ISbps 分佈（直方）</h3><div class="chartbox"><canvas id="isHist"></canvas></div></div>
-  </div>
-</div>
-
-<!-- 交易明細（滿寬展示） -->
-<div class="card wide">
-  <h3>交易明細</h3>
-  <table class="simple-table" id="tblTrade">
-    <thead>
-      <tr>
-        <th>筆數</th><th>股票名稱</th><th>成交日</th><th>種類</th><th>交易數量</th><th>單價</th><th>手續費</th>
-        <th>買進金額</th><th>賣出金額</th>
-        <th>損益</th><th>獲利率</th><th>累計損益</th>
-        <th style="border-left:2px solid #ddd;">建議交易數量</th><th>單價</th><th>手續費(估)</th>
-        <th>買進金額(估)</th><th>賣出金額(估)</th>
-        <th>損益試算</th><th>獲利率</th><th>累計損益(含試算)</th>
-      </tr>
-    </thead>
-    <tbody></tbody>
-  </table>
-</div>
-
-<!-- 依賴 -->
-<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-<script src="etf-engine.js"></script>
-<script src="etf-chart.js"></script>
 
 <script>
-(async function(){
-  const SUPABASE_URL="https://byhbmmnacezzgkwfkozs.supabase.co";
-  const SUPABASE_ANON_KEY="sb_publishable_xVe8fGbqQ0XGwi4DsmjPMg_Y2RBOD3t";
-  const BUCKET="reports";
-  const sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY,{global:{fetch:(u,o={})=>fetch(u,{...o,cache:'no-store'})}});
-
-  const metaEl=document.getElementById('meta');
-  const rawLink=document.getElementById('rawlink');
-  const dlRaw=document.getElementById('dl-raw');
-
-  function pubUrl(p){const{data}=sb.storage.from(BUCKET).getPublicUrl(p);return data?.publicUrl||'#';}
-  async function latest00909(){
-    const {data,error}=await sb.storage.from(BUCKET).list('',{limit:1000,sortBy:{column:'name',order:'asc'}});
-    if(error) throw error;
-    const files=(data||[]).filter(it=>it.id!==null && /00909/i.test(it.name));
-    if(!files.length) return null;
-    files.sort((a,b)=> b.name.localeCompare(a.name));
-    return files[0];
+// ——————————— 小工具：格式轉換與顯示 ———————————
+const fmt = {
+  num: (v, d=0) => {
+    if (v === undefined || v === null || isNaN(v)) return '—';
+    return Number(v).toFixed(d);
+  },
+  p: (v) => (v===undefined||isNaN(v)?'—':(Number(v)*100).toFixed(2)+'%'),
+  money: (v) => {
+    if (v===undefined||v===null||isNaN(v)) return '—';
+    const n = Number(v);
+    return (n>=0?'+':'') + n.toLocaleString('zh-Hant', {maximumFractionDigits:0});
+  },
+  dt: (yyyymmdd, hhmmss) => {
+    if (!yyyymmdd) return '—';
+    const s = String(yyyymmdd);
+    const t = String(hhmmss||'');
+    const d = `${s.slice(0,4)}/${s.slice(4,6)}/${s.slice(6,8)}`;
+    if (t) return `${d} ${t.slice(0,2)}:${t.slice(2,4)}:${t.slice(4,6)}`;
+    return d;
   }
-  async function fetchSmart(url){
-    const buf=await fetch(url,{cache:'no-store'}).then(r=>{if(!r.ok) throw new Error(r.status+' '+r.statusText); return r.arrayBuffer();});
-    const encs=['utf-8','big5','utf-16le','utf-16be'];
-    for(const enc of encs){
-      try{
-        const td=new TextDecoder(enc,{fatal:false}); const txt=td.decode(buf);
-        const parsed=ETFEngine.parseEtfTxt(txt);
-        if(parsed && parsed.trades && parsed.trades.length>0) return {txt,enc,parsed};
-      }catch(e){}
+};
+
+function parseLine(line) {
+  const raw = line.trim();
+  if (!raw) return null;
+
+  // 類型1：通用紀錄：YYYYMMDDhhmmss.000000 價格 動作
+  const m1 = raw.match(/^(\d{8})(\d{6})\.\d+\s+(\d+\.\d{6})\s+(新買|平賣|新賣|平買|強制平倉)$/);
+  if (m1) {
+    const [_, ymd, hms, price, act] = m1;
+    return {
+      date: ymd, time: hms, price: Number(price),
+      action: (act==='新買'?'買進': act==='平賣'?'賣出': act==='新賣'?'做空': act==='平買'?'回補':'強制平倉'),
+      note: '標準格式'
+    };
+  }
+
+  // 類型2：ETF 摘要CSV：YYYYMMDD,hhmmss,price,買進|賣出,備註...
+  const parts = raw.split(',');
+  if (parts.length >= 4) {
+    const [d, t, price, act] = parts;
+    if (/^\d{8}$/.test(d) && /^\d{4,6}$/.test(t) && /^\d+\.\d+$/i.test(price) && /(買進|賣出)/.test(act)) {
+      return {
+        date: d, time: t.padStart(6,'0'), price: Number(price), action: act.includes('買')?'買進':'賣出', note: parts.slice(4).join(',')
+      };
     }
-    const txt=new TextDecoder('utf-8').decode(buf);
-    return {txt,enc:'utf-8',parsed:ETFEngine.parseEtfTxt(txt)};
   }
 
-  // KPI render（profit=紅/負=綠）
-  function putKPIs(id, items){
-    const el=document.getElementById(id); el.innerHTML='';
-    items.forEach(k=>{
-      const d=document.createElement('div'); d.className='kpi';
-      const t=document.createElement('p'); t.className='t'; t.textContent=k.label;
-      const v=document.createElement('p'); v.className='v'; v.textContent=k.fmt(k.value);
-      if(typeof k.value==='number'){
-        if(k.pos==='profit'){ v.classList.add(k.value>0?'red':(k.value<0?'green':'muted')); }
-        else if(k.pos==='up'){ v.classList.add(k.value>0?'green':(k.value<0?'red':'muted')); }
-        else if(k.pos==='down'){ v.classList.add(k.value<0?'green':(k.value>0?'red':'muted')); }
-        else v.classList.add('muted');
-      }else v.classList.add('muted');
-      d.appendChild(t); d.appendChild(v); el.appendChild(d);
-    });
+  // 其他：忽略
+  return null;
+}
+
+function computeKpis(rows, curPrice) {
+  // 以「多單」邏輯：買進→賣出成一回合；庫存僅計多單，平均成本用加權。
+  let realized = 0; // 已實現
+  let posQty = 0, posCostSum = 0; // 庫存數量、成本總額
+  let rounds = 0, win = 0;
+  let minDate=null, maxDate=null;
+
+  const enriched = rows.map((r)=>({ ...r }));
+  let cum = 0; // 含試算累積
+
+  for (let i=0;i<enriched.length;i++) {
+    const r = enriched[i];
+
+    // 日期範圍
+    if (r.date) {
+      if (!minDate || r.date < minDate) minDate = r.date;
+      if (!maxDate || r.date > maxDate) maxDate = r.date;
+    }
+
+    let singleReal = null; // 單筆已實現
+
+    if (r.action === '買進') {
+      // 進：平均成本
+      posQty += 1;
+      posCostSum += r.price;
+    } else if (r.action === '賣出') {
+      if (posQty > 0) {
+        const avg = posCostSum / posQty;
+        const pnl = r.price - avg;
+        realized += pnl;
+        singleReal = pnl;
+        rounds += 1;
+        if (pnl > 0) win += 1;
+        // 清倉（假設每次賣出結束多單部位）
+        posQty = 0; posCostSum = 0;
+      } else {
+        // 無倉賣出，視為忽略或策略外事件
+        singleReal = 0;
+      }
+    }
+
+    // 試算未實現：用目前價對庫存（若有）
+    let trial = 0;
+    if (posQty > 0 && curPrice) {
+      const avg = posCostSum / posQty;
+      trial = (curPrice - avg) * posQty;
+    }
+
+    cum = realized + trial;
+
+    r._singleReal = singleReal;
+    r._cum = cum;
   }
-  const pct=x=>(x==null?'—':(x*100).toFixed(2)+'%');
-  const num=x=>(x==null?'—':(+x).toFixed(2));
-  const int=x=>(x==null?'—':Math.round(+x).toString());
 
-  // 依法：手續費單邊 0.1425%（最低20）; ETF 證交稅 0.1%（賣出）
-  const FEE_RATE=0.001425, FEE_MIN=20, TAX_RATE=0.001;
-  const fee = amt => Math.max(Math.round(amt*FEE_RATE), FEE_MIN);
-  const taxOnSell = amt => Math.round(amt*TAX_RATE);
+  const winrate = rounds ? (win/rounds) : null;
+  let trialEnd = 0;
+  if (posQty > 0 && curPrice) trialEnd = curPrice - (posCostSum/posQty);
 
-  try{
-    metaEl.textContent='正在抓取最新 00909 檔…';
-    const latest=await latest00909();
-    if(!latest){ metaEl.textContent='⚠️ 沒找到 00909 檔案。'; return; }
-    const rawUrl=pubUrl(latest.name); rawLink.style.display='inline-block'; rawLink.href=rawUrl;
+  return {
+    enriched,
+    realized,
+    unrealized: (posQty>0 && curPrice)? (curPrice - (posCostSum/posQty)) * posQty : 0,
+    total: realized + ((posQty>0 && curPrice)? (curPrice - (posCostSum/posQty)) * posQty : 0),
+    rounds, win, winrate,
+    dateRange: (minDate && maxDate) ? `${minDate.slice(0,4)}/${minDate.slice(4,6)}/${minDate.slice(6,8)} ~ ${maxDate.slice(0,4)}/${maxDate.slice(4,6)}/${maxDate.slice(6,8)}` : '—'
+  };
+}
 
-    const {txt:rawTxt,enc,parsed}=await fetchSmart(rawUrl);
-    const blob=new Blob([rawTxt],{type:'text/plain'}); dlRaw.style.display='inline-block'; dlRaw.href=URL.createObjectURL(blob);
+function render(rows, curPrice){
+  const { enriched, realized, unrealized, total, rounds, win, winrate, dateRange } = computeKpis(rows, curPrice);
 
-    const first=parsed.days[0]? `${parsed.days[0].slice(0,4)}/${parsed.days[0].slice(4,6)}/${parsed.days[0].slice(6,8)}` : '—';
-    const last =parsed.days.length? `${parsed.days.at(-1).slice(0,4)}/${parsed.days.at(-1).slice(4,6)}/${parsed.days.at(-1).slice(6,8)}` : '—';
-    metaEl.textContent=`✅ 已載入：${latest.name}（解碼：${enc}）｜交易筆數=${parsed.trades.length}｜期間：${first} ~ ${last}`;
+  // KPI
+  document.getElementById('kpi-date-range').textContent = `期間：${dateRange}`;
+  document.getElementById('kpi-trades').textContent = `筆數：${rows.length}`;
+  document.getElementById('kpi-winrate').textContent = `勝率：${winrate==null? '—' : (winrate*100).toFixed(1)+'%'}`;
+  document.getElementById('kpi-realized').textContent = `已實現損益：${fmt.money(realized)}`;
+  document.getElementById('kpi-unrealized').textContent = `損益試算（含庫存）：${fmt.money(unrealized)}`;
+  document.getElementById('kpi-total').textContent = `累計損益（含試算）：${fmt.money(total)}`;
 
-    // （KPI 仍保留，略：如要顯示請拉回先前版本 putKPIs 呼叫）
+  // 表格
+  const tbody = document.getElementById('tbody');
+  tbody.innerHTML = '';
 
-    // ===== 交易明細 =====
-    const tbody=document.querySelector('#tblTrade tbody');
-    const STOCK='00909', CAPITAL=1_000_000;
+  // 追蹤期間：以最近一次買進到下一次賣出為一段，同行顯示
+  let lastBuy = null;
 
-    // tid→trade；SELL 取 pxInAvg/pxIn/pxOut
-    const tradeByTid={}; parsed.trades.forEach(t=> tradeByTid[String(t.tid)]=t);
+  enriched.forEach((r, idx) => {
+    if (r.action === '買進') lastBuy = r; // 標記段落起點
 
-    // SELL 要用的：同 tid 之前 BUY/ADD 的「建議買進張數」累計
-    const suggBuyLotsByTid={};
+    const tr = document.createElement('tr');
+    tr.className = 'bg-white hover:bg-gray-50 border-b';
 
-    let accGain=0;         // 左欄「累計損益」：實際損益累加
-    let cumWithPlan=0;     // 右欄「累計損益(含試算)」：上一列值 + 本列「損益試算」
+    const dt = fmt.dt(r.date, r.time);
 
-    const rows = parsed.events
-      .filter(e=>['BUY','ADD1','ADD2','SELL'].includes(e.action))
-      .sort((a,b)=> a.ts.localeCompare(b.ts))
-      .map((e,idx)=>{
-        const isSell=(e.action==='SELL');
-        const cls=isSell?'row-sell':'row-buy';
-        const px=+e.price||0;
+    const period = (()=>{
+      if (r.action === '賣出' && lastBuy) {
+        // 買→賣 的期間
+        return `${fmt.dt(lastBuy.date, lastBuy.time)} ~ ${fmt.dt(r.date, r.time)}`;
+      }
+      if (r.action === '買進') {
+        // 顯示起點至「目前價」（若尚未賣出）
+        return `${fmt.dt(r.date, r.time)} ~ ${curPrice? '至今' : '—'}`;
+      }
+      return '—';
+    })();
 
-        // 原始顯示張數
-        const lotsRaw = isSell
-          ? (e.kv['總單位']!=null? +e.kv['總單位'] : (tradeByTid[e.kv.tid]?.qty||1))
-          : (e.kv['本次單位']!=null? +e.kv['本次單位'] : 1);
-        const sharesRaw = lotsRaw*1000;
-        const grossRaw = px*sharesRaw;
-        const feeRaw = fee(grossRaw);
-        const buyAmt  = !isSell? Math.round(grossRaw + feeRaw) : null;
-        const sellAmt =  isSell? Math.round(grossRaw - feeRaw - taxOnSell(grossRaw)) : null;
+    // 買/賣欄位：買進僅顯示買價，賣出僅顯示賣價
+    const buyPrice = r.action==='買進' ? fmt.num(r.price, 6) : '';
+    const sellPrice = r.action==='賣出' ? fmt.num(r.price, 6) : '';
 
-        // 實際損益/ROI：僅 SELL 列
-        let gain=null, roi=null, accHtml='';
-        if(isSell){
-          const tr=tradeByTid[e.kv.tid];
-          gain = Math.round(tr.gainSlip||0);
-          const base = Math.round((tr.pxInAvg||0)*sharesRaw);
-          roi  = base? (gain/base) : 0;
-          accGain += gain;
-          accHtml = `<span class="${accGain>=0?'gain-red':'loss-green'}">${accGain>=0?'+':''}${accGain.toLocaleString()}</span>`;
-        }
+    tr.innerHTML = `
+      <td class="mono text-gray-700">${dt}</td>
+      <td class="font-medium ${r.action==='買進'?'text-red-600': r.action==='賣出'?'text-green-600':'text-gray-600'}">${r.action}</td>
+      <td class="mono text-right">${buyPrice}</td>
+      <td class="mono text-right">${sellPrice}</td>
+      <td class="mono">${period}</td>
+      <td class="mono text-right">${r._singleReal==null?'':fmt.money(r._singleReal)}</td>
+      <td class="mono text-right">${fmt.money(r._cum)}</td>
+      <td class="text-xs text-gray-500">${r.note||''}</td>
+    `;
 
-        // 1-1-2 建議張數（用「當列單價」估 unitSize；SELL 用同 tid 之前 BUY/ADD 累計）
-        const oneLotEst = Math.round(px*1000 + fee(px*1000));
-        const maxLotsEst= oneLotEst>0? Math.floor(CAPITAL/oneLotEst) : 0;
-        const unitSize  = maxLotsEst? Math.floor(maxLotsEst/4) : 0;
+    tbody.appendChild(tr);
+  });
+}
 
-        let suggLots = 0;
-        if(e.action==='BUY'||e.action==='ADD1') suggLots=unitSize;
-        else if(e.action==='ADD2')             suggLots=unitSize*2;
-        else if(e.action==='SELL')             suggLots=(suggBuyLotsByTid[e.kv.tid]||0);
+async function readFile(file){
+  const text = await file.text();
+  const rows = [];
+  text.split(/\r?\n/).forEach((line)=>{
+    const r = parseLine(line);
+    if (r) rows.push(r);
+  });
+  return rows;
+}
 
-        if(!isSell) suggBuyLotsByTid[e.kv.tid]=(suggBuyLotsByTid[e.kv.tid]||0)+suggLots;
+// ——————————— 事件繫結 ———————————
+let state = { rows: [], curPrice: null };
 
-        // 估算區：依法計算
-        const sharesSugg = suggLots*1000;
+const $ = (id)=>document.getElementById(id);
 
-        // 買進金額(估)：用當列單價買入
-        const grossBuyEst = px*sharesSugg;
-        const feeBuyEst   = fee(grossBuyEst);
-        const buyAmtEst   = Math.round(grossBuyEst + feeBuyEst);
+$('file').addEventListener('change', async (e)=>{
+  const f = e.target.files[0];
+  if (!f) return;
+  state.rows = await readFile(f);
+  render(state.rows, state.curPrice);
+});
 
-        // 賣出金額(估)：用當列單價賣出
-        const grossSellEst= px*sharesSugg;
-        const feeSellEst  = fee(grossSellEst);
-        const taxEst      = taxOnSell(grossSellEst);
-        const sellAmtEst  = Math.round(grossSellEst - feeSellEst - taxEst);
+$('recalc').addEventListener('click', ()=>{
+  const v = Number($('curPrice').value);
+  state.curPrice = isNaN(v) ? null : v;
+  render(state.rows, state.curPrice);
+});
 
-        // 損益試算：只在 SELL 列（用 tid 的 pxInAvg 當估買入價）
-        let planGain=null, planRoi=null;
-        if(isSell){
-          const tr=tradeByTid[e.kv.tid];
-          const buyGrossAvg = (tr.pxInAvg||0)*sharesSugg;
-          const buyFeeAvg   = fee(buyGrossAvg);
-          const buyNetAvg   = Math.round(buyGrossAvg + buyFeeAvg);
-          const sellNet     = sellAmtEst;
-          planGain = sellNet - buyNetAvg;
-          planRoi  = buyNetAvg? (planGain/buyNetAvg) : 0;
-        }
-        // 累計損益(含試算) = 上一列 + 本列損益試算（沒有則加0）
-        cumWithPlan += (planGain||0);
+$('load-demo').addEventListener('click', ()=>{
+  const demo = [
+    '20231107,90500,17.610000,買進,層=1,今開=17.620000,昨收=17.880000,門檻%=1.20,成本含稅=17.635000,本次單位=1,總單位=1',
+    '20231108,90500,17.860000,賣出,平均成本含稅=17.635000,買價=17.64,賣價=17.86,毛利=225,買手續費=25,賣手續費=25,交易稅=18,稅後獲利=182,稅後累積獲利=182,總單位=1',
+    '20231122,90500,18.410000,買進,層=1,今開=18.440000,昨收=18.670000,門檻%=1.20,成本含稅=18.430000,本次單位=1,總單位=1'
+  ];
+  state.rows = demo.map(parseLine).filter(Boolean);
+  state.curPrice = 18.520000;
+  $('curPrice').value = state.curPrice;
+  render(state.rows, state.curPrice);
+});
 
-        const d8=e.d8;
-        const fmtMoney = v => (v==null||v===0)? '' : (v>0? `<span class="gain-red">+${v.toLocaleString()}</span>` : `<span class="loss-green">${v.toLocaleString()}</span>`);
-        const fmtPct   = v => (v==null)? '' : (v>=0? `<span class="gain-red">${(v*100).toFixed(2)}%</span>` : `<span class="loss-green">${(v*100).toFixed(2)}%</span>`);
-
-        return `<tr class="${cls}">
-          <td>${idx+1}</td>
-          <td>00909</td>
-          <td>${d8}</td>
-          <td>${isSell?'賣出':'買進'}</td>
-          <td>${sharesRaw.toLocaleString()}</td>
-          <td>${px.toFixed(2)}</td>
-          <td>${feeRaw.toLocaleString()}</td>
-          <td>${buyAmt!=null? buyAmt.toLocaleString() : ''}</td>
-          <td>${sellAmt!=null? sellAmt.toLocaleString() : ''}</td>
-          <td>${fmtMoney(gain)}</td>
-          <td>${fmtPct(roi)}</td>
-          <td>${accHtml}</td>
-          <td style="border-left:2px solid #ddd;">${suggLots||''}</td>
-          <td>${px? px.toFixed(2): ''}</td>
-          <td>${suggLots? feeSellEst.toLocaleString(): ''}</td>
-          <td>${suggLots? buyAmtEst.toLocaleString(): ''}</td>
-          <td>${suggLots? sellAmtEst.toLocaleString(): ''}</td>
-          <td>${fmtMoney(planGain)}</td>
-          <td>${fmtPct(planRoi)}</td>
-          <td>${fmtMoney(cumWithPlan)}</td>
-        </tr>`;
-      });
-
-    document.querySelector('#tblTrade tbody').innerHTML =
-      rows.join('') || '<tr><td colspan="20" style="text-align:center;color:#777;">（無資料）</td></tr>';
-
-  }catch(err){
-    metaEl.textContent='❌ 載入或解析失敗：'+(err?.message||err);
-    console.error(err);
-  }
-})();
+// 初始：空畫面
+render([], null);
 </script>
 </body>
 </html>
