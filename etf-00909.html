@@ -35,15 +35,15 @@
   .chartbox{ height:340px; }
   canvas{ width:100%; height:100%; background:#fff; border:1px solid #eee; border-radius:10px; }
 
-  /* ====== 交易明細：固定欄寬、不換行、與卡片貼齊，最緊縮後置中 ====== */
-  .tablecard{ padding:16px 18px; }
-  .table-wrap{
-    display:flex; justify-content:center;   /* 置中 */
-    width:100%; overflow-x:auto;            /* 不留右白邊，必要時可水平捲動 */
+  /* ====== 交易明細：固定欄寬、不換行、滿版貼齊 ====== */
+  .tablecard.wide{
+    width:100vw; margin-left:calc(50% - 50vw);
+    padding-left:24px; padding-right:24px;
   }
+  .table-wrap{ width:100%; overflow-x:auto; }
   .simple-table{
     table-layout:fixed !important;
-    width:1812px;                           /* 等於 colgroup 總寬 */
+    width:1812px; /* 等於 colgroup 總寬 */
     border-collapse:collapse;
     font-size:11px;
   }
@@ -101,8 +101,8 @@
   </div>
 </div>
 
-<!-- 交易明細 -->
-<div class="card tablecard">
+<!-- 交易明細：滿版貼齊 -->
+<div class="card tablecard wide">
   <h3>交易明細</h3>
   <div class="table-wrap">
     <table class="simple-table" id="tblTrade">
@@ -310,14 +310,14 @@
       {label:'年化波動(頁端計)', value:std(rets)*Math.sqrt(252), fmt:pct, pos:'down'},
     ]);
 
-    // ===== 交易明細 & 建議張數（依第一筆進場價→1/4 單位；1、1、2 倍） =====
+    // ===== 交易明細與建議張數 =====
     const tbody=document.querySelector('#tblTrade tbody');
     const CAPITAL=1_000_000;
 
     const tradeByTid={}; parsed.trades.forEach(t=> tradeByTid[String(t.tid)]=t);
-    const unitLotsByTid={};       // 每個 tid 的「單位張數」（以第一筆進場價推算）
+    const unitLotsByTid={};       // tid 的單位張數（以第一筆進場價推導）
     const suggLotsSumByTid={};    // SELL 用：累計建議張數
-    let accGain=0, cumWithPlan=0; // 左/右欄累計；同時用於 KPI 的預估總獲利
+    let accGain=0, cumWithPlan=0;
 
     const rows = parsed.events
       .filter(e=>['BUY','ADD1','ADD2','SELL'].includes(e.action))
@@ -338,11 +338,11 @@
         const buyAmt = !isSell? Math.round(grossRaw + feeRaw) : null;
         const sellAmt=  isSell? Math.round(grossRaw - feeRaw - taxOnSell(grossRaw)) : null;
 
-        // ===== 設定本 tid 的「單位張數」（以第一個進場事件的價格推導） =====
+        // 設定 tid 的單位張數（以第一個進場事件的價格）
         if(!unitLotsByTid[tid] && (e.action==='BUY' || e.action==='ADD1' || e.action==='ADD2')){
-          const oneLotCost = Math.round(px*1000 + fee(px*1000));      // 每張含手續費成本
+          const oneLotCost = Math.round(px*1000 + fee(px*1000));        // 每張含手續費
           const maxLots    = oneLotCost>0? Math.floor(CAPITAL/oneLotCost) : 0;
-          unitLotsByTid[tid] = Math.max(1, Math.floor(maxLots/4));     // 單位（至少1張）
+          unitLotsByTid[tid] = Math.max(1, Math.floor(maxLots/4));       // 單位（至少1張）
         }
         const unitLots = unitLotsByTid[tid] || 0;
 
@@ -351,7 +351,6 @@
         if(e.action==='BUY' || e.action==='ADD1') suggLots = unitLots;
         else if(e.action==='ADD2')               suggLots = unitLots*2;
         else if(e.action==='SELL')               suggLots = (suggLotsSumByTid[tid]||0);
-
         if(!isSell) suggLotsSumByTid[tid]=(suggLotsSumByTid[tid]||0)+suggLots;
 
         const sharesSugg = (suggLots||0)*1000;
@@ -367,22 +366,29 @@
                     accGain<0? `<span class="loss-green">${accGain.toLocaleString()}</span>` : '';
         }
 
-        // 試算（SELL 顯示；買成本用 pxInAvg）
+        // === 試算 ===
         const tr=tradeByTid[tid];
         const pxInAvg=tr?.pxInAvg ?? px;
 
+        // (估) 買進淨額（SELL 列顯示 avg，BUY/ADD 列顯示「當列價」）
         const grossBuyAvg=pxInAvg*sharesSugg;
         const feeBuyAvg=fee(grossBuyAvg);
         const buyNetAvg=Math.round(grossBuyAvg + feeBuyAvg);
 
+        const grossBuyNow=px*sharesSugg;
+        const feeBuyNow=fee(grossBuyNow);
+        const buyNetNow=Math.round(grossBuyNow + feeBuyNow);
+
+        // (估) 賣出淨額（SELL 列顯示）
         const grossSellEst=px*sharesSugg;
         const feeSellEst=fee(grossSellEst);
-        const taxEst=Math.round(grossSellEst*0.001);
+        const taxEst=taxOnSell(grossSellEst);
         const sellNetEst=Math.round(grossSellEst - feeSellEst - taxEst);
 
+        // 損益試算＝同列顯示的賣出(估) − 買進(估)
         let planGain=null, planRoi=null, showCumPlan='';
         if(isSell){
-          planGain = sellNetEst - buyNetAvg;
+          planGain = sellNetEst - buyNetAvg;          // 與表內兩欄一致
           planRoi  = planGain / 1_000_000;
           cumWithPlan += (planGain||0);
           showCumPlan = cumWithPlan>0? `<span class="gain-red">+${cumWithPlan.toLocaleString()}</span>` :
@@ -396,6 +402,12 @@
 
         const money=v=> (v==null||v===0)? '' : (v>0? `<span class="gain-red">+${v.toLocaleString()}</span>` : `<span class="loss-green">${v.toLocaleString()}</span>`);
         const rate=v=> (v==null)? '' : (v>=0? `<span class="gain-red">${(v*100).toFixed(2)}%</span>` : `<span class="loss-green">${(v*100).toFixed(2)}%</span>`);
+
+        // === 列輸出（BUY/ADD：只顯示買進(估)；SELL：同列顯示買/賣兩個估值，損益試算用這兩欄相減） ===
+        const buyEstCell = isSell
+          ? (sharesSugg? buyNetAvg.toLocaleString(): '')
+          : (sharesSugg? buyNetNow.toLocaleString(): '');
+        const sellEstCell = isSell ? (sharesSugg? sellNetEst.toLocaleString(): '') : '';
 
         return `<tr class="${cls}">
           <td>${idx+1}</td>
@@ -412,9 +424,9 @@
           <td>${accHtml}</td>
           <td style="border-left:2px solid #ddd;">${sharesSugg? sharesSugg.toLocaleString(): ''}</td>
           <td>${px? px.toFixed(2): ''}</td>
-          <td>${ isSell ? (sharesSugg? feeSellEst.toLocaleString(): '') : (sharesSugg? fee(px*sharesSugg).toLocaleString(): '') }</td>
-          <td>${!isSell && sharesSugg? Math.round(px*sharesSugg + fee(px*sharesSugg)).toLocaleString(): ''}</td>
-          <td>${ isSell && sharesSugg? sellNetEst.toLocaleString(): ''}</td>
+          <td>${ sharesSugg ? (isSell? feeSellEst.toLocaleString(): feeBuyNow.toLocaleString()) : ''}</td>
+          <td>${buyEstCell}</td>
+          <td>${sellEstCell}</td>
           <td>${money(planGain)}</td>
           <td>${rate(planRoi)}</td>
           <td>${showCumPlan}</td>
@@ -422,14 +434,6 @@
       });
 
     tbody.innerHTML = rows.join('') || '<tr><td colspan="20" style="text-align:center;color:#777;">（無資料）</td></tr>';
-
-    // ===== KPI：預估張數獲利 =====
-    const estProfit = cumWithPlan;                 // 右欄累計(含試算)
-    const estReturn = estProfit / 1_000_000;
-    putKPIs('kpi-core', [
-      {label:'預估張數獲利', value:estProfit, fmt:(v)=> (v==null?'—':(v>=0? `+${v.toLocaleString()}`: v.toLocaleString())), pos:'profit'},
-      {label:'預估張數報酬率', value:estReturn, fmt:pct, pos:'profit'},
-    ]);
 
   }catch(err){
     metaEl.textContent='❌ 載入或解析失敗：'+(err?.message||err);
