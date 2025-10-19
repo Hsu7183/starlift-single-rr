@@ -60,14 +60,17 @@
   <p class="subtitle">共同創辦人：許夏睿、何冠緯、張宸</p>
   <hr>
 
-  <h3 class="section-title-red">策略</h3>
+  <!-- 原：策略 → 交易策略 -->
+  <h3 class="section-title-red">交易策略</h3>
   <div class="strategy-grid">
     <div class="strategy-col">
-      <p class="subcat">順勢</p>
+      <!-- 原：順勢 → 順勢型 -->
+      <p class="subcat">順勢型</p>
 
       <!-- 0807 -->
       <a class="card" href="0807.html">
-        <p class="card-title red">0807版本</p>
+        <!-- 原：0807版本 → 台指近-0807版本 -->
+        <p class="card-title red">台指近-0807版本</p>
         <div class="lines">
           <p class="line"><span class="label">近1週報酬率</span><span id="wk1-range-0807" class="range">—</span><span id="wk1-0807" class="val neu">—</span></p>
           <p class="line"><span class="label">近2週報酬率</span><span id="wk2-range-0807" class="range">—</span><span id="wk2-0807" class="val neu">—</span></p>
@@ -85,7 +88,8 @@
 
       <!-- 1001 -->
       <a class="card" href="1001.html">
-        <p class="card-title red">1001版本</p>
+        <!-- 原：1001版本 → 台指近-1001版本 -->
+        <p class="card-title red">台指近-1001版本</p>
         <div class="lines">
           <p class="line"><span class="label">近1週報酬率</span><span id="wk1-range-1001" class="range">—</span><span id="wk1-1001" class="val neu">—</span></p>
           <p class="line"><span class="label">近2週報酬率</span><span id="wk2-range-1001" class="range">—</span><span id="wk2-1001" class="val neu">—</span></p>
@@ -103,12 +107,34 @@
     </div>
 
     <div class="strategy-col">
-      <p class="subcat">逆勢</p>
+      <!-- 原：逆勢 → 逆勢型 -->
+      <p class="subcat">逆勢型</p>
+
+      <!-- 00909＋ETF版本（新增卡片） -->
+      <a class="card" href="etf-00909.html">
+        <p class="card-title red">00909＋ETF版本</p>
+        <div class="lines">
+          <p class="line"><span class="label">近1週報酬率</span><span id="wk1-range-00909" class="range">—</span><span id="wk1-00909" class="val neu">—</span></p>
+          <p class="line"><span class="label">近2週報酬率</span><span id="wk2-range-00909" class="range">—</span><span id="wk2-00909" class="val neu">—</span></p>
+          <p class="line"><span class="label">近1月報酬率</span><span id="m1-range-00909"  class="range">—</span><span id="m1-00909"  class="val neu">—</span></p>
+          <p class="line"><span class="label">近2月報酬率</span><span id="m2-range-00909"  class="range">—</span><span id="m2-00909"  class="val neu">—</span></p>
+          <p class="line"><span class="label">近3月報酬率</span><span id="m3-range-00909"  class="range">—</span><span id="m3-00909"  class="val neu">—</span></p>
+          <p class="line"><span class="label">近6月報酬率</span><span id="m6-range-00909"  class="range">—</span><span id="m6-00909"  class="val neu">—</span></p>
+          <p class="line"><span class="label">近1年報酬率</span><span id="y1-range-00909"  class="range">—</span><span id="y1-00909"  class="val neu">—</span></p>
+          <p class="line"><span class="label">近2年報酬率</span><span id="y2-range-00909"  class="range">—</span><span id="y2-00909"  class="val neu">—</span></p>
+          <p class="line"><span class="label">近3年報酬率</span><span id="y3-range-00909"  class="range">—</span><span id="y3-00909"  class="val neu">—</span></p>
+          <p class="line"><span class="label">近6年報酬率</span><span id="y6-range-00909"  class="range">—</span><span id="y6-00909"  class="val neu">—</span></p>
+          <p class="period">期間：<span id="period-00909">—</span></p>
+        </div>
+      </a>
+
+      <!-- （可保留研發中卡片，若不需要可刪） -->
       <a class="card" href="#"><p class="card-title gray">研發中</p></a>
     </div>
 
     <div class="strategy-col">
-      <p class="subcat">盤整</p>
+      <!-- 原：盤整 → 盤整型 -->
+      <p class="subcat">盤整型</p>
       <a class="card" href="#"><p class="card-title gray">研發中</p></a>
     </div>
   </div>
@@ -147,7 +173,8 @@
       global: { fetch: (u,o={}) => fetch(u,{...o, cache:'no-store'}) }
     });
 
-    const WANT = { "0807": /0807/i, "1001": /1001/i };
+    // 原本只有 0807/1001，這裡加上 00909
+    const WANT = { "0807": /0807/i, "1001": /1001/i, "00909": /00909/i };
 
     function pubUrl(path){ const { data } = sb.storage.from(BUCKET).getPublicUrl(path); return data?.publicUrl || '#'; }
     async function latestFile(regex){
@@ -321,7 +348,8 @@
       }
     }
 
-    await Promise.all([fillCard("0807"), fillCard("1001")]);
+    // 原本兩張卡，這裡補上 00909
+    await Promise.all([fillCard("0807"), fillCard("1001"), fillCard("00909")]);
   })();
   </script>
 </body>
