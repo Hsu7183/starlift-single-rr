@@ -1,5 +1,5 @@
 /* ===========================================================================
- * js/etf-chart.js
+ * etf-chart.js
  * 繪圖模組：專為 00909-ETF 分頁（etf-00909.html）設計。
  * 使用 Chart.js（需載入 CDN）
  *   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
