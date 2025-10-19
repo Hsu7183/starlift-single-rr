@@ -22,7 +22,7 @@
     .kpi{ background:#fafafa; border:1px solid #eee; border-radius:10px; padding:10px 12px; }
     .kpi .t{ font-size:12px; color:#666; margin:0; }
     .kpi .v{ font-size:20px; font-weight:800; margin:4px 0 0; color:#111; }
-    /* 顏色：一般綠=正、紅=負；獲利類反轉（profit=紅正、綠負）由 JS 控制 class */
+    /* 顏色：一般綠=正、紅=負；獲利類反轉（profit=紅正、綠負） */
     .kpi .v.green{ color:#10b981; }
     .kpi .v.red{   color:#d32f2f; }
     .kpi .v.muted{ color:#666; }
@@ -30,7 +30,7 @@
 
     .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
 
-    /* 固定圖表高度，避免 canvas 無限延長 */
+    /* 圖表固定高度 */
     .chartbox{ height:360px; }
     canvas{ width:100%; height:100%; background:#fff; border:1px solid #eee; border-radius:10px; }
 
@@ -38,6 +38,13 @@
     .simple-table{ width:100%; border-collapse:collapse; font-size:13px; }
     .simple-table th, .simple-table td{ border-bottom:1px solid #eee; padding:6px 8px; text-align:right; }
     .simple-table th:first-child, .simple-table td:first-child{ text-align:left; }
+
+    /* 交易摘要 行色：買=淡紅、賣=淡綠 */
+    .row-buy{ background:#fdecea; }
+    .row-sell{ background:#e9f8ef; }
+    .gain-red{ color:#d32f2f; font-weight:700; }
+    .loss-green{ color:#10b981; font-weight:700; }
+    tfoot td{ background:#f7f7f7; font-weight:700; }
   </style>
 </head>
 <body>
@@ -57,10 +64,9 @@
     </div>
   </div>
 
-  <!-- 建議投資方式 -->
   <div class="card">
     <h3>建議投資方式（本金 100 萬，單位規則 1-1-2）</h3>
-    <table class="simple-table" id="planTbl">
+    <table class="simple-table">
       <tbody>
         <tr><th>最近一次買進時間</th><td id="plan-lastBuy">—</td></tr>
         <tr><th>當時買進價（元）</th><td id="plan-lastPx">—</td></tr>
@@ -71,7 +77,7 @@
         <tr><th>參考獲利（以最近完成一筆每張損益 × 計畫張數）</th><td id="plan-profit">—</td></tr>
       </tbody>
     </table>
-    <div class="note">以最近一次「買進」的價格估算一張金額，先求極限張數，再用 1-1-2 的四單位配置（不足則捨去）。參考獲利以最近完成的一筆交易每張損益乘以計畫張數估算。</div>
+    <div class="note">以最近一次「買進」估一張金額→極限張數→1-1-2 配置。參考獲利＝最近完成的一筆每張損益×計畫張數。</div>
   </div>
 
   <div class="card">
@@ -114,12 +120,7 @@
     </div>
   </div>
 
-  <div class="card">
-    <h3>參與率曲線（按交易排序）</h3>
-    <div class="chartbox"><canvas id="partRate"></canvas></div>
-  </div>
-
-  <!-- 交易摘要（全部顯示） -->
+  <!-- 交易摘要（全部顯示：買=淡紅底，賣=淡綠底） -->
   <div class="card">
     <h3>交易摘要（全部顯示）</h3>
     <table class="simple-table" id="tblTrade">
@@ -136,16 +137,7 @@
           <th>損益</th>
           <th>獲利率</th>
           <th>累計損益</th>
-        </tr>
-      </thead>
-      <tbody></tbody>
-    </table>
-    <hr style="margin:12px 0;border:none;border-top:1px dashed #ddd;">
-    <h4 style="margin:0 0 8px;">建議交易數量（本金100萬、1-1-2 規則）試算</h4>
-    <table class="simple-table" id="tblPlan">
-      <thead>
-        <tr>
-          <th>建議交易數量</th>
+          <th style="border-left:2px solid #ddd;">建議交易數量</th>
           <th>單價</th>
           <th>手續費(估)</th>
           <th>付出成本(估)</th>
@@ -155,11 +147,12 @@
         </tr>
       </thead>
       <tbody></tbody>
+      <tfoot><tr id="planRow"><td colspan="18">—</td></tr></tfoot>
     </table>
   </div>
 </div>
 
-<!-- 依賴（股票線專用，不動期貨線） -->
+<!-- 依賴（股票線專用） -->
 <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="etf-engine.js"></script>
@@ -167,7 +160,6 @@
 
 <script>
 (async function(){
-  // ===== Supabase 設定 =====
   const SUPABASE_URL = "https://byhbmmnacezzgkwfkozs.supabase.co";
   const SUPABASE_ANON_KEY = "sb_publishable_xVe8fGbqQ0XGwi4DsmjPMg_Y2RBOD3t";
   const BUCKET = "reports";
@@ -196,30 +188,29 @@
     return files[0];
   }
 
-  // —— 智慧解碼：utf-8 / big5 / utf-16le / utf-16be
+  // 智慧解碼
   async function fetchSmart(url){
     const buf = await fetch(url, {cache:'no-store'}).then(r=>{ if(!r.ok) throw new Error(r.status+' '+r.statusText); return r.arrayBuffer(); });
     const encs = ['utf-8','big5','utf-16le','utf-16be'];
     for(const enc of encs){
       try{
-        const td = new TextDecoder(enc, {fatal:false});
+        const td = new TextDecoder(enc,{fatal:false});
         const txt = td.decode(buf);
         const parsed = ETFEngine.parseEtfTxt(txt);
-        if (parsed && parsed.trades && parsed.trades.length > 0) return { text: txt, enc, parsed };
+        if (parsed && parsed.trades && parsed.trades.length>0) return { text:txt, enc, parsed };
       }catch(e){}
     }
     const txt = new TextDecoder('utf-8').decode(buf);
-    return { text: txt, enc: 'utf-8', parsed: ETFEngine.parseEtfTxt(txt) };
+    return { text:txt, enc:'utf-8', parsed: ETFEngine.parseEtfTxt(txt) };
   }
 
-  // ── KPI 渲染輔助：支援「profit」反轉顏色（紅=賺、綠=虧）
+  // KPI render（含 profit 反轉色）
   function putKPIs(targetId, items){
     const el=document.getElementById(targetId); el.innerHTML='';
     items.forEach(k=>{
       const d=document.createElement('div'); d.className='kpi';
       const t=document.createElement('p'); t.className='t'; t.textContent=k.label;
-      const v=document.createElement('p'); v.className='v';
-      v.textContent = k.fmt(k.value);
+      const v=document.createElement('p'); v.className='v'; v.textContent = k.fmt(k.value);
       if(typeof k.value==='number'){
         if(k.pos==='profit'){ v.classList.add(k.value>0?'red':(k.value<0?'green':'muted')); }
         else if(k.pos==='up'){ v.classList.add(k.value>0?'green':(k.value<0?'red':'muted')); }
@@ -238,58 +229,28 @@
   try{
     metaEl.textContent = '正在抓取最新 00909 檔（/reports 下）…';
 
-    // 1) 抓最新檔
+    // 下載
     const latest = await latest00909();
-    if(!latest){ metaEl.textContent='⚠️ 沒找到 00909 檔案（請確認 bucket/reports 是否有檔）。'; return; }
+    if(!latest){ metaEl.textContent='⚠️ 沒找到 00909 檔案。'; return; }
     const rawUrl = pubUrl(latest.name);
     rawLink.style.display='inline-block'; rawLink.href = rawUrl;
 
-    // 2) 下載 + 智慧解碼 + 解析
     const { text:rawTxt, enc, parsed } = await fetchSmart(rawUrl);
     const rawBlob = new Blob([rawTxt], {type:'text/plain'});
     dlRaw.style.display='inline-block'; dlRaw.href = URL.createObjectURL(rawBlob);
 
-    // 3) Loading → 成功
     const first = parsed.days[0] ? `${parsed.days[0].slice(0,4)}/${parsed.days[0].slice(4,6)}/${parsed.days[0].slice(6,8)}` : '—';
     const last  = parsed.days.length? `${parsed.days.at(-1).slice(0,4)}/${parsed.days.at(-1).slice(4,6)}/${parsed.days.at(-1).slice(6,8)}` : '—';
     metaEl.textContent = `✅ 已載入：${latest.name}（解碼：${enc}）｜交易筆數=${parsed.trades.length}｜期間：${first} ~ ${last}`;
 
-    // 4) KPI 計算
-    const kpis   = ETFEngine.calcEtfKpis(parsed);
-
-    // 4.1 建議投資方式（本金 100 萬、單位 1-1-2）
-    (function renderPlan(){
-      const CAPITAL = 1_000_000;
-      const lastBuyEv = [...parsed.events].filter(e=>e.action==='BUY').sort((a,b)=>a.ts.localeCompare(b.ts)).pop();
-      const lastBuyTs = lastBuyEv ? `${lastBuyEv.d8.slice(0,4)}/${lastBuyEv.d8.slice(4,6)}/${lastBuyEv.d8.slice(6,8)} ${lastBuyEv.t6.slice(0,2)}:${lastBuyEv.t6.slice(2,4)}:${lastBuyEv.t6.slice(4,6)}` : '—';
-      const buyPx = lastBuyEv ? +lastBuyEv.price : null;
-      const lotAmt = buyPx ? Math.round(buyPx*1000) : null;
-      const maxLots = lotAmt ? Math.floor(CAPITAL / lotAmt) : 0;
-      const unitSize = maxLots ? Math.floor(maxLots / 4) : 0;  // 1-1-2
-      const planLots = unitSize * 4;
-      const unitsText = unitSize ? `${unitSize} / ${unitSize} / ${unitSize*2}` : '—';
-
-      const lastTrade = [...parsed.trades].sort((a,b)=>a.tsOut.localeCompare(b.tsOut)).pop();
-      const plPerLot = lastTrade ? (lastTrade.pxOut - lastTrade.pxIn) * 1000 : 0;
-      const estProfit = planLots ? Math.round(plPerLot * planLots) : null;
-
-      document.getElementById('plan-lastBuy').textContent = lastBuyTs;
-      document.getElementById('plan-lastPx').textContent  = buyPx!=null ? buyPx.toFixed(2) : '—';
-      document.getElementById('plan-lotAmt').textContent  = lotAmt!=null ? lotAmt.toLocaleString() : '—';
-      document.getElementById('plan-maxLots').textContent = maxLots || '—';
-      document.getElementById('plan-units').textContent   = unitsText;
-      document.getElementById('plan-planLots').textContent= planLots || '—';
-      document.getElementById('plan-profit').textContent  = (estProfit!=null) ? (estProfit>=0? `+${estProfit.toLocaleString()} 元` : `${estProfit.toLocaleString()} 元`) : '—';
-    })();
-
-    // 5) KPI 顯示（獲利類用 pos:'profit' → 紅=賺、綠=虧）
+    // KPI
+    const kpis = ETFEngine.calcEtfKpis(parsed);
     putKPIs('kpi-core', [
       {label:'累積報酬（每百萬）', value:kpis.core.totalReturn, fmt:pct, pos:'profit'},
       {label:'CAGR',              value:kpis.core.CAGR,        fmt:pct, pos:'profit'},
       {label:'涵蓋日數',           value:kpis.core.coverDays,   fmt:int, pos:null},
       {label:'交易筆數',           value:kpis.core.trades,      fmt:int, pos:null},
     ]);
-
     putKPIs('kpi-risk', [
       {label:'年化波動',  value:kpis.risk.volAnn,   fmt:pct, pos:'down'},
       {label:'最大回撤',  value:kpis.risk.MDD,      fmt:pct, pos:'down'},
@@ -301,7 +262,6 @@
       {label:'VaR(95%) / 日',  value:kpis.risk.VaR95,  fmt:pct, pos:'down'},
       {label:'CVaR(95%) / 日', value:kpis.risk.CVaR95, fmt:pct, pos:'down'},
     ]);
-
     putKPIs('kpi-trade', [
       {label:'勝率',              value:kpis.trade.winRate,   fmt:pct,  pos:'profit'},
       {label:'Profit Factor',    value:kpis.trade.PF,        fmt:num,  pos:'profit'},
@@ -313,14 +273,7 @@
       {label:'平均 ISbps',       value:kpis.trade.avgISbps,  fmt:bps,  pos:'down'},
     ]);
 
-    putKPIs('kpi-cap', [
-      {label:'平均參與率',  value:kpis.capacity.avgParticipation, fmt:pct, pos:'down'},
-      {label:'P75 參與率',  value:kpis.capacity.p75Participation, fmt:pct, pos:'down'},
-      {label:'基準資金（萬）', value:kpis.meta.baseCapital/10000, fmt:num, pos:null},
-      {label:'涵蓋期間(起-迄)', value:0, fmt:()=>((kpis.meta.firstDay||'—')+' ~ '+(kpis.meta.lastDay||'—')), pos:null},
-    ]);
-
-    // 6) 圖表
+    // 圖表
     const labels = parsed.days.map(d=>`${d.slice(0,4)}/${d.slice(4,6)}/${d.slice(6,8)}`);
     ETFChart.drawEquityCurve(document.getElementById('eq'), labels, parsed.equity);
     const MAEs  = parsed.trades.map(t=> t.maePct!=null ? +t.maePct : null).filter(x=>x!=null);
@@ -337,51 +290,83 @@
     }).filter(x=>x!=null);
     ETFChart.drawPartRate(document.getElementById('partRate'), partRates);
 
-    // 7) 交易摘要（全部顯示，新格式）
+    // ===== 交易摘要（事件級：BUY/ADD1/ADD2/SELL 全列；買=淡紅底、賣=淡綠底） =====
+    const STOCK_NAME = '00909';
+    const tbody = document.querySelector('#tblTrade tbody');
+
+    // 建立 tid→trade 快取（取賣出淨損益等）
+    const tradeByTid = {};
+    parsed.trades.forEach(t => tradeByTid[String(t.tid)] = t);
+
+    let accGain = 0; // 累計損益（元，僅賣出列累加）
+    const rows = parsed.events
+      .filter(ev => ['BUY','ADD1','ADD2','SELL'].includes(ev.action))
+      .sort((a,b)=> a.ts.localeCompare(b.ts))
+      .map((ev, idx) => {
+        const isSell = (ev.action === 'SELL');
+        const rowCls = isSell ? 'row-sell' : 'row-buy';
+
+        // 交易數量
+        const lots = isSell
+          ? (ev.kv['總單位']!=null ? Number(ev.kv['總單位']) : (tradeByTid[ev.kv.tid]?.qty || 1))
+          : (ev.kv['本次單位']!=null ? Number(ev.kv['本次單位']) : 1);
+        const qtyShares = lots * 1000;
+
+        // 單價
+        const px = Number(ev.price) || 0;
+
+        // 手續費（賣出取賣手續費；買進若沒有就估 59/張）
+        const FEE_PER_LOT_EST = 59;
+        const fee = isSell
+          ? (ev.kv['賣手續費']!=null ? Number(ev.kv['賣手續費']) : 0)
+          : (ev.kv['買手續費']!=null ? Number(ev.kv['買手續費']) : (lots * FEE_PER_LOT_EST));
+
+        // 付出成本：買進＝px*股數+fee；賣出欄位留空
+        const costPay = !isSell ? Math.round(px * qtyShares + fee) : null;
+
+        // 損益與獲利率：只在賣出列顯示
+        let gainNet = null, roi = null;
+        if (isSell) {
+          const tr = tradeByTid[ev.kv.tid];
+          if (tr) {
+            gainNet = Math.round(tr.gainSlip || 0);
+            const baseCost = (ev.kv['平均成本含稅']!=null ? Number(ev.kv['平均成本含稅']) : (tr.pxInAvg||0)) * qtyShares;
+            roi = baseCost>0 ? gainNet / baseCost : 0;
+            accGain += gainNet;
+          }
+        }
+
+        const d8 = ev.d8;
+        const dstr = `${d8.slice(0,4)}${d8.slice(4,6)}${d8.slice(6,8)}`;
+
+        const gainHtml = (gainNet==null) ? '' :
+          `<span class="${gainNet>=0?'gain-red':'loss-green'}">${gainNet>=0?'+':''}${gainNet.toLocaleString()}</span>`;
+        const roiHtml  = (roi==null) ? '' :
+          `<span class="${roi>=0?'gain-red':'loss-green'}">${(roi*100).toFixed(2)}%</span>`;
+        const accHtml  = (isSell) ?
+          `<span class="${accGain>=0?'gain-red':'loss-green'}">${accGain>=0?'+':''}${accGain.toLocaleString()}</span>` : '';
+
+        return `<tr class="${rowCls}">
+          <td>${idx+1}</td>
+          <td>${STOCK_NAME}</td>
+          <td>${dstr}</td>
+          <td>${isSell?'賣出':'買進'}</td>
+          <td>${qtyShares.toLocaleString()}</td>
+          <td>${px.toFixed(2)}</td>
+          <td>${fee? fee.toLocaleString() : ''}</td>
+          <td>${costPay!=null? costPay.toLocaleString() : ''}</td>
+          <td>${gainHtml}</td>
+          <td>${roiHtml}</td>
+          <td>${accHtml}</td>
+          <!-- 後面是同一行的「建議交易數量試算」欄位（tfoot 會覆蓋，這邊留空） -->
+          <td colspan="7"></td>
+        </tr>`;
+      });
+
+    tbody.innerHTML = rows.join('') || '<tr><td colspan="18" style="text-align:center;color:#777;">（無資料）</td></tr>';
+
+    // 在同一張表格的表尾（同一行後面）輸出 1-1-2 試算
     {
-      const STOCK_NAME = '00909';
-      const tbody = document.querySelector('#tblTrade tbody');
-
-      // 建 SELL kv 索引
-      const sellKVByTid = {};
-      for (const ev of parsed.events) if (ev.action === 'SELL') sellKVByTid[String(ev.kv.tid)] = ev.kv;
-
-      let accGain = 0; // 累計損益（元）
-      const rows = parsed.trades
-        .sort((a,b)=> a.tsOut.localeCompare(b.tsOut))
-        .map((t, idx) => {
-          const kv = sellKVByTid[String(t.tid)] || {};
-          const d8 = String(t.tsOut).slice(0,8);
-          const dstr = `${d8.slice(0,4)}${d8.slice(4,6)}${d8.slice(6,8)}`;
-          const qtyShares = t.qty * 1000;
-          const px = +t.pxOut || 0;
-          const feeSell = kv['賣手續費'] != null ? Number(kv['賣手續費']) : 0;
-          const avgCostWithFee = kv['平均成本含稅'] != null ? Number(kv['平均成本含稅']) : (t.pxInAvg || 0);
-          const costPay = Math.round(avgCostWithFee * qtyShares);
-          const gainNet = Math.round(t.gainSlip || 0);
-          accGain += gainNet;
-          const roi = costPay > 0 ? gainNet / costPay : 0;
-          const color = gainNet > 0 ? 'style="color:#d32f2f;font-weight:700;"'
-                        : (gainNet < 0 ? 'style="color:#10b981;font-weight:700;"' : '');
-          return `<tr>
-            <td>${idx+1}</td>
-            <td>${STOCK_NAME}</td>
-            <td>${dstr}</td>
-            <td>賣出</td>
-            <td>${qtyShares.toLocaleString()}</td>
-            <td>${px.toFixed(2)}</td>
-            <td>${feeSell ? feeSell.toLocaleString() : ''}</td>
-            <td>${costPay ? costPay.toLocaleString() : ''}</td>
-            <td ${color}>${gainNet>=0?'+':''}${(gainNet).toLocaleString()}</td>
-            <td ${color}>${(roi*100).toFixed(2)}%</td>
-            <td ${color}>${accGain>=0?'+':''}${accGain.toLocaleString()}</td>
-          </tr>`;
-        });
-
-      tbody.innerHTML = rows.join('') || '<tr><td colspan="11" style="text-align:center;color:#777;">（無資料）</td></tr>';
-
-      // 8) 建議交易數量試算（本金100萬、1-1-2）
-      const planBody = document.querySelector('#tblPlan tbody');
       const CAPITAL = 1_000_000;
       const lastBuyEv = [...parsed.events].filter(e=>e.action==='BUY').sort((a,b)=>a.ts.localeCompare(b.ts)).pop();
       const lastTrade = [...parsed.trades].sort((a,b)=>a.tsOut.localeCompare(b.tsOut)).pop();
@@ -389,29 +374,32 @@
       const buyPx = lastBuyEv ? +lastBuyEv.price : null;
       const lotAmt = buyPx ? Math.round(buyPx*1000) : null;
       const maxLots = lotAmt ? Math.floor(CAPITAL / lotAmt) : 0;
-      const unitSize = maxLots ? Math.floor(maxLots / 4) : 0;
+      const unitSize = maxLots ? Math.floor(maxLots / 4) : 0;  // 1-1-2
       const planLots = unitSize * 4;
 
-      const FEE_PER_LOT_EST = 59;                             // 估算：59/張（可改）
+      const FEE_PER_LOT_EST = 59;
       const planFee  = planLots * FEE_PER_LOT_EST;
       const planCost = buyPx ? Math.round(planLots * 1000 * buyPx) + planFee : null;
 
-      const plPerLot = lastTrade ? (lastTrade.pxOut - lastTrade.pxIn) * 1000 : 0; // 元/張
+      const plPerLot = lastTrade ? (lastTrade.pxOut - lastTrade.pxIn) * 1000 : 0;
       const planGain = Math.round(plPerLot * planLots);
       const planRoi  = planCost>0 ? planGain / planCost : 0;
       const planAcc  = (accGain + planGain);
-      const c = gain => (gain>0 ? 'style="color:#d32f2f;font-weight:700;"' : (gain<0 ? 'style="color:#10b981;font-weight:700;"' : ''));
 
-      planBody.innerHTML = `<tr>
+      const c = v => (v>=0? 'gain-red' : 'loss-green');
+      const tfoot = document.querySelector('#tblTrade tfoot #planRow');
+      tfoot.innerHTML = `
+        <td colspan="11" style="text-align:left;">建議交易數量（本金100萬、1-1-2 規則）試算：</td>
         <td>${planLots || '—'} 張</td>
         <td>${buyPx!=null ? buyPx.toFixed(2) : '—'}</td>
         <td>${planLots ? (planFee.toLocaleString()) : '—'}</td>
         <td>${planCost!=null ? planCost.toLocaleString() : '—'}</td>
-        <td ${c(planGain)}>${planGain>=0?'+':''}${planGain.toLocaleString()}</td>
-        <td ${c(planRoi)}>${(planRoi*100).toFixed(2)}%</td>
-        <td ${c(planAcc)}>${planAcc>=0?'+':''}${planAcc.toLocaleString()}</td>
-      </tr>`;
+        <td class="${c(planGain)}">${planGain>=0?'+':''}${planGain.toLocaleString()}</td>
+        <td class="${c(planRoi)}">${(planRoi*100).toFixed(2)}%</td>
+        <td class="${c(planAcc)}">${planAcc>=0?'+':''}${planAcc.toLocaleString()}</td>
+      `;
     }
+
   }catch(err){
     metaEl.textContent = '❌ 載入或解析失敗：' + (err?.message || err);
     console.error(err);
