@@ -38,8 +38,18 @@
   function toNum(x, d){ var v = Number(x); return isFinite(v) ? v : (d != null ? d : 0); }
   function sum(a){ var s=0; for(var i=0;i<a.length;i++) s+=a[i]; return s; }
   function mean(a){ return a.length ? sum(a)/a.length : 0; }
-  function std(a){ if(a.length<2) return 0; var m=mean(a), s=0; for(var i=0;i<a.length;i++){ var d=a[i]-m; s+=d*d; } return Math.sqrt(s/(a.length-1)); }
-  function quantile(a,q){ if(!a.length) return 0; var b=a.slice().sort(function(x,y){return x-y;}); var i=Math.min(b.length-1,Math.max(0,Math.floor(q*(b.length-1)))); return b[i]; }
+  function std(a){
+    if(a.length<2) return 0;
+    var m=mean(a), s=0;
+    for(var i=0;i<a.length;i++){ var d=a[i]-m; s+=d*d; }
+    return Math.sqrt(s/(a.length-1));
+  }
+  function quantile(a,q){
+    if(!a.length) return 0;
+    var b=a.slice().sort(function(x,y){return x-y;});
+    var i=Math.min(b.length-1,Math.max(0,Math.floor(q*(b.length-1))));
+    return b[i];
+  }
   function percentile(a,p){ return quantile(a,p/100); }
   function ymdToDate(d8){ return new Date(d8.slice(0,4)+'-'+d8.slice(4,6)+'-'+d8.slice(6,8)+'T00:00:00'); }
 
@@ -53,6 +63,7 @@
     }
     return { mdd:mdd, ddStart:ds, ddEnd:de, duration:Math.max(0,de-ds) };
   }
+  // Ulcer Index：以百分比單位輸出（前端除以 100 再以 % 顯示）
   function ulcerIndex(eq){
     if(eq.length<2) return 0;
     var peak=eq[0], s=0;
@@ -72,6 +83,7 @@
   }
 
   /* ======================== 僅保留四種動作 ======================== */
+  // 若來源日後更名（如「加碼」「再加碼」），請擴充下方正規式。
   function mapAct(act){
     var s = String(act||'').replace(/[\uFEFF\u200B-\u200D\u00A0\u3000]/g,'').trim();
     if(/^買進$/.test(s))       return 'BUY';
@@ -102,8 +114,8 @@
       var ts14=d8+t6, act=mapAct(actRaw); if(act==='OTHER') continue;
 
       var kv={}, segs=tail.split(/[,，]/);
-      for(var s of segs){
-        s=s.trim(); if(!s) continue;
+      for(var j=0;j<segs.length;j++){
+        var s=segs[j].trim(); if(!s) continue;
         var p=s.indexOf('=');
         if(p===-1) continue;
         var k=s.slice(0,p).trim(), v=s.slice(p+1).trim();
@@ -120,7 +132,8 @@
 
     // 依 tid 匯成 trades
     var byTid={};
-    for(var e of events){
+    for(var k=0;k<events.length;k++){
+      var e=events[k];
       var tid=e.kv.tid? String(e.kv.tid).trim() : null;
       if(!tid) continue;
       (byTid[tid]||(byTid[tid]=[])).push(e);
@@ -129,7 +142,8 @@
     var tids=Object.keys(byTid).sort(function(a,b){return +a - +b;});
     var trades=[];
 
-    for(var tid of tids){
+    for(var x=0;x<tids.length;x++){
+      var tid=tids[x];
       var arr=byTid[tid].sort(function(a,b){return a.ts.localeCompare(b.ts);});
       var sell = null; for(var r=0;r<arr.length;r++){ if(arr[r].action==='SELL'){ sell=arr[r]; break; } }
       if(!sell) continue;
@@ -161,9 +175,10 @@
       var mfe = sell.kv['MFEpct']!=null ? toNum(sell.kv['MFEpct'],null) : null;
       var holdMin = sell.kv['holdMin']!=null ? toNum(sell.kv['holdMin'],null) : null;
 
-      // 參考聚合欄位
+      // 參考聚合欄位：ISbps / 進場名目 / ADV / 成交價中位
       var isbpsList=[], notionals=[], advs=[], prices=[];
-      for(var ev of arr){
+      for(var q=0;q<arr.length;q++){
+        var ev=arr[q];
         if(ev.action==='BUY'||ev.action==='ADD1'||ev.action==='ADD2'||ev.action==='SELL'){
           var kvw=ev.kv;
           if(kvw['ISbps']!=null)         isbpsList.push(toNum(kvw['ISbps'],0));
@@ -188,16 +203,17 @@
 
     // 以出場日計入損益
     var dailyMap={};
-    for(var t of trades){
+    for(var y=0;y<trades.length;y++){
+      var t=trades[y];
       var d8=String(t.tsOut).slice(0,8);
       dailyMap[d8]=(dailyMap[d8]||0)+t.gainSlip;
     }
     var days=Object.keys(dailyMap).sort();
-    var pnl=[]; for(var d of days) pnl.push(dailyMap[d]);
+    var pnl=[]; for(var d=0; d<days.length; d++) pnl.push(dailyMap[days[d]]);
 
     // Equity（每百萬）
     var equity=[], acc=0;
-    for(var v of pnl){ acc+=v; equity.push(acc/BASE_CAP); }
+    for(var z=0; z<pnl.length; z++){ acc+=pnl[z]; equity.push(acc/BASE_CAP); }
     var rets=pnl.map(function(v){ return v/BASE_CAP; });
 
     if(DEBUG){
@@ -206,8 +222,10 @@
       if(trades.length) console.log('[JETF] sample trade:', trades[0]);
     }
 
-    return { events:events, trades:trades, days:days, pnl:pnl, equity:equity, rets:rets,
-             extras:extras, FEE_RATE:FEE_RATE, FEE_MIN:FEE_MIN, TAX_RATE:TAX_RATE, BASE_CAP:BASE_CAP };
+    return {
+      events:events, trades:trades, days:days, pnl:pnl, equity:equity, rets:rets,
+      extras:extras, FEE_RATE:FEE_RATE, FEE_MIN:FEE_MIN, TAX_RATE:TAX_RATE, BASE_CAP:BASE_CAP
+    };
   }
 
   /* ======================== KPI 計算 ======================== */
@@ -226,9 +244,11 @@
     var dn=std(rets.filter(function(x){return x<0;}))*Math.sqrt(252);
     var md=maxDrawdown(eq), ui=ulcerIndex(eq);
 
-    var sharpe = volAnn>0 ? (mean(rets)*252)/volAnn : null;
-    var sortino= dn>0    ? (mean(rets)*252)/dn     : null;
-    var calmar = md.mdd>0? ((cagr!=null?cagr:(mean(rets)*252))/md.mdd) : null;
+    var meanDaily = mean(rets);
+    var sharpe = volAnn>0 ? (meanDaily*252)/volAnn : null;
+    var sortino= dn>0    ? (meanDaily*252)/dn     : null;
+    var annualized = (cagr!=null ? cagr : meanDaily*252);
+    var calmar = md.mdd>0? (annualized/md.mdd) : null;
     var var95  = percentile(rets,5), cvar95=cvarLeftTail(rets,0.95);
 
     // trade 區
@@ -245,6 +265,10 @@
     var avgMAE=mean(MAEs)||0, avgMFE=mean(MFEs)||0;
     var avgHold=mean(holds)||0, medHold=holds.length? quantile(holds,0.5):0;
 
+    // avgISbps：由 trades.ISbps 平均
+    var isbpsArr = T.map(function(t){ return t.ISbps; }).filter(function(v){ return v != null; });
+    var avgISbps = isbpsArr.length ? mean(isbpsArr) : 0;
+
     // capacity（若有 ADV/Notional 可估；沒資料時回 0）
     var parts=T.map(function(t){
       var adv=t.ADV20avg, med=t.medExecPx, notional=t.entryNotionalSum;
@@ -255,7 +279,7 @@
     return {
       core: { totalReturn:totalRet, CAGR:cagr, coverDays:cover, trades:N },
       risk: { volAnn:volAnn, MDD:md.mdd, ddDuration:md.duration, UlcerIndex:ui, Sharpe:sharpe, Sortino:sortino, Calmar:calmar, VaR95:var95, CVaR95:cvar95 },
-      trade:{ winRate:winRate, PF:PF, avgTrade:avgTrade, avgHoldMin:avgHold, medHoldMin:medHold, avgMAEpct:avgMAE, avgMFEpct:avgMFE, avgISbps:0 },
+      trade:{ winRate:winRate, PF:PF, avgTrade:avgTrade, avgHoldMin:avgHold, medHoldMin:medHold, avgMAEpct:avgMAE, avgMFEpct:avgMFE, avgISbps:avgISbps },
       capacity:{ avgParticipation:avgPart, p75Participation:p75Part },
       meta:{ baseCapital:BASE_CAP, firstDay:days[0]||null, lastDay:days[days.length-1]||null }
     };
@@ -273,7 +297,10 @@
   function parseEtfKpisSafe(fn){
     return function(txt){
       try{ return fn(txt); }
-      catch(e){ if(DEBUG) console.error('[JETF] parse error:', e); return {events:[],trades:[],days:[],pnl:[],equity:[],rets:[],extras:[],FEE_RATE:FEE_RATE,FEE_MIN:FEE_MIN,TAX_RATE:TAX_RATE,BASE_CAP:BASE_CAP}; }
+      catch(e){
+        if(DEBUG) console.error('[JETF] parse error:', e);
+        return {events:[],trades:[],days:[],pnl:[],equity:[],rets:[],extras:[],FEE_RATE:FEE_RATE,FEE_MIN:FEE_MIN,TAX_RATE:TAX_RATE,BASE_CAP:BASE_CAP};
+      }
     };
   }
 
