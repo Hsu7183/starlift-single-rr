@@ -18,7 +18,8 @@
   .home{ display:inline-block; padding:6px 10px; border-radius:10px; border:1px solid #aaa; color:#333; text-decoration:none; font-size:12px; }
   .home:hover{ background:#f2f2f2; }
   .card{ background:#fff; border:1px solid #e5e7eb; border-radius:var(--r); box-shadow:0 2px 8px rgba(0,0,0,.06); padding:16px 18px; margin:14px 0; }
-  .card.wide{ width:100vw; margin-left:calc(50% - 50vw); padding-left:24px; padding-right:24px; }
+  .card.wide{ width:100vw; margin-left:calc(50% - 50vw); padding-left:24px; padding-right:24px; overflow-x:auto; }
+
   .meta{ color:#666; font-size:12px; }
   .btn{ display:inline-block; padding:6px 10px; border-radius:10px; border:1px solid #0d6efd; color:#0d6efd; text-decoration:none; font-size:12px; }
   .btn.secondary{ border-color:#aaa; color:#555; }
@@ -35,20 +36,29 @@
   .chartbox{ height:340px; }
   canvas{ width:100%; height:100%; background:#fff; border:1px solid #eee; border-radius:10px; }
 
-  /* 交易明細：固定欄寬、不換行、零間隔（只留底線） */
+  /* ====== 交易明細：固定欄寬、不換行、零間隔（只留底線） ====== */
   .simple-table{
-    width:100%; table-layout:fixed; border-collapse:collapse; font-size:11px;
-  }
-  .simple-table th,.simple-table td{
-    border-bottom:1px solid #eee; padding:4px 6px; text-align:right; white-space:nowrap;
+    table-layout:fixed !important;     /* 用 colgroup 決定寬度，禁止自動重算 */
+    width:1802px;                      /* 20 欄固定總寬（等於下方 colgroup 寬度總和） */
+    border-collapse:collapse;
+    font-size:11px;
     font-variant-numeric: tabular-nums;
   }
+  .simple-table th,.simple-table td{
+    box-sizing:border-box;             /* padding 不再撐寬 */
+    padding:4px 6px;
+    white-space:nowrap;                /* 禁止換行 */
+    overflow:hidden;                   /* 超出裁切 */
+    text-overflow:ellipsis;            /* 以省略號處理 */
+    border-bottom:1px solid #eee;
+    text-align:right;
+  }
   .simple-table th:first-child,.simple-table td:first-child{ text-align:left; }
-  .simple-table tr{ background-clip:padding-box; } /* 防止視覺縫隙 */
+  .simple-table tr{ background-clip:padding-box; }
   .row-buy{  background:#fdecea; }
   .row-sell{ background:#e9f8ef; }
-  .gain-red{ color:#d32f2f; font-weight:700; }
-  .loss-green{ color:#10b981; font-weight:700; }
+  .gain-red{ color:#d32f2f; font-weight:600; }
+  .loss-green{ color:#10b981; font-weight:600; }
 </style>
 </head>
 <body>
@@ -129,7 +139,7 @@
         <th>筆數</th><th>股票名稱</th><th>成交日</th><th>種類</th><th>交易數量</th><th>單價</th><th>手續費</th>
         <th>買進金額</th><th>賣出金額</th>
         <th>損益</th><th>獲利率</th><th>累計損益</th>
-        <th style="border-left:2px solid #ddd;">建議交易數量</th><th>單價</th><th>手續費(估)</th>
+        <th style="border-left:2px solid #ddd;">建議交易數量(股)</th><th>單價</th><th>手續費(估)</th>
         <th>買進金額(估)</th><th>賣出金額(估)</th>
         <th>損益試算</th><th>獲利率</th><th>累計損益(含試算)</th>
       </tr>
@@ -222,8 +232,9 @@
     dlRaw.download = latest.name || '00909_raw.txt';
 
     const first=parsed.days[0]? `${parsed.days[0].slice(0,4)}/${parsed.days[0].slice(4,6)}/${parsed.days[0].slice(6,8)}` : '—';
-    const last =parsed.days.length? `${parsed.days.at(-1).slice(0,4)}/${parsed.days.at(-1).slice(4,6)}/${parsed.days.at(-1).slice(6,8)}` : '—';
-    metaEl.textContent=`✅ 已載入：${latest.name}（解碼：${enc}）｜交易筆數=${parsed.trades.length}｜期間：${first} ~ ${last}`;
+    const last =parsed.days.length? `${parsed.days.at(-1).slice(0,4)}/${parsed.days.at(-1).slice(6,8)}` : '—';
+    const lastFmt = parsed.days.length? `${parsed.days.at(-1).slice(0,4)}/${parsed.days.at(-1).slice(4,6)}/${parsed.days.at(-1).slice(6,8)}` : '—';
+    metaEl.textContent=`✅ 已載入：${latest.name}（解碼：${enc}）｜交易筆數=${parsed.trades.length}｜期間：${first} ~ ${lastFmt}`;
 
     // KPI
     const kpis=ETFEngine.calcEtfKpis(parsed);
@@ -319,10 +330,10 @@
 
     // ===== 交易明細 =====
     const tbody=document.querySelector('#tblTrade tbody');
-    const STOCK='00909', CAPITAL=1_000_000;
+    const CAPITAL=1_000_000;
 
     const tradeByTid={}; parsed.trades.forEach(t=> tradeByTid[String(t.tid)]=t);
-    const suggBuyLotsByTid={};   // SELL 使用：同 tid 累計建議買進「張數」
+    const suggBuyLotsByTid={};   // SELL 使用：同 tid 累計建議買進張數
     let accGain=0;               // 左欄「累計損益」（實際，只在 SELL 累加）
     let cumWithPlan=0;           // 右欄「累計損益(含試算)」（只在 SELL 累加）
 
@@ -349,7 +360,7 @@
         if(isSell){
           const tr=tradeByTid[e.kv.tid];
           gain = Math.round(tr?.gainSlip ?? 0);
-          roi  = gain / 1_000_000;  // ★ 依需求：損益 / 百萬
+          roi  = gain / 1_000_000;
           accGain += gain;
           accHtml = accGain>0? `<span class="gain-red">+${accGain.toLocaleString()}</span>` :
                     accGain<0? `<span class="loss-green">${accGain.toLocaleString()}</span>` : '';
@@ -367,7 +378,7 @@
 
         if(!isSell) suggBuyLotsByTid[e.kv.tid]=(suggBuyLotsByTid[e.kv.tid]||0)+suggLots;
 
-        // 以「股數」顯示建議交易數量
+        // 「股」顯示
         const sharesSugg = (suggLots||0)*1000;
 
         // === 試算區 ===
@@ -392,7 +403,7 @@
         let planGain=null, planRoi=null, showCumPlan='';
         if(isSell){
           planGain = sellNetEst - buyNetAvg;
-          planRoi  = planGain / 1_000_000;  // ★ 試算獲利率也改為 / 百萬
+          planRoi  = planGain / 1_000_000;  // 試算獲利率也改為 / 百萬
           cumWithPlan += (planGain||0);
           showCumPlan = cumWithPlan>0? `<span class="gain-red">+${cumWithPlan.toLocaleString()}</span>` :
                         cumWithPlan<0? `<span class="loss-green">${cumWithPlan.toLocaleString()}</span>` : '';
