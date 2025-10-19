@@ -139,7 +139,8 @@
   async function latest00909(){
     const { data, error } = await sb.storage.from(BUCKET).list('', { limit:1000, sortBy:{ column:'name', order:'asc' }});
     if (error) throw error;
-    const files = (data||[]).filter(it => it.id !== null && /00909/i.test(it.name));
+    // 修正：不要檢查 it.id，避免把有效檔案過濾掉
+    const files = (data||[]).filter(it => /00909/i.test(it.name));
     if(!files.length) return null;
     files.sort((a,b)=> b.name.localeCompare(a.name));
     return files[0];
@@ -193,7 +194,10 @@
     const rawUrl=pubUrl(latest.name); rawLink.style.display='inline-block'; rawLink.href=rawUrl;
 
     const {txt:rawTxt,enc,parsed}=await fetchSmart(rawUrl);
-    const blob=new Blob([rawTxt],{type:'text/plain'}); dlRaw.style.display='inline-block'; dlRaw.href=URL.createObjectURL(blob);
+    const blob=new Blob([rawTxt],{type:'text/plain'});
+    dlRaw.style.display='inline-block';
+    dlRaw.href=URL.createObjectURL(blob);
+    dlRaw.download = latest.name || '00909_raw.txt';
 
     const first=parsed.days[0]? `${parsed.days[0].slice(0,4)}/${parsed.days[0].slice(4,6)}/${parsed.days[0].slice(6,8)}` : '—';
     const last =parsed.days.length? `${parsed.days.at(-1).slice(0,4)}/${parsed.days.at(-1).slice(4,6)}/${parsed.days.at(-1).slice(6,8)}` : '—';
@@ -211,6 +215,7 @@
       {label:'年化波動',  value:kpis.risk.volAnn,   fmt:pct, pos:'down'},
       {label:'最大回撤',  value:kpis.risk.MDD,      fmt:pct, pos:'down'},
       {label:'回撤持續（日）', value:kpis.risk.ddDuration, fmt:int, pos:null},
+      // Ulcer Index 由引擎輸出為「百分比值」，前端除以 100 後用 % 顯示。
       {label:'Ulcer Index', value:(kpis.risk.UlcerIndex/100), fmt:pct, pos:'down'},
       {label:'Sharpe',     value:kpis.risk.Sharpe,   fmt:num, pos:'profit'},
       {label:'Sortino',    value:kpis.risk.Sortino,  fmt:num, pos:'profit'},
@@ -235,17 +240,61 @@
       {label:'涵蓋期間(起-迄)', value:0, fmt:()=>((kpis.meta?.firstDay||'—')+' ~ '+(kpis.meta?.lastDay||'—')), pos:null},
     ]);
 
-    // 繪圖
-    ETFChart.drawEquityCurve(document.getElementById('eq'),
+    // ===== 建議投資方式（本金 100 萬，單位 1-1-2）=====
+    (function renderPlan(){
+      const CAPITAL = 1_000_000;
+      const lastBuyEv = parsed.events
+        .filter(e => e.action==='BUY' || e.action==='ADD1' || e.action==='ADD2')
+        .sort((a,b)=> b.ts.localeCompare(a.ts))[0];
+
+      const lastSellTr = parsed.trades.at(-1);
+      const lastPx = lastBuyEv ? +lastBuyEv.price : null;
+      const lotAmt = lastPx ? Math.round(lastPx*1000 + fee(lastPx*1000)) : 0;
+      const maxLots = lotAmt ? Math.floor(CAPITAL / lotAmt) : 0;
+      const unit = maxLots ? Math.floor(maxLots/4) : 0; // 1-1-2
+      const planLots = unit*1 + unit*1 + unit*2;
+
+      // 參考獲利：抓最近一筆完成交易「每張損益」× 計畫張數（保守起見）
+      let perLotGain = 0;
+      if (lastSellTr && lastSellTr.qtyLots) {
+        perLotGain = Math.round(lastSellTr.gainSlip / lastSellTr.qtyLots);
+      }
+      const planProfit = perLotGain * planLots;
+
+      const fmtInt = v => (v==null? '—' : (+v).toLocaleString());
+      const fmtDate = ts => ts ? `${ts.slice(0,4)}/${ts.slice(4,6)}/${ts.slice(6,8)} ${ts.slice(8,10)}:${ts.slice(10,12)}` : '—';
+
+      document.getElementById('plan-lastBuy').textContent = fmtDate(lastBuyEv?.ts);
+      document.getElementById('plan-lastPx').textContent  = lastPx? lastPx.toFixed(2) : '—';
+      document.getElementById('plan-lotAmt').textContent  = fmtInt(lotAmt);
+      document.getElementById('plan-maxLots').textContent = fmtInt(maxLots);
+      document.getElementById('plan-units').textContent   = unit ? `1(${unit}) - 1(${unit}) - 2(${unit*2})` : '—';
+      document.getElementById('plan-planLots').textContent= fmtInt(planLots);
+      document.getElementById('plan-profit').innerHTML    = planProfit>0
+        ? `<span class="gain-red">+${fmtInt(planProfit)}</span>`
+        : `<span class="${planProfit<0?'loss-green':''}">${fmtInt(planProfit)}</span>`;
+    })();
+
+    // ===== 圖表 =====
+    ETFChart.drawEquityCurve(
+      document.getElementById('eq'),
       parsed.days.map(d=>`${d.slice(0,4)}/${d.slice(4,6)}/${d.slice(6,8)}`),
       parsed.equity
     );
-    ETFChart.drawMaeMfeScatter(document.getElementById('maeMfe'),
-      parsed.trades.map(t=>t.maePct).filter(v=>v!=null),
-      parsed.trades.map(t=>t.mfePct).filter(v=>v!=null)
+
+    // MAE/MFE 改為成對資料，避免索引錯位
+    {
+      const pairs = parsed.trades
+        .filter(t => t.maePct != null && t.mfePct != null)
+        .map(t => ({ x: t.maePct, y: t.mfePct }));
+      ETFChart.drawMaeMfeScatter(document.getElementById('maeMfe'), pairs);
+    }
+
+    ETFChart.drawIsHist(
+      document.getElementById('isHist'),
+      parsed.trades.map(t=>t.ISbps).filter(v=>v!=null),
+      24
     );
-    ETFChart.drawIsHist(document.getElementById('isHist'),
-      parsed.trades.map(t=>t.ISbps).filter(v=>v!=null), 24);
 
     // ===== 交易明細 =====
     const tbody=document.querySelector('#tblTrade tbody');
@@ -269,7 +318,7 @@
         const sharesRaw = lotsRaw*1000;
         const grossRaw  = px*sharesRaw;
 
-        // 依法手續費/稅 & 淨額（買列只顯示買進金額；賣列只顯示賣出金額）
+        // 依法手續費/稅 & 淨額（買列顯示買進金額；賣列顯示賣出金額）
         const feeRaw = fee(grossRaw);
         const buyAmt = !isSell? Math.round(grossRaw + feeRaw) : null;
         const sellAmt=  isSell? Math.round(grossRaw - feeRaw - Math.round(grossRaw*TAX_RATE)) : null;
