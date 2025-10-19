@@ -47,7 +47,7 @@
     <h1 style="margin-right:auto;">00909-ETF版本｜機構級 KPI</h1>
     <a class="home" href="index.html">← 回首頁</a>
   </div>
-  <p class="sub">資料：Supabase <code>/reports</code> 最新「00909」檔；股票線獨立計算（不動期貨線）。</p>
+  <p class="sub">資料：Supabase <code>/reports</code> 最新「00909」TXT；股票線獨立計算（不動期貨線）。</p>
 
   <div class="card">
     <div class="toolbar">
@@ -58,6 +58,7 @@
     </div>
   </div>
 
+  <!-- 建議投資方式 -->
   <div class="card">
     <h3>建議投資方式（本金 100 萬，單位規則 1-1-2）</h3>
     <table class="simple-table">
@@ -87,7 +88,7 @@
   </div>
 </div>
 
-<!-- 交易明細（滿寬，固定欄寬） -->
+<!-- 交易明細（滿寬、固定欄寬、不換行） -->
 <div class="card wide">
   <h3>交易明細</h3>
   <table class="simple-table" id="tblTrade">
@@ -144,7 +145,7 @@
     return files[0];
   }
 
-  // 智慧解碼（utf-8 / big5 / utf-16le / utf-16be）
+  // 智慧解碼
   async function fetchSmart(url){
     const buf = await fetch(url,{cache:'no-store'}).then(r=>{ if(!r.ok) throw new Error(r.status+' '+r.statusText); return r.arrayBuffer(); });
     const encs = ['utf-8','big5','utf-16le','utf-16be'];
@@ -160,7 +161,7 @@
     return {txt,enc:'utf-8',parsed:ETFEngine.parseEtfTxt(txt)};
   }
 
-  // KPI 渲染（profit=紅、負=綠；down 反向）
+  // KPI 渲染（profit=紅、down=值越大越紅）
   function putKPIs(id, items){
     const el=document.getElementById(id); el.innerHTML='';
     items.forEach(k=>{
@@ -230,13 +231,15 @@
     putKPIs('kpi-cap', [
       {label:'平均參與率',  value:kpis.capacity?.avgParticipation ?? 0, fmt:pct, pos:'down'},
       {label:'P75 參與率',  value:kpis.capacity?.p75Participation ?? 0, fmt:pct, pos:'down'},
-      {label:'基準資金（萬）', value:ETFEngine.BASE_CAP? ETFEngine.BASE_CAP/10000 : 100, fmt:num, pos:null},
+      {label:'基準資金（萬）', value:100, fmt:num, pos:null},
       {label:'涵蓋期間(起-迄)', value:0, fmt:()=>((kpis.meta?.firstDay||'—')+' ~ '+(kpis.meta?.lastDay||'—')), pos:null},
     ]);
 
-    // 圖表
-    const labels=parsed.days.map(d=>`${d.slice(0,4)}/${d.slice(4,6)}/${d.slice(6,8)}`);
-    ETFChart.drawEquityCurve(document.getElementById('eq'), labels, parsed.equity);
+    // 繪圖
+    ETFChart.drawEquityCurve(document.getElementById('eq'),
+      parsed.days.map(d=>`${d.slice(0,4)}/${d.slice(4,6)}/${d.slice(6,8)}`),
+      parsed.equity
+    );
     ETFChart.drawMaeMfeScatter(document.getElementById('maeMfe'),
       parsed.trades.map(t=>t.maePct).filter(v=>v!=null),
       parsed.trades.map(t=>t.mfePct).filter(v=>v!=null)
@@ -246,15 +249,12 @@
 
     // ===== 交易明細 =====
     const tbody=document.querySelector('#tblTrade tbody');
-    const STOCK='00909'; const CAPITAL=1_000_000;
+    const STOCK='00909', CAPITAL=1_000_000;
 
-    // tid→trade；SELL 需 pxInAvg/pxIn/pxOut/gainSlip
     const tradeByTid={}; parsed.trades.forEach(t=> tradeByTid[String(t.tid)]=t);
-    // SELL 用：同 tid 之前 BUY/ADD 的「建議買進張數」累計
-    const suggBuyLotsByTid={};
-
-    let accGain=0;     // 左欄「累計損益」（實際，只在 SELL 加總）
-    let cumWithPlan=0; // 右欄「累計損益(含試算)」（只在 SELL 加總）
+    const suggBuyLotsByTid={};   // SELL 使用：同 tid 累計建議買進張數
+    let accGain=0;               // 左欄「累計損益」（實際，只在 SELL 累加）
+    let cumWithPlan=0;           // 右欄「累計損益(含試算)」（只在 SELL 累加）
 
     const rows = parsed.events
       .filter(e=>['BUY','ADD1','ADD2','SELL'].includes(e.action))
@@ -262,17 +262,17 @@
       .map((e,idx)=>{
         const isSell=(e.action==='SELL');
         const cls=isSell? 'row-sell':'row-buy';
-        const px = +e.price || 0;
+        const px=+e.price||0;
 
-        // 原始交易數量
+        // 原始交易量
         const lotsRaw = e.kv.lotsThisRow || 0;
-        const sharesRaw = lotsRaw * 1000;
-        const grossRaw  = px * sharesRaw;
+        const sharesRaw = lotsRaw*1000;
+        const grossRaw  = px*sharesRaw;
 
-        // 依法手續費/稅 & 淨額（買列顯示買進金額；賣列顯示賣出金額）
+        // 依法手續費/稅 & 淨額（買列只顯示買進金額；賣列只顯示賣出金額）
         const feeRaw = fee(grossRaw);
         const buyAmt = !isSell? Math.round(grossRaw + feeRaw) : null;
-        const sellAmt=  isSell? Math.round(grossRaw - feeRaw - taxOnSell(grossRaw)) : null;
+        const sellAmt=  isSell? Math.round(grossRaw - feeRaw - Math.round(grossRaw*TAX_RATE)) : null;
 
         // 實際損益/ROI（只在 SELL）
         let gain=null, roi=null, accHtml='';
@@ -286,7 +286,7 @@
                     accGain<0? `<span class="loss-green">${accGain.toLocaleString()}</span>` : '';
         }
 
-        // 建議張數：1-1-2；SELL＝同 tid 累計的建議買進張數
+        // 建議張數（1-1-2）：SELL＝同 tid 累計的建議買進張數
         const oneLotEst = Math.round(px*1000 + fee(px*1000));
         const maxLotsEst= oneLotEst>0? Math.floor(CAPITAL/oneLotEst) : 0;
         const unitSize  = maxLotsEst? Math.floor(maxLotsEst/4) : 0;
@@ -298,23 +298,22 @@
 
         if(!isSell) suggBuyLotsByTid[e.kv.tid]=(suggBuyLotsByTid[e.kv.tid]||0)+suggLots;
 
-        // 估算區（僅在 SELL 列顯示損益試算與累計）
-        const sharesSugg = suggLots*1000;
+        // 估算（只在 SELL 列計「損益試算／累計(含試算)」）
+        const sharesSugg=suggLots*1000;
 
-        // (估)買進淨額（SELL 列用 pxInAvg 作為試算進價；BUY/ADD 列只顯示買方估值，不做試算）
-        const tr = tradeByTid[e.kv.tid];
-        const pxInAvg = tr?.pxInAvg ?? px; // 沒有就用當列價（合理 fallback）
-        const grossBuyAvg = pxInAvg * sharesSugg;
-        const feeBuyAvg   = fee(grossBuyAvg);
-        const buyNetAvg   = Math.round(grossBuyAvg + feeBuyAvg);
+        // (估)買進淨額（SELL 用 pxInAvg）
+        const tr=tradeByTid[e.kv.tid];
+        const pxInAvg=tr?.pxInAvg ?? px;
+        const grossBuyAvg=pxInAvg*sharesSugg;
+        const feeBuyAvg=fee(grossBuyAvg);
+        const buyNetAvg=Math.round(grossBuyAvg + feeBuyAvg);
 
-        // (估)賣出淨額（用當列價）
-        const grossSellEst = px * sharesSugg;
-        const feeSellEst   = fee(grossSellEst);
-        const taxEst       = taxOnSell(grossSellEst);
-        const sellNetEst   = Math.round(grossSellEst - feeSellEst - taxEst);
+        // (估)賣出淨額（用當列賣價）
+        const grossSellEst=px*sharesSugg;
+        const feeSellEst=fee(grossSellEst);
+        const taxEst=Math.round(grossSellEst*TAX_RATE);
+        const sellNetEst=Math.round(grossSellEst - feeSellEst - taxEst);
 
-        // 損益試算（只在 SELL 列）
         let planGain=null, planRoi=null, showCumPlan='';
         if(isSell){
           planGain = sellNetEst - buyNetAvg;
@@ -325,8 +324,8 @@
         }
 
         const d8=e.d8;
-        const money = v => (v==null||v===0)? '' : (v>0? `<span class="gain-red">+${v.toLocaleString()}</span>` : `<span class="loss-green">${v.toLocaleString()}</span>`);
-        const rate  = v => (v==null)? '' : (v>=0? `<span class="gain-red">${(v*100).toFixed(2)}%</span>` : `<span class="loss-green">${(v*100).toFixed(2)}%</span>`);
+        const money=v=> (v==null||v===0)? '' : (v>0? `<span class="gain-red">+${v.toLocaleString()}</span>` : `<span class="loss-green">${v.toLocaleString()}</span>`);
+        const rate=v=> (v==null)? '' : (v>=0? `<span class="gain-red">${(v*100).toFixed(2)}%</span>` : `<span class="loss-green">${(v*100).toFixed(2)}%</span>`);
 
         return `<tr class="${cls}">
           <td>${idx+1}</td>
