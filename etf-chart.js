@@ -5,18 +5,19 @@
  *   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
  *
  * 提供：
- *   ETFChart.drawEquityCurve(ctx, labels, equity)
- *   ETFChart.drawMaeMfeScatter(ctx, maeArr, mfeArr)
- *   ETFChart.drawIsHist(ctx, isbpsArr, bins)
+ *   ETFChart.drawEquityCurve(canvas, labels, equity)
+ *   ETFChart.drawMaeMfeScatter(canvas, pairs)   // pairs: [{x: maePct, y: mfePct}]
+ *   ETFChart.drawIsHist(canvas, isbpsArr, bins)
  * =========================================================================== */
 
 (function (global) {
   'use strict';
 
-  function clearCanvas(ctx) {
-    if (!ctx || !ctx.getContext) return;
-    const c = ctx.getContext('2d');
-    c.clearRect(0, 0, ctx.width, ctx.height);
+  function clearCanvas(canvas) {
+    if (!canvas || !canvas.getContext) return;
+    const c = canvas.getContext('2d');
+    // 使用 canvas 真實寬高，避免在 CSS 縮放時清不乾淨
+    c.clearRect(0, 0, canvas.width || canvas.clientWidth, canvas.height || canvas.clientHeight);
   }
 
   /* === 收益曲線 === */
@@ -30,7 +31,8 @@
         labels,
         datasets: [{
           label: '收益曲線（每百萬 %）',
-          data: equity.map(x => (x * 100).toFixed(2)),
+          // 保持數字，交給軸與 tooltip 格式化
+          data: equity.map(x => x * 100),
           borderColor: '#d32f2f',
           borderWidth: 2,
           fill: false,
@@ -57,7 +59,7 @@
             mode: 'index',
             intersect: false,
             callbacks: {
-              label: ctx => ` ${ctx.parsed.y}%`
+              label: ctx => ` ${Number(ctx.parsed.y).toFixed(2)}%`
             }
           }
         }
@@ -65,18 +67,18 @@
     });
   }
 
-  /* === MAE vs MFE 散點圖 === */
-  function drawMaeMfeScatter(canvas, MAEs, MFEs) {
-    if (!canvas || !MAEs?.length || !MFEs?.length) return;
+  /* === MAE vs MFE 散點圖（吃成對資料） === */
+  // pairs: [{ x: maePct, y: mfePct }, ...]
+  function drawMaeMfeScatter(canvas, pairs) {
+    if (!canvas || !pairs?.length) return;
     clearCanvas(canvas);
 
-    const points = MAEs.map((mae, i) => ({ x: mae, y: MFEs[i] }));
     new Chart(canvas, {
       type: 'scatter',
       data: {
         datasets: [{
           label: 'MAE vs MFE (%)',
-          data: points,
+          data: pairs,
           borderColor: '#1976d2',
           backgroundColor: 'rgba(25,118,210,0.5)',
           pointRadius: 3
@@ -101,7 +103,7 @@
           legend: { display: false },
           tooltip: {
             callbacks: {
-              label: ctx => `MAE=${ctx.parsed.x.toFixed(2)}%, MFE=${ctx.parsed.y.toFixed(2)}%`
+              label: ctx => `MAE=${Number(ctx.parsed.x).toFixed(2)}%, MFE=${Number(ctx.parsed.y).toFixed(2)}%`
             }
           }
         }
@@ -115,7 +117,11 @@
     clearCanvas(canvas);
 
     const min = Math.min(...arr), max = Math.max(...arr);
-    const step = (max - min) / bins;
+    let range = (max - min);
+    // 全等或異常時避免 step=0
+    if (!isFinite(range) || range <= 0) { range = 1; }
+    const step = range / bins;
+
     const edges = Array.from({ length: bins + 1 }, (_, i) => min + i * step);
     const counts = new Array(bins).fill(0);
     arr.forEach(v => {
