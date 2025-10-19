@@ -22,7 +22,10 @@
     .kpi{ background:#fafafa; border:1px solid #eee; border-radius:10px; padding:10px 12px; }
     .kpi .t{ font-size:12px; color:#666; margin:0; }
     .kpi .v{ font-size:20px; font-weight:800; margin:4px 0 0; color:#111; }
-    .kpi .v.red{ color:#d32f2f; } .kpi .v.green{ color:#10b981; } .kpi .v.muted{ color:#666; }
+    /* 顏色：一般上漲綠、下跌紅；獲利類反轉（profit-red） */
+    .kpi .v.green{ color:#10b981; }  /* 一般正向 */
+    .kpi .v.red{   color:#d32f2f; }  /* 一般負向 or 獲利正向（反轉） */
+    .kpi .v.muted{ color:#666; }
     .note{ font-size:12px; color:#777; margin-top:6px; }
 
     .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
@@ -30,6 +33,11 @@
     /* 固定圖表高度，避免 canvas 無限延長 */
     .chartbox{ height:360px; }
     canvas{ width:100%; height:100%; background:#fff; border:1px solid #eee; border-radius:10px; }
+
+    /* 建議投資方式 表格 */
+    .simple-table{ width:100%; border-collapse:collapse; font-size:13px; }
+    .simple-table th,.simple-table td{ border-bottom:1px solid #eee; padding:6px 8px; text-align:right; }
+    .simple-table th:first-child,.simple-table td:first-child{ text-align:left; }
   </style>
 </head>
 <body>
@@ -47,6 +55,23 @@
       <a id="rawlink" class="btn" href="#" target="_blank" style="display:none;">查看原始 TXT</a>
       <a id="dl-raw"  class="btn secondary" href="#" download="00909_raw.txt" style="display:none;">下載原始 TXT</a>
     </div>
+  </div>
+
+  <!-- 新增：建議投資方式（在核心績效上方） -->
+  <div class="card">
+    <h3>建議投資方式（本金 100 萬，單位規則 1-1-2）</h3>
+    <table class="simple-table" id="planTbl">
+      <tbody>
+        <tr><th>最近一次買進時間</th><td id="plan-lastBuy">—</td></tr>
+        <tr><th>當時買進價（元）</th><td id="plan-lastPx">—</td></tr>
+        <tr><th>一張金額（元）</th><td id="plan-lotAmt">—</td></tr>
+        <tr><th>極限可買張數（本金 ÷ 一張）</th><td id="plan-maxLots">—</td></tr>
+        <tr><th>單位配置（1-1-2）</th><td id="plan-units">—</td></tr>
+        <tr><th>計畫張數（合計）</th><td id="plan-planLots">—</td></tr>
+        <tr><th>參考獲利（以最近完成的一筆交易每張損益 × 計畫張數）</th><td id="plan-profit">—</td></tr>
+      </tbody>
+    </table>
+    <div class="note">說明：以最近一次「買進」的價格估算一張金額，先求極限張數，再用 1-1-2 的四單位配置（若極限張數除不盡則捨去餘數）。參考獲利以最近完成的一筆交易每張損益乘以計畫張數估算，僅供策略規模化參考。</div>
   </div>
 
   <div class="card">
@@ -96,7 +121,7 @@
 
   <div class="card">
     <h3>交易摘要（前 30 筆）</h3>
-    <table class="table" id="tbl">
+    <table class="simple-table" id="tbl">
       <thead>
         <tr>
           <th>tid</th><th>出場時間</th><th>張數</th><th>進→出</th>
@@ -145,7 +170,7 @@
     return files[0];
   }
 
-  // —— 智慧解碼：嘗試 utf-8 / big5 / utf-16le / utf-16be，回第一個能解析出交易的版本
+  // —— 智慧解碼：utf-8 / big5 / utf-16le / utf-16be
   async function fetchSmart(url){
     const buf = await fetch(url, {cache:'no-store'}).then(r=>{ if(!r.ok) throw new Error(r.status+' '+r.statusText); return r.arrayBuffer(); });
     const encs = ['utf-8','big5','utf-16le','utf-16be'];
@@ -154,17 +179,14 @@
         const td = new TextDecoder(enc, {fatal:false});
         const txt = td.decode(buf);
         const parsed = ETFEngine.parseEtfTxt(txt);
-        if (parsed && parsed.trades && parsed.trades.length > 0) {
-          return { text: txt, enc, parsed };
-        }
+        if (parsed && parsed.trades && parsed.trades.length > 0) return { text: txt, enc, parsed };
       }catch(e){}
     }
-    // 全部失敗就回 utf-8 文本
     const txt = new TextDecoder('utf-8').decode(buf);
     return { text: txt, enc: 'utf-8', parsed: ETFEngine.parseEtfTxt(txt) };
   }
 
-  // ── KPI Render helpers ──
+  // ── KPI 渲染輔助：支援「profit」反轉顏色（紅=獲利、綠=虧損）
   function putKPIs(targetId, items){
     const el=document.getElementById(targetId); el.innerHTML='';
     items.forEach(k=>{
@@ -172,11 +194,19 @@
       const t=document.createElement('p'); t.className='t'; t.textContent=k.label;
       const v=document.createElement('p'); v.className='v';
       v.textContent = k.fmt(k.value);
+
       if(typeof k.value==='number'){
-        if(k.pos==='up'   && k.value>0) v.classList.add('green');
-        else if(k.pos==='down' && k.value<0) v.classList.add('red');
-        else v.classList.add('muted');
+        if(k.pos==='profit'){             // 獲利反轉：紅=正、綠=負
+          v.classList.add(k.value>0 ? 'red' : (k.value<0 ? 'green' : 'muted'));
+        }else if(k.pos==='up'){           // 一般：綠=正
+          v.classList.add(k.value>0 ? 'green' : (k.value<0 ? 'red' : 'muted'));
+        }else if(k.pos==='down'){         // 風險：紅=高、綠=低（只有負才綠）
+          v.classList.add(k.value<0 ? 'green' : (k.value>0 ? 'red' : 'muted'));
+        }else{
+          v.classList.add('muted');
+        }
       } else v.classList.add('muted');
+
       d.appendChild(t); d.appendChild(v); el.appendChild(d);
     });
   }
@@ -208,10 +238,37 @@
     // 4) KPI 計算
     const kpis   = ETFEngine.calcEtfKpis(parsed);
 
-    // 5) KPI 顯示
+    // 4.1 建議投資方式（本金 100 萬、單位 1-1-2）
+    (function renderPlan(){
+      const CAPITAL = 1_000_000;
+      // 最近一次「買進」事件
+      const lastBuyEv = [...parsed.events].filter(e=>e.action==='BUY').sort((a,b)=>a.ts.localeCompare(b.ts)).pop();
+      const lastBuyTs = lastBuyEv ? `${lastBuyEv.d8.slice(0,4)}/${lastBuyEv.d8.slice(4,6)}/${lastBuyEv.d8.slice(6,8)} ${lastBuyEv.t6.slice(0,2)}:${lastBuyEv.t6.slice(2,4)}:${lastBuyEv.t6.slice(4,6)}` : '—';
+      const buyPx = lastBuyEv ? +lastBuyEv.price : null;
+      const lotAmt = buyPx ? Math.round(buyPx*1000) : null;
+      const maxLots = lotAmt ? Math.floor(CAPITAL / lotAmt) : 0;
+      const unitSize = maxLots ? Math.floor(maxLots / 4) : 0;
+      const planLots = unitSize * 4;
+      const unitsText = unitSize ? `${unitSize} / ${unitSize} / ${unitSize*2}` : '—';
+
+      // 最近完成的一筆交易 → 參考每張損益
+      const lastTrade = [...parsed.trades].sort((a,b)=>a.tsOut.localeCompare(b.tsOut)).pop();
+      const plPerLot = lastTrade ? (lastTrade.pxOut - lastTrade.pxIn) * 1000 : 0;
+      const estProfit = planLots ? Math.round(plPerLot * planLots) : null;
+
+      document.getElementById('plan-lastBuy').textContent = lastBuyTs;
+      document.getElementById('plan-lastPx').textContent  = buyPx!=null ? buyPx.toFixed(2) : '—';
+      document.getElementById('plan-lotAmt').textContent  = lotAmt!=null ? lotAmt.toLocaleString() : '—';
+      document.getElementById('plan-maxLots').textContent = maxLots || '—';
+      document.getElementById('plan-units').textContent   = unitsText;
+      document.getElementById('plan-planLots').textContent= planLots || '—';
+      document.getElementById('plan-profit').textContent  = (estProfit!=null) ? (estProfit>=0? `+${estProfit.toLocaleString()} 元` : `${estProfit.toLocaleString()} 元`) : '—';
+    })();
+
+    // 5) KPI 顯示（獲利類改用 pos:'profit' → 紅=賺、綠=虧）
     putKPIs('kpi-core', [
-      {label:'累積報酬（每百萬）', value:kpis.core.totalReturn, fmt:pct, pos:'up'},
-      {label:'CAGR',              value:kpis.core.CAGR,        fmt:pct, pos:'up'},
+      {label:'累積報酬（每百萬）', value:kpis.core.totalReturn, fmt:pct, pos:'profit'},
+      {label:'CAGR',              value:kpis.core.CAGR,        fmt:pct, pos:'profit'},
       {label:'涵蓋日數',           value:kpis.core.coverDays,   fmt:int, pos:null},
       {label:'交易筆數',           value:kpis.core.trades,      fmt:int, pos:null},
     ]);
@@ -221,21 +278,21 @@
       {label:'最大回撤',  value:kpis.risk.MDD,      fmt:pct, pos:'down'},
       {label:'回撤持續（日）', value:kpis.risk.ddDuration, fmt:int, pos:null},
       {label:'Ulcer Index', value:(kpis.risk.UlcerIndex/100), fmt:pct, pos:'down'},
-      {label:'Sharpe',     value:kpis.risk.Sharpe,   fmt:num, pos:'up'},
-      {label:'Sortino',    value:kpis.risk.Sortino,  fmt:num, pos:'up'},
-      {label:'Calmar',     value:kpis.risk.Calmar,   fmt:num, pos:'up'},
+      {label:'Sharpe',     value:kpis.risk.Sharpe,   fmt:num, pos:'profit'},  /* 正向越大越好 → 用 profit 顏色 */
+      {label:'Sortino',    value:kpis.risk.Sortino,  fmt:num, pos:'profit'},
+      {label:'Calmar',     value:kpis.risk.Calmar,   fmt:num, pos:'profit'},
       {label:'VaR(95%) / 日',  value:kpis.risk.VaR95,  fmt:pct, pos:'down'},
       {label:'CVaR(95%) / 日', value:kpis.risk.CVaR95, fmt:pct, pos:'down'},
     ]);
 
     putKPIs('kpi-trade', [
-      {label:'勝率',              value:kpis.trade.winRate,   fmt:pct,  pos:'up'},
-      {label:'Profit Factor',    value:kpis.trade.PF,        fmt:num,  pos:'up'},
-      {label:'均單報酬（每筆/百萬）', value:kpis.trade.avgTrade, fmt:pct,  pos:'up'},
+      {label:'勝率',              value:kpis.trade.winRate,   fmt:pct,  pos:'profit'},
+      {label:'Profit Factor',    value:kpis.trade.PF,        fmt:num,  pos:'profit'},
+      {label:'均單報酬（每筆/百萬）', value:kpis.trade.avgTrade, fmt:pct,  pos:'profit'},
       {label:'平均持有時間',     value:kpis.trade.avgHoldMin,fmt:minFmt,pos:null},
       {label:'中位持有時間',     value:kpis.trade.medHoldMin,fmt:minFmt,pos:null},
       {label:'平均 MAE',         value:kpis.trade.avgMAEpct/100, fmt:pct, pos:'down'},
-      {label:'平均 MFE',         value:kpis.trade.avgMFEpct/100, fmt:pct, pos:'up'},
+      {label:'平均 MFE',         value:kpis.trade.avgMFEpct/100, fmt:pct, pos:'profit'},
       {label:'平均 ISbps',       value:kpis.trade.avgISbps,  fmt:bps,  pos:'down'},
     ]);
 
