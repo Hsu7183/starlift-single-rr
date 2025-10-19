@@ -6,7 +6,11 @@
 <title>00909-ETF版本｜機構級 KPI</title>
 <style>
   :root{ --wrap:1100px; --r:12px; }
-  body{ font-family:Arial,"微軟正黑體",sans-serif; margin:20px; background:#f8f9fa; color:#333; }
+  body{
+    font-family:Arial,"微軟正黑體",sans-serif;
+    font-variant-numeric: tabular-nums;  /* 等寬數字，避免忽大忽小 */
+    margin:20px; background:#f8f9fa; color:#333;
+  }
   h1{ margin:0 0 6px 0; font-weight:800; letter-spacing:.5px; }
   .sub{ color:#666; margin:0 0 18px 0; font-size:14px; }
   .wrap{ max-width:var(--wrap); margin:0 auto; }
@@ -31,10 +35,16 @@
   .chartbox{ height:340px; }
   canvas{ width:100%; height:100%; background:#fff; border:1px solid #eee; border-radius:10px; }
 
-  /* 交易明細：滿寬、最小間距、固定欄寬、不換行 */
-  .simple-table{ width:100%; table-layout:fixed; border-collapse:collapse; font-size:11px; }
-  .simple-table th,.simple-table td{ border-bottom:1px solid #eee; padding:2px 4px; text-align:right; white-space:nowrap; }
+  /* 交易明細：固定欄寬、不換行、零間隔（只留底線） */
+  .simple-table{
+    width:100%; table-layout:fixed; border-collapse:collapse; font-size:11px;
+  }
+  .simple-table th,.simple-table td{
+    border-bottom:1px solid #eee; padding:4px 6px; text-align:right; white-space:nowrap;
+    font-variant-numeric: tabular-nums;
+  }
   .simple-table th:first-child,.simple-table td:first-child{ text-align:left; }
+  .simple-table tr{ background-clip:padding-box; } /* 防止視覺縫隙 */
   .row-buy{  background:#fdecea; }
   .row-sell{ background:#e9f8ef; }
   .gain-red{ color:#d32f2f; font-weight:700; }
@@ -93,13 +103,26 @@
   <h3>交易明細</h3>
   <table class="simple-table" id="tblTrade">
     <colgroup>
-      <col style="width:50px;"><col style="width:64px;"><col style="width:84px;"><col style="width:56px;">
-      <col style="width:96px;"><col style="width:64px;"><col style="width:72px;">
-      <col style="width:110px;"><col style="width:110px;">
-      <col style="width:96px;"><col style="width:72px;"><col style="width:120px;">
-      <col style="width:110px;"><col style="width:64px;"><col style="width:90px;">
-      <col style="width:120px;"><col style="width:120px;">
-      <col style="width:110px;"><col style="width:72px;"><col style="width:140px;">
+      <col style="width:50px;"><!-- 筆數 -->
+      <col style="width:64px;"><!-- 股票名稱 -->
+      <col style="width:84px;"><!-- 成交日 -->
+      <col style="width:56px;"><!-- 種類 -->
+      <col style="width:86px;"><!-- 交易數量 -->
+      <col style="width:64px;"><!-- 單價 -->
+      <col style="width:64px;"><!-- 手續費 -->
+      <col style="width:110px;"><!-- 買進金額 -->
+      <col style="width:110px;"><!-- 賣出金額 -->
+      <col style="width:96px;"><!-- 損益 -->
+      <col style="width:72px;"><!-- 獲利率 -->
+      <col style="width:120px;"><!-- 累計損益 -->
+      <col style="width:110px;"><!-- 建議交易數量(股) -->
+      <col style="width:64px;"><!-- 單價 -->
+      <col style="width:90px;"><!-- 手續費(估) -->
+      <col style="width:120px;"><!-- 買進金額(估) -->
+      <col style="width:120px;"><!-- 賣出金額(估) -->
+      <col style="width:110px;"><!-- 損益試算 -->
+      <col style="width:72px;"><!-- 獲利率(試) -->
+      <col style="width:140px;"><!-- 累計損益(含試算) -->
     </colgroup>
     <thead>
       <tr>
@@ -139,7 +162,6 @@
   async function latest00909(){
     const { data, error } = await sb.storage.from(BUCKET).list('', { limit:1000, sortBy:{ column:'name', order:'asc' }});
     if (error) throw error;
-    // 修正：不要檢查 it.id，避免把有效檔案過濾掉
     const files = (data||[]).filter(it => /00909/i.test(it.name));
     if(!files.length) return null;
     files.sort((a,b)=> b.name.localeCompare(a.name));
@@ -215,7 +237,6 @@
       {label:'年化波動',  value:kpis.risk.volAnn,   fmt:pct, pos:'down'},
       {label:'最大回撤',  value:kpis.risk.MDD,      fmt:pct, pos:'down'},
       {label:'回撤持續（日）', value:kpis.risk.ddDuration, fmt:int, pos:null},
-      // Ulcer Index 由引擎輸出為「百分比值」，前端除以 100 後用 % 顯示。
       {label:'Ulcer Index', value:(kpis.risk.UlcerIndex/100), fmt:pct, pos:'down'},
       {label:'Sharpe',     value:kpis.risk.Sharpe,   fmt:num, pos:'profit'},
       {label:'Sortino',    value:kpis.risk.Sortino,  fmt:num, pos:'profit'},
@@ -254,7 +275,7 @@
       const unit = maxLots ? Math.floor(maxLots/4) : 0; // 1-1-2
       const planLots = unit*1 + unit*1 + unit*2;
 
-      // 參考獲利：抓最近一筆完成交易「每張損益」× 計畫張數（保守起見）
+      // 參考獲利：抓最近一筆完成交易「每張損益」× 計畫張數（保守）
       let perLotGain = 0;
       if (lastSellTr && lastSellTr.qtyLots) {
         perLotGain = Math.round(lastSellTr.gainSlip / lastSellTr.qtyLots);
@@ -282,7 +303,7 @@
       parsed.equity
     );
 
-    // MAE/MFE 改為成對資料，避免索引錯位
+    // MAE/MFE 成對
     {
       const pairs = parsed.trades
         .filter(t => t.maePct != null && t.mfePct != null)
@@ -301,7 +322,7 @@
     const STOCK='00909', CAPITAL=1_000_000;
 
     const tradeByTid={}; parsed.trades.forEach(t=> tradeByTid[String(t.tid)]=t);
-    const suggBuyLotsByTid={};   // SELL 使用：同 tid 累計建議買進張數
+    const suggBuyLotsByTid={};   // SELL 使用：同 tid 累計建議買進「張數」
     let accGain=0;               // 左欄「累計損益」（實際，只在 SELL 累加）
     let cumWithPlan=0;           // 右欄「累計損益(含試算)」（只在 SELL 累加）
 
@@ -323,13 +344,12 @@
         const buyAmt = !isSell? Math.round(grossRaw + feeRaw) : null;
         const sellAmt=  isSell? Math.round(grossRaw - feeRaw - Math.round(grossRaw*TAX_RATE)) : null;
 
-        // 實際損益/ROI（只在 SELL）
+        // 實際損益 / 獲利率（獲利率 = 損益 ÷ 1,000,000）
         let gain=null, roi=null, accHtml='';
         if(isSell){
           const tr=tradeByTid[e.kv.tid];
           gain = Math.round(tr?.gainSlip ?? 0);
-          const base = Math.round((tr?.pxInAvg ?? 0) * sharesRaw);
-          roi  = base? (gain/base) : 0;
+          roi  = gain / 1_000_000;  // ★ 依需求：損益 / 百萬
           accGain += gain;
           accHtml = accGain>0? `<span class="gain-red">+${accGain.toLocaleString()}</span>` :
                     accGain<0? `<span class="loss-green">${accGain.toLocaleString()}</span>` : '';
@@ -347,17 +367,23 @@
 
         if(!isSell) suggBuyLotsByTid[e.kv.tid]=(suggBuyLotsByTid[e.kv.tid]||0)+suggLots;
 
-        // 估算（只在 SELL 列計「損益試算／累計(含試算)」）
-        const sharesSugg=suggLots*1000;
+        // 以「股數」顯示建議交易數量
+        const sharesSugg = (suggLots||0)*1000;
 
-        // (估)買進淨額（SELL 用 pxInAvg）
+        // === 試算區 ===
         const tr=tradeByTid[e.kv.tid];
         const pxInAvg=tr?.pxInAvg ?? px;
+
+        // 買進側估值（僅在「買進列」顯示）
+        const grossBuyEstNow = px * sharesSugg;
+        const feeBuyEstNow   = fee(grossBuyEstNow);
+        const buyNetEstNow   = Math.round(grossBuyEstNow + feeBuyEstNow);
+
+        // 賣出側估值（僅在「賣出列」顯示；買成本用 pxInAvg）
         const grossBuyAvg=pxInAvg*sharesSugg;
         const feeBuyAvg=fee(grossBuyAvg);
         const buyNetAvg=Math.round(grossBuyAvg + feeBuyAvg);
 
-        // (估)賣出淨額（用當列賣價）
         const grossSellEst=px*sharesSugg;
         const feeSellEst=fee(grossSellEst);
         const taxEst=Math.round(grossSellEst*TAX_RATE);
@@ -366,7 +392,7 @@
         let planGain=null, planRoi=null, showCumPlan='';
         if(isSell){
           planGain = sellNetEst - buyNetAvg;
-          planRoi  = buyNetAvg? (planGain/buyNetAvg) : 0;
+          planRoi  = planGain / 1_000_000;  // ★ 試算獲利率也改為 / 百萬
           cumWithPlan += (planGain||0);
           showCumPlan = cumWithPlan>0? `<span class="gain-red">+${cumWithPlan.toLocaleString()}</span>` :
                         cumWithPlan<0? `<span class="loss-green">${cumWithPlan.toLocaleString()}</span>` : '';
@@ -389,11 +415,15 @@
           <td>${money(gain)}</td>
           <td>${rate(roi)}</td>
           <td>${accHtml}</td>
-          <td style="border-left:2px solid #ddd;">${suggLots||''}</td>
+          <td style="border-left:2px solid #ddd;">${sharesSugg? sharesSugg.toLocaleString(): ''}</td>
           <td>${px? px.toFixed(2): ''}</td>
-          <td>${suggLots? feeSellEst.toLocaleString(): ''}</td>
-          <td>${suggLots? buyNetAvg.toLocaleString(): ''}</td>
-          <td>${suggLots? sellNetEst.toLocaleString(): ''}</td>
+          <td>${
+              isSell
+                ? (sharesSugg? feeSellEst.toLocaleString(): '')
+                : (sharesSugg? feeBuyEstNow.toLocaleString(): '')
+            }</td>
+          <td>${!isSell && sharesSugg? buyNetEstNow.toLocaleString(): ''}</td>
+          <td>${ isSell && sharesSugg? sellNetEst.toLocaleString(): ''}</td>
           <td>${money(planGain)}</td>
           <td>${rate(planRoi)}</td>
           <td>${showCumPlan}</td>
