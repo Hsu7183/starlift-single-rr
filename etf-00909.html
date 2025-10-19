@@ -10,9 +10,11 @@
     h1{ margin:0 0 6px 0; font-weight:800; letter-spacing:.5px; }
     .sub{ color:#666; margin:0 0 18px 0; font-size:14px; }
     .wrap{ max-width:var(--w); margin:0 auto; }
+    .toolbar{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+    .home{ display:inline-block; padding:6px 10px; border-radius:10px; border:1px solid #aaa; color:#333; text-decoration:none; font-size:12px; }
+    .home:hover{ background:#f2f2f2; }
     .card{ background:#fff; border:1px solid #e5e7eb; border-radius:var(--r); box-shadow:0 2px 8px rgba(0,0,0,.06); padding:16px 18px; margin:14px 0; }
     .meta{ color:#666; font-size:12px; }
-    .flex{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
     .btn{ display:inline-block; padding:6px 10px; border-radius:10px; border:1px solid #0d6efd; color:#0d6efd; text-decoration:none; font-size:12px; }
     .btn.secondary{ border-color:#aaa; color:#555; }
 
@@ -25,21 +27,25 @@
 
     .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
 
-    /* ── 固定圖表高度：避免無限延長 ── */
+    /* 固定圖表高度，避免 canvas 無限延長 */
     .chartbox{ height:360px; }
     canvas{ width:100%; height:100%; background:#fff; border:1px solid #eee; border-radius:10px; }
   </style>
 </head>
 <body>
 <div class="wrap">
-  <h1>00909-ETF版本｜機構級 KPI</h1>
+  <div class="toolbar">
+    <h1 style="margin-right:auto;">00909-ETF版本｜機構級 KPI</h1>
+    <a class="home" href="index.html">← 回首頁</a>
+  </div>
   <p class="sub">資料：Supabase <code>/reports</code> 最新「00909」檔；股票線獨立計算（不動期貨線）。</p>
 
   <div class="card">
-    <div class="flex">
+    <div class="toolbar">
       <div id="meta" class="meta">正在抓取最新檔案…</div>
+      <span style="flex:1;"></span>
       <a id="rawlink" class="btn" href="#" target="_blank" style="display:none;">查看原始 TXT</a>
-      <a id="dl-raw" class="btn secondary" href="#" download="00909_raw.txt" style="display:none;">下載原始 TXT</a>
+      <a id="dl-raw"  class="btn secondary" href="#" download="00909_raw.txt" style="display:none;">下載原始 TXT</a>
     </div>
   </div>
 
@@ -139,6 +145,25 @@
     return files[0];
   }
 
+  // —— 智慧解碼：嘗試 utf-8 / big5 / utf-16le / utf-16be，回第一個能解析出交易的版本
+  async function fetchSmart(url){
+    const buf = await fetch(url, {cache:'no-store'}).then(r=>{ if(!r.ok) throw new Error(r.status+' '+r.statusText); return r.arrayBuffer(); });
+    const encs = ['utf-8','big5','utf-16le','utf-16be'];
+    for(const enc of encs){
+      try{
+        const td = new TextDecoder(enc, {fatal:false});
+        const txt = td.decode(buf);
+        const parsed = ETFEngine.parseEtfTxt(txt);
+        if (parsed && parsed.trades && parsed.trades.length > 0) {
+          return { text: txt, enc, parsed };
+        }
+      }catch(e){}
+    }
+    // 全部失敗就回 utf-8 文本
+    const txt = new TextDecoder('utf-8').decode(buf);
+    return { text: txt, enc: 'utf-8', parsed: ETFEngine.parseEtfTxt(txt) };
+  }
+
   // ── KPI Render helpers ──
   function putKPIs(targetId, items){
     const el=document.getElementById(targetId); el.innerHTML='';
@@ -162,7 +187,6 @@
   const minFmt= x => (x==null? '—' : Math.round(+x)+' 分');
 
   try{
-    // Loading 提示
     metaEl.textContent = '正在抓取最新 00909 檔（/reports 下）…';
 
     // 1) 抓最新檔
@@ -171,22 +195,20 @@
     const rawUrl = pubUrl(latest.name);
     rawLink.style.display='inline-block'; rawLink.href = rawUrl;
 
-    const res = await fetch(rawUrl, {cache:'no-store'});
-    if(!res.ok) throw new Error(res.status+' '+res.statusText);
-    const rawTxt = await res.text();
+    // 2) 下載 + 智慧解碼 + 解析
+    const { text:rawTxt, enc, parsed } = await fetchSmart(rawUrl);
     const rawBlob = new Blob([rawTxt], {type:'text/plain'});
     dlRaw.style.display='inline-block'; dlRaw.href = URL.createObjectURL(rawBlob);
 
-    // 2) 解析 & 計算（股票線）
-    const parsed = ETFEngine.parseEtfTxt(rawTxt);
+    // 3) Loading → 成功
+    const first = parsed.days[0] ? `${parsed.days[0].slice(0,4)}/${parsed.days[0].slice(4,6)}/${parsed.days[0].slice(6,8)}` : '—';
+    const last  = parsed.days.length? `${parsed.days.at(-1).slice(0,4)}/${parsed.days.at(-1).slice(4,6)}/${parsed.days.at(-1).slice(6,8)}` : '—';
+    metaEl.textContent = `✅ 已載入：${latest.name}（解碼：${enc}）｜交易筆數=${parsed.trades.length}｜期間：${first} ~ ${last}`;
+
+    // 4) KPI 計算
     const kpis   = ETFEngine.calcEtfKpis(parsed);
 
-    // 3) Loading → 成功
-    const first = kpis.meta.firstDay? `${kpis.meta.firstDay.slice(0,4)}/${kpis.meta.firstDay.slice(4,6)}/${kpis.meta.firstDay.slice(6,8)}` : '—';
-    const last  = kpis.meta.lastDay ? `${kpis.meta.lastDay.slice(0,4)}/${kpis.meta.lastDay.slice(4,6)}/${kpis.meta.lastDay.slice(6,8)}` : '—';
-    metaEl.textContent = `✅ 已載入：${latest.name}｜交易筆數=${kpis.core.trades}｜期間：${first} ~ ${last}`;
-
-    // 4) KPI
+    // 5) KPI 顯示
     putKPIs('kpi-core', [
       {label:'累積報酬（每百萬）', value:kpis.core.totalReturn, fmt:pct, pos:'up'},
       {label:'CAGR',              value:kpis.core.CAGR,        fmt:pct, pos:'up'},
@@ -224,14 +246,15 @@
       {label:'涵蓋期間(起-迄)', value:0, fmt:()=>((kpis.meta.firstDay||'—')+' ~ '+(kpis.meta.lastDay||'—')), pos:null},
     ]);
 
-    // 5) 圖表（固定 .chartbox 高度，Canvas 100% 填滿）
+    // 6) 圖表
     const labels = parsed.days.map(d=>`${d.slice(0,4)}/${d.slice(4,6)}/${d.slice(6,8)}`);
     ETFChart.drawEquityCurve(document.getElementById('eq'), labels, parsed.equity);
 
     const MAEs  = parsed.trades.map(t=> t.maePct!=null ? +t.maePct : null).filter(x=>x!=null);
     const MFEs  = parsed.trades.map(t=> t.mfePct!=null ? +t.mfePct : null).filter(x=>x!=null);
-    const ISbps = parsed.trades.map(t=> t.ISbps!=null ? +t.ISbps : null).filter(x=>x!=null);
     ETFChart.drawMaeMfeScatter(document.getElementById('maeMfe'), MAEs, MFEs);
+
+    const ISbps = parsed.trades.map(t=> t.ISbps!=null ? +t.ISbps : null).filter(x=>x!=null);
     ETFChart.drawIsHist(document.getElementById('isHist'), ISbps, 24);
 
     const partRates = parsed.trades.map(t=>{
@@ -243,7 +266,7 @@
     }).filter(x=>x!=null);
     ETFChart.drawPartRate(document.getElementById('partRate'), partRates);
 
-    // 6) 表格：前 30 筆
+    // 7) 表格
     const tbody = document.querySelector('#tbl tbody');
     const rows = parsed.trades.slice(0,30).map(t=>{
       const ts = String(t.tsOut);
