@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>00909-ETF版本｜機構級 KPI</title>
+  <style>
+    :root{ --w:1100px; --r:12px; }
+    body{ font-family: Arial, "微軟正黑體", sans-serif; margin:20px; background:#f8f9fa; color:#333; }
+    h1{ margin:0 0 6px 0; font-weight:800; letter-spacing:.5px; }
+    .sub{ color:#666; margin:0 0 18px 0; font-size:14px; }
+    .wrap{ max-width:var(--w); margin:0 auto; }
+    .card{ background:#fff; border:1px solid #e5e7eb; border-radius:var(--r); box-shadow:0 2px 8px rgba(0,0,0,.06); padding:16px 18px; margin:14px 0; }
+    .meta{ color:#666; font-size:12px; }
+    .flex{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+    .btn{ display:inline-block; padding:6px 10px; border-radius:10px; border:1px solid #0d6efd; color:#0d6efd; text-decoration:none; font-size:12px; }
+    .btn.secondary{ border-color:#aaa; color:#555; }
+    .kpi-grid{ display:grid; grid-template-columns: repeat(4,1fr); gap:10px; }
+    .kpi{ background:#fafafa; border:1px solid #eee; border-radius:10px; padding:10px 12px; }
+    .kpi .t{ font-size:12px; color:#666; margin:0; }
+    .kpi .v{ font-size:20px; font-weight:800; margin:4px 0 0; color:#111; }
+    .kpi .v.red{ color:#d32f2f; } .kpi .v.green{ color:#10b981; } .kpi .v.muted{ color:#666; }
+    .note{ font-size:12px; color:#777; margin-top:6px; }
+    .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    canvas{ width:100%; height:340px; background:#fff; border:1px solid #eee; border-radius:10px; }
+    .table{ width:100%; border-collapse:collapse; font-size:13px; }
+    .table th, .table td{ border-bottom:1px solid #eee; padding:6px 8px; text-align:right; }
+    .table th:first-child, .table td:first-child{ text-align:left; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <h1>00909-ETF版本｜機構級 KPI</h1>
+  <p class="sub">資料：Supabase <code>/reports</code> 最新「00909」檔；股票線獨立計算（不動期貨線）。</p>
+
+  <div class="card">
+    <div class="flex">
+      <div id="meta" class="meta">正在抓取最新檔案…</div>
+      <a id="rawlink" class="btn" href="#" target="_blank" style="display:none;">查看原始 TXT</a>
+      <a id="dl-raw" class="btn secondary" href="#" download="00909_raw.txt" style="display:none;">下載原始 TXT</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>核心績效</h3>
+    <div id="kpi-core" class="kpi-grid"></div>
+    <div class="note">報酬以「每 100 萬基準資金」表示；CAGR 於涵蓋日數 &gt; 365 才顯示。</div>
+  </div>
+
+  <div class="card">
+    <h3>風險與風險調整</h3>
+    <div id="kpi-risk" class="kpi-grid"></div>
+    <div class="note">年化以 252 日；Calmar=CAGR/MDD；Ulcer 以 equity 百分比 drawdown 計算；VaR/CVaR 基於日報酬左尾近似。</div>
+  </div>
+
+  <div class="card">
+    <h3>交易層與執行品質</h3>
+    <div id="kpi-trade" class="kpi-grid"></div>
+    <div class="note">ISbps 來自 decisionPx→execPx；MAE/MFE 取每筆交易（賣出行）統計；持有時間為分鐘。</div>
+  </div>
+
+  <div class="card">
+    <h3>容量與參與率</h3>
+    <div id="kpi-cap" class="kpi-grid"></div>
+    <div class="note">參與率 ≈ entryNotional ÷ (ADV20 × 中位成交價)；僅供容量等級參考。</div>
+  </div>
+
+  <div class="card">
+    <h3>收益曲線（每百萬 %）</h3>
+    <canvas id="eq"></canvas>
+  </div>
+
+  <div class="card grid2">
+    <div>
+      <h3>MAE vs MFE（散點，％）</h3>
+      <canvas id="maeMfe"></canvas>
+    </div>
+    <div>
+      <h3>ISbps 分佈（直方）</h3>
+      <canvas id="isHist"></canvas>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>參與率曲線（按交易排序）</h3>
+    <canvas id="partRate"></canvas>
+  </div>
+
+  <div class="card">
+    <h3>交易摘要（前 30 筆）</h3>
+    <table class="table" id="tbl">
+      <thead>
+        <tr>
+          <th>tid</th><th>出場時間</th><th>張數</th><th>進→出</th>
+          <th>淨損益(萬/百萬)</th><th>持有(分)</th><th>MAE%</th><th>MFE%</th><th>ISbps</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- 依賴 -->
+<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="js/etf-engine.js"></script>
+<script src="js/etf-chart.js"></script>
+
+<script>
+(async function(){
+  // ===== Supabase 設定（與首頁一致） =====
+  const SUPABASE_URL = "https://byhbmmnacezzgkwfkozs.supabase.co";
+  const SUPABASE_ANON_KEY = "sb_publishable_xVe8fGbqQ0XGwi4DsmjPMg_Y2RBOD3t";
+  const BUCKET = "reports";
+  const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    global: { fetch: (u,o={}) => fetch(u,{...o, cache:'no-store'}) }
+  });
+
+  function pubUrl(path){ const { data } = sb.storage.from(BUCKET).getPublicUrl(path); return data?.publicUrl || '#'; }
+  async function latest00909(){
+    const { data } = await sb.storage.from(BUCKET).list('', { limit:1000, sortBy:{ column:'name', order:'asc' }});
+    const files = (data||[]).filter(it => it.id !== null && /00909/i.test(it.name));
+    if(!files.length) return null;
+    const score = n => { const m=(n||'').match(/\b(20\\d{6})\\b/g); return m? Math.max(...m.map(s=>+s)):0; };
+    files.sort((a,b)=>{
+      const sa=score(a.name), sb=score(b.name);
+      if(sa!==sb) return sb-sa;
+      const ta=a.updated_at? Date.parse(a.updated_at):0, tb=b.updated_at? Date.parse(b.updated_at):0;
+      if(ta!==tb) return tb-ta;
+      return (b.metadata?.size||0)-(a.metadata?.size||0);
+    });
+    return files[0];
+  }
+
+  // ===== DOM helpers =====
+  const metaEl = document.getElementById('meta');
+  function putKPIs(targetId, items){
+    const el=document.getElementById(targetId); el.innerHTML='';
+    items.forEach(k=>{
+      const d=document.createElement('div'); d.className='kpi';
+      const t=document.createElement('p'); t.className='t'; t.textContent=k.label;
+      const v=document.createElement('p'); v.className='v';
+      v.textContent = k.fmt(k.value);
+      if(typeof k.value==='number'){
+        if(k.pos==='up'   && k.value>0) v.classList.add('green');
+        else if(k.pos==='down' && k.value<0) v.classList.add('red');
+        else v.classList.add('muted');
+      } else v.classList.add('muted');
+      d.appendChild(t); d.appendChild(v); el.appendChild(d);
+    });
+  }
+  const pct = x => (x==null? '—' : (x*100).toFixed(2)+'%');
+  const num = x => (x==null? '—' : (+x).toFixed(2));
+  const int = x => (x==null? '—' : Math.round(+x).toString());
+  const bps = x => (x==null? '—' : (+x).toFixed(1)+' bps');
+  const minFmt = x => (x==null? '—' : Math.round(+x)+' 分');
+
+  try{
+    // 1) 下載最新 00909 TXT
+    const latest = await latest00909();
+    if(!latest){ metaEl.textContent='找不到 00909 檔案（/reports 下無 00909 命名）。'; return; }
+    const rawUrl = pubUrl(latest.name);
+    metaEl.textContent = `已載入：${latest.name}`;
+    const rawlink = document.getElementById('rawlink'); rawlink.style.display='inline-block'; rawlink.href = rawUrl;
+
+    const res = await fetch(rawUrl, {cache:'no-store'});
+    const rawTxt = await res.text();
+    const rawBlob = new Blob([rawTxt], {type:'text/plain'});
+    const dl = document.getElementById('dl-raw'); dl.style.display='inline-block'; dl.href = URL.createObjectURL(rawBlob);
+
+    // 2) 解析 & 計算（股票線）
+    const parsed = ETFEngine.parseEtfTxt(rawTxt);
+    const kpis = ETFEngine.calcEtfKpis(parsed);
+
+    // 3) KPI 呈現
+    putKPIs('kpi-core', [
+      {label:'累積報酬（每百萬）', value:kpis.core.totalReturn, fmt:pct, pos:'up'},
+      {label:'CAGR',              value:kpis.core.CAGR,        fmt:pct, pos:'up'},
+      {label:'涵蓋日數',           value:kpis.core.coverDays,   fmt:int, pos:null},
+      {label:'交易筆數',           value:kpis.core.trades,      fmt:int, pos:null},
+    ]);
+
+    putKPIs('kpi-risk', [
+      {label:'年化波動',  value:kpis.risk.volAnn,   fmt:pct, pos:'down'},
+      {label:'最大回撤',  value:kpis.risk.MDD,      fmt:pct, pos:'down'},
+      {label:'回撤持續（日）', value:kpis.risk.ddDuration, fmt:int, pos:null},
+      {label:'Ulcer Index', value:(kpis.risk.UlcerIndex/100), fmt:pct, pos:'down'},
+      {label:'Sharpe',     value:kpis.risk.Sharpe,   fmt:num, pos:'up'},
+      {label:'Sortino',    value:kpis.risk.Sortino,  fmt:num, pos:'up'},
+      {label:'Calmar',     value:kpis.risk.Calmar,   fmt:num, pos:'up'},
+      {label:'VaR(95%) / 日',  value:kpis.risk.VaR95,  fmt:pct, pos:'down'},
+      {label:'CVaR(95%) / 日', value:kpis.risk.CVaR95, fmt:pct, pos:'down'},
+    ]);
+
+    putKPIs('kpi-trade', [
+      {label:'勝率',              value:kpis.trade.winRate,   fmt:pct,  pos:'up'},
+      {label:'Profit Factor',    value:kpis.trade.PF,        fmt:num,  pos:'up'},
+      {label:'均單報酬（每筆/百萬）', value:kpis.trade.avgTrade, fmt:pct,  pos:'up'},
+      {label:'平均持有時間',     value:kpis.trade.avgHoldMin,fmt:minFmt,pos:null},
+      {label:'中位持有時間',     value:kpis.trade.medHoldMin,fmt:minFmt,pos:null},
+      {label:'平均 MAE',         value:kpis.trade.avgMAEpct/100, fmt:pct, pos:'down'},
+      {label:'平均 MFE',         value:kpis.trade.avgMFEpct/100, fmt:pct, pos:'up'},
+      {label:'平均 ISbps',       value:kpis.trade.avgISbps,  fmt:bps,  pos:'down'},
+    ]);
+
+    putKPIs('kpi-cap', [
+      {label:'平均參與率',  value:kpis.capacity.avgParticipation, fmt:pct, pos:'down'},
+      {label:'P75 參與率',  value:kpis.capacity.p75Participation, fmt:pct, pos:'down'},
+      {label:'基準資金（萬）', value:kpis.meta.baseCapital/10000, fmt:num, pos:null},
+      {label:'涵蓋期間(起-迄)', value:0, fmt:()=>((kpis.meta.firstDay||'—')+' ~ '+(kpis.meta.lastDay||'—')), pos:null},
+    ]);
+
+    // 4) 繪圖：Equity / MAE-MFE / ISbps / Participation
+    const labels = parsed.days.map(d=>`${d.slice(0,4)}/${d.slice(4,6)}/${d.slice(6,8)}`);
+    ETFChart.drawEquityCurve(document.getElementById('eq'), labels, parsed.equity);
+
+    const MAEs = parsed.trades.map(t=> t.maePct!=null ? +t.maePct : null).filter(x=>x!=null);
+    const MFEs = parsed.trades.map(t=> t.mfePct!=null ? +t.mfePct : null).filter(x=>x!=null);
+    ETFChart.drawMaeMfeScatter(document.getElementById('maeMfe'), MAEs, MFEs);
+
+    const ISbps = parsed.trades.map(t=> t.ISbps!=null ? +t.ISbps : null).filter(x=>x!=null);
+    ETFChart.drawIsHist(document.getElementById('isHist'), ISbps, 24);
+
+    const partRates = parsed.trades.map(t=>{
+      if (t.entryNotionalSum && t.ADV20avg && t.medExecPx) {
+        const est = t.ADV20avg * t.medExecPx;
+        return est>0 ? (t.entryNotionalSum / est) : null;
+      }
+      return null;
+    }).filter(x=>x!=null);
+    ETFChart.drawPartRate(document.getElementById('partRate'), partRates);
+
+    // 5) 表格：前 30 筆
+    const tbody = document.querySelector('#tbl tbody');
+    const rows = parsed.trades.slice(0,30).map(t=>{
+      const ts = String(t.tsOut);
+      const tsStr = `${ts.slice(0,4)}/${ts.slice(4,6)}/${ts.slice(6,8)} ${ts.slice(8,10)}:${ts.slice(10,12)}:${ts.slice(12,14)}`;
+      return `<tr>
+        <td>${t.tid}</td>
+        <td>${tsStr}</td>
+        <td>${t.qty}</td>
+        <td>${t.pxIn.toFixed(2)}→${t.pxOut.toFixed(2)}</td>
+        <td>${(t.gainSlip/1_000_000).toFixed(4)}</td>
+        <td>${t.holdMin!=null? Math.round(t.holdMin):''}</td>
+        <td>${t.maePct!=null? (+t.maePct).toFixed(2):''}</td>
+        <td>${t.mfePct!=null? (+t.mfePct).toFixed(2):''}</td>
+        <td>${t.ISbps!=null? (+t.ISbps).toFixed(1):''}</td>
+      </tr>`;
+    }).join('');
+    tbody.innerHTML = rows || '<tr><td colspan="9" style="text-align:center;color:#777;">（資料不足）</td></tr>';
+
+  }catch(e){
+    metaEl.textContent = '載入或解析失敗：' + (e?.message || e);
+  }
+})();
+</script>
+</body>
+</html>
