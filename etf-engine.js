@@ -1,4 +1,4 @@
-// etf-engine.js — 股票/ETF 計算核心（支援 canonical 與 CSV 中文格式）
+// etf-engine.js — 股票/ETF 計算核心（寬鬆 CSV & canonical；買/賣費用分列）
 (function (root){
   const DAY_MS = 24*60*60*1000;
 
@@ -12,53 +12,57 @@
 
   // ---------- 解析 ----------
   const CANON_RE = /^(\d{14})\.0{6}\s+(\d+\.\d{6})\s+(新買|平賣|新賣|平買|強制平倉)\s*$/;
-  const CSV_RE   = /^(\d{8}),\s*(\d{5,6}),\s*(\d+(?:\.\d+)?),\s*(買進|賣出|加碼攤平|再加碼攤平)\s*(?:,(.*))?$/;
+  const CSV_RE   = /^(\d{8})\s*,\s*(\d{5,6})\s*,\s*([0-9]+(?:\.[0-9]+)?)\s*,\s*(買進|賣出|加碼攤平|再加碼攤平)\s*(?:,(.*))?$/i;
 
   // 回傳 rows: [{ts, tsMs, day, price, act, qtyUnits?}]
   function parseCanon(text){
     const rows=[]; if(!text) return rows;
-    for(const raw of text.split('\n')){
-      const line = raw.trim(); if(!line) continue;
+    const lines = text.replace(/\r\n?/g,'\n').split('\n');
+
+    for(const raw0 of lines){
+      const raw = raw0.trim(); if(!raw) continue;
 
       // 1) canonical
-      let m = line.match(CANON_RE);
+      let m = raw.match(CANON_RE);
       if(m){
-        rows.push({
-          ts: m[1],
-          tsMs: parseTs(m[1]),
-          day: m[1].slice(0,8),
-          price: +m[2],
-          act: m[3],         // 新買/平賣/新賣/平買/強制平倉
-          qtyUnits: undefined
-        });
+        rows.push({ ts:m[1], tsMs:parseTs(m[1]), day:m[1].slice(0,8), price:+m[2], act:m[3] });
         continue;
       }
 
-      // 2) CSV 中文
-      m = line.match(CSV_RE);
+      // 2) CSV（先用正則）
+      m = raw.match(CSV_RE);
       if(m){
-        const d=m[1], t=pad6(m[2]); const ts = d + t;
-        const price = +m[3];
-        const zhAct = m[4];
-        const tail = m[5]||'';
-
-        // 僅做多邏輯：買進 / 加碼攤平 / 再加碼攤平 => 新買；賣出 => 平賣
+        const d=m[1], t=pad6(m[2]); const ts=d+t;
+        const price=+m[3], zhAct=m[4], tail=m[5]||'';
         const act = (zhAct==='賣出') ? '平賣' : '新買';
-
-        // 解析單位：買進用「本次單位=」，賣出用「總單位=」
         let qtyUnits;
-        if (zhAct==='賣出'){
-          const mm = tail.match(/總單位\s*=\s*(\d+)/);
-          if(mm) qtyUnits = +mm[1];
+        if(zhAct==='賣出'){
+          const mm = tail.match(/總單位\s*=\s*(\d+)/) || tail.match(/總單位：\s*(\d+)/);
+          // 若沒有寫總單位，qtyUnits 先留空，稍後以現有 shares 出清
+          if(mm) qtyUnits=+mm[1];
         }else{
-          const mm = tail.match(/本次單位\s*=\s*(\d+)/);
-          if(mm) qtyUnits = +mm[1];
-          else qtyUnits = 1; // 沒寫就視為 1 單位
+          const mm = tail.match(/本次單位\s*=\s*(\d+)/) || tail.match(/本次單位：\s*(\d+)/);
+          qtyUnits = mm ? +mm[1] : 1;
         }
+        rows.push({ ts, tsMs:parseTs(ts), day:d, price, act, qtyUnits });
+        continue;
+      }
 
-        rows.push({
-          ts, tsMs: parseTs(ts), day:d, price, act, qtyUnits
-        });
+      // 3) CSV（split 保底）
+      const parts = raw.split(',').map(s=>s.trim());
+      if(parts.length>=4 && /^\d{8}$/.test(parts[0]) && /^\d{5,6}$/.test(parts[1])){
+        const d=parts[0], t=pad6(parts[1]), price=+parts[2], zhAct=parts[3], ts=d+t;
+        const rest = parts.slice(4).join(',');
+        const act = (zhAct==='賣出') ? '平賣' : '新買';
+        let qtyUnits;
+        if(zhAct==='賣出'){
+          const mm = rest.match(/總單位\s*=\s*(\d+)/);
+          if(mm) qtyUnits=+mm[1];
+        }else{
+          const mm = rest.match(/本次單位\s*=\s*(\d+)/);
+          qtyUnits = mm ? +mm[1] : 1;
+        }
+        rows.push({ ts, tsMs:parseTs(ts), day:d, price, act, qtyUnits });
       }
     }
     rows.sort((a,b)=> a.ts.localeCompare(b.ts));
@@ -69,7 +73,7 @@
   function fees(price, shares, cfg, isSell){
     const gross = price * shares;
     const fee = Math.max(cfg.minFee, gross * cfg.feeRate);
-    const tax = isSell ? gross * cfg.taxRate : 0;
+    const tax = isSell ? (gross * cfg.taxRate) : 0;
     return { fee, tax, total: fee + tax };
   }
   function slipPrice(price, side, cfg){
@@ -84,55 +88,66 @@
     let shares = 0, avgCost = 0, cash = initial, realized = 0;
 
     const tradeRecs=[];
-    let openSide=null, openTs=null, openPx=null, openShares=0, openFee=0;
+    let openTs=null, openPx=null, openShares=0, buyFee=0;
 
     const eqSeries=[], ddSeries=[];
     let peak = initial;
 
     for(const r of rows){
-      const isBuyAct  = (r.act==='新買' || r.act==='平買');  // 此 CSV 僅會用到 新買 / 平賣
-      const isSellAct = (r.act==='平賣' || r.act==='新賣');
+      const isBuy  = (r.act==='新買' || r.act==='平買');   // 本 CSV 僅會用到 新買 / 平賣
+      const isSell = (r.act==='平賣' || r.act==='新賣');
+      if(!(isBuy||isSell)) continue;
 
-      if(!(isBuyAct||isSellAct)) continue;
-
-      // 決定本筆股數
-      const qtyUnits = r.qtyUnits ?? 1;
-      const qty = qtyUnits * lot;
-
-      // 成交價（含滑價）
-      const side = isBuyAct ? 'buy' : 'sell';
+      const side = isBuy ? 'buy' : 'sell';
       const px = slipPrice(r.price, side, cfg);
 
-      if(isBuyAct){ // 開多 or 回補
-        const f = fees(px, qty, cfg, false);
-        const cost = px*qty + f.total;
+      if(isBuy){
+        const qty = (r.qtyUnits!=null ? r.qtyUnits : 1) * lot;
+        const f = fees(px, qty, cfg, false); // 買進只有手續費
+        const cost = px*qty + f.fee;
         cash -= cost;
         avgCost = (shares*avgCost + px*qty) / (shares + qty || 1);
         shares += qty;
 
-        // 記錄最近一次開倉（用於 tradeRecs；簡化：逐段視為獨立 round-trip）
-        openSide='long'; openTs=r.ts; openPx=px; openShares=qty; openFee=f.total;
-      }else{        // 出清（此 CSV 的賣出本就對應「總單位」）
-        if(shares<=0){ /* 無部位，略過 */ }
-        else{
-          const f = fees(px, qty, cfg, true);
-          const proceeds = px*qty - f.total;
-          cash += proceeds;
-          const pnl = (px - avgCost)*qty - f.total;
-          realized += pnl;
-          shares -= qty;
-          tradeRecs.push({
-            side:'LONG', inTs:openTs, outTs:r.ts,
-            inPx:openPx, outPx:px, shares:qty,
-            feesIn:openFee, feesOut:f.total,
-            pnl, holdDays:(parseTs(r.ts)-parseTs(openTs))/DAY_MS
-          });
-          if(shares===0) avgCost=0;
-        }
+        // 累積最近一段的開倉資料（同一段可多次加碼，出場時以加總 shares 計算）
+        if(openTs==null){ openTs=r.ts; openPx=px; buyFee=0; openShares=0; }
+        buyFee += f.fee;
+        openShares += qty;
+      }else{
+        // 賣出：若檔案未提供「總單位」，預設全數出清
+        const qty = (r.qtyUnits!=null ? r.qtyUnits*lot : shares);
+        if(qty<=0) continue;
+
+        const f = fees(px, qty, cfg, true); // 賣出：手續費 + 證交稅
+        const proceeds = px*qty - f.fee - f.tax;
+        cash += proceeds;
+
+        const pnl = (px - avgCost)*qty - f.fee - f.tax - 0 /* 買進手續費已在當時扣現金 */;
+        realized += pnl;
+        shares -= qty;
+        if(shares<0) shares=0;
+
+        // 記錄一段 round-trip（用最近 open 資訊；多次加碼亦歸為同段）
+        tradeRecs.push({
+          side:'LONG',
+          inTs: openTs || r.ts,
+          outTs: r.ts,
+          inPx: openPx || avgCost,
+          outPx: px,
+          shares: qty,
+          buyFee: Math.round(buyFee),      // 只含買方手續費
+          sellFee: Math.round(f.fee),      // 賣方手續費
+          sellTax: Math.round(f.tax),      // 賣方交易稅
+          pnl,
+          holdDays: (parseTs(r.ts)-(openTs?parseTs(openTs):parseTs(r.ts)))/DAY_MS
+        });
+
+        // 清空段資訊
+        openTs=null; openPx=null; openShares=0; buyFee=0;
+        if(shares===0) avgCost=0;
       }
 
-      const markPx = px;
-      const equity = cash + (shares!==0 ? shares*markPx : 0);
+      const equity = cash + (shares!==0 ? shares*px : 0);
       if(equity>peak) peak=equity;
       const dd = (equity-peak)/peak;
       eqSeries.push({ t:r.tsMs, v:equity });
