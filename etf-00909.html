@@ -17,6 +17,7 @@
     .kpi{background:#fafbff;border:1px solid #eef;border-radius:10px;padding:10px}
     .kpi b{font-size:18px;display:block;margin-top:4px}
     .muted{color:#666;font-size:13px}
+    .subtle{color:#888}
     .scroll-x{overflow-x:auto}
     table{width:100%;border-collapse:collapse}
     th,td{border-bottom:1px solid #eee;padding:6px 8px;font-size:13px;white-space:nowrap}
@@ -28,18 +29,17 @@
     @media(max-width:1200px){ .grid{grid-template-columns:repeat(3,minmax(0,1fr));} }
     @media(max-width:700px){ .grid{grid-template-columns:repeat(2,minmax(0,1fr));} }
 
-    /* 明細底色 */
+    /* 明細底色：賺紅虧綠來自損益欄位；列底色仍為買=粉紅、賣=粉綠 */
     .buy-row  { background:#ffecec; }
     .sell-row { background:#ecffec; }
-    /* 損益配色：賺紅虧綠 */
+    /* 損益配色（表格損益/累計損益）：賺=紅、虧=綠 */
     .pnl-pos{ color:#d0021b; font-weight:600; }
     .pnl-neg{ color:#0f8a00; font-weight:600; }
 
-    /* KPI 判等色塊 */
-    .rate-strong{color:#0f8a00;font-weight:600}
-    .rate-adequate{color:#b8860b;font-weight:600}
-    .rate-improve{color:#d0021b;font-weight:600}
-    .subtle{color:#888}
+    /* KPI 機構評語顏色：Strong=紅、Adequate=黑、Improve=綠 */
+    .rate-strong{color:#d0021b;font-weight:600}
+    .rate-adequate{color:#222;font-weight:600}
+    .rate-improve{color:#0f8a00;font-weight:600}
   </style>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -52,6 +52,7 @@
     <h1>00909 股票/ETF 分析</h1>
     <p class="muted">自動擷取檔名含 <code>00909</code> 的最新 TXT，以「基準檔最後日期」為錨：分析資料＝基準全段＋之後新增。</p>
 
+    <!-- 差異/期間摘要 -->
     <div class="card" id="diffCard">
       <div class="row">
         <strong>差異檢查</strong>
@@ -63,8 +64,10 @@
       <div id="periodText" class="muted" style="margin-top:6px;"></div>
     </div>
 
+    <!-- 自動流程狀態 -->
     <div class="card"><span id="autostatus" class="muted">初始化中…</span></div>
 
+    <!-- 參數小卡（僅展示，不做輸入） -->
     <div class="card row">
       <div class="chip">手續費率：<span id="feeRateChip">—</span></div>
       <div class="chip">交易稅率：<span id="taxRateChip">—</span></div>
@@ -74,9 +77,11 @@
       <div class="chip">Rf：<span id="rfChip">—</span></div>
     </div>
 
+    <!-- 圖表 -->
     <div id="eqBox" class="card"><canvas id="eqChart"></canvas></div>
     <div id="ddBox" class="card"><canvas id="ddChart"></canvas></div>
 
+    <!-- round-trip KPI（保留但不動） -->
     <div class="card">
       <h3 style="margin:6px 0">核心 KPI</h3>
       <div id="kpiCore" class="grid"></div>
@@ -89,22 +94,25 @@
       </details>
     </div>
 
+    <!-- round-trip 明細（保留） -->
     <div class="card">
       <h3 style="margin:6px 0">交易明細（買/賣費用分列）</h3>
       <div class="scroll-x"><table id="tradeTable"><thead></thead><tbody></tbody></table></div>
     </div>
 
+    <!-- 交易明細（逐筆，全費口徑） -->
     <div class="card">
       <h3 style="margin:6px 0">交易明細</h3>
       <div class="scroll-x"><table id="execTable"><thead></thead><tbody></tbody></table></div>
     </div>
 
+    <!-- 最佳化交易明細（本金100萬，1-1-2） -->
     <div class="card">
       <h3 style="margin:6px 0">最佳化交易明細</h3>
       <div class="scroll-x"><table id="optTable"><thead></thead><tbody></tbody></table></div>
     </div>
 
-    <!-- 新增：最佳化 KPI（含判等） -->
+    <!-- 最佳化 KPI（含判等） -->
     <div class="card" id="kpiOptCard" style="display:none">
       <h3 style="margin:6px 0">最佳化 KPI（含判等）</h3>
 
@@ -149,11 +157,20 @@
           <tbody></tbody>
         </table></div>
       </div>
+
+      <div class="card" style="margin-top:12px">
+        <strong>五、成本 / 流動 / 基金級 (Cost & Liquidity & Fund-level)</strong>
+        <div class="scroll-x"><table id="kpiOptCost" style="margin-top:6px;width:100%">
+          <thead><tr><th>指標</th><th>數值</th><th>說明</th><th>機構評語</th><th>參考區間</th></tr></thead>
+          <tbody></tbody>
+        </table></div>
+      </div>
     </div>
   </div>
 
+  <!-- 主程式 -->
   <script src="etf-engine.js?v=fullfee-v1"></script>
   <script src="etf-chart.js?v=etf-chart-v1"></script>
-  <script src="etf-00909.js?v=kpi-opt-v1"></script>
+  <script src="etf-00909.js?v=kpi-opt-v2"></script>
 </body>
 </html>
