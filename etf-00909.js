@@ -1,4 +1,4 @@
-// etf-00909.js — 控制器：Supabase 取檔 → 基準合併（row-level）→ 計算 → 圖表/KPI/明細
+// etf-00909.js — 控制器
 (function(){
   const $ = s => document.querySelector(s);
   const status = $('#autostatus'); function set(msg,bad=false){ if(status){ status.textContent=msg; status.style.color=bad?'#c62828':'#666'; } }
@@ -53,7 +53,6 @@
     if(error) throw new Error(error.message);
   }
 
-  // 解碼（保留原始文字，由引擎同時支援 CSV/Canonical）
   async function fetchText(url){
     const res=await fetch(url,{cache:'no-store'}); if(!res.ok) throw new Error(`${res.status} ${res.statusText}`);
     const buf=await res.arrayBuffer();
@@ -63,7 +62,6 @@
     return new TextDecoder('utf-8').decode(buf);
   }
 
-  // 以「基準最後 ts」為錨，合併 row 陣列
   function mergeRowsByBaseline(baseRows, newRows){
     const A=[...baseRows].sort((x,y)=>x.ts.localeCompare(y.ts));
     const B=[...newRows].sort((x,y)=>x.ts.localeCompare(y.ts));
@@ -75,7 +73,6 @@
     return { merged, start8, end8 };
   }
 
-  // KPI renderers
   function renderKPIs(kpi){
     const core = [
       ['累積報酬',  (kpi.core.totalReturn*100).toFixed(2)+'%'],
@@ -138,7 +135,6 @@
       const url = new URL(location.href);
       const paramFile = url.searchParams.get('file');
 
-      // 1) 最新檔
       let latest=null, list=[];
       if(paramFile){
         latest = { name:paramFile.split('/').pop()||'00909.txt', fullPath:paramFile, from:'url' };
@@ -156,7 +152,7 @@
       if(!latest){ set('找不到檔名含「00909」的 TXT（可用 ?file= 指定）。', true); return; }
       elLatest.textContent = latest.name;
 
-      // 2) 基準
+      // 基準
       let base=null;
       const manifest = await readManifest();
       if (manifest?.baseline_path){
@@ -166,11 +162,11 @@
       }
       elBase.textContent = base ? base.name : '（尚無）';
 
-      // 3) 下載與解析
+      // 下載與解析
       const latestUrl = latest.from==='url' ? latest.fullPath : pubUrl(latest.fullPath);
       const txtNew = await fetchText(latestUrl);
       const rowsNew = ETF_ENGINE.parseCanon(txtNew);
-      if(rowsNew.length===0){ set('最新檔沒有可解析的交易行。', true); return; }
+      if(rowsNew.length===0){ set('最新檔沒有可解析的交易行（請確認「賣出」字樣被正確寫入）。', true); return; }
 
       let rowsMerged = rowsNew, start8='', end8='';
       if(base){
@@ -184,7 +180,7 @@
       }
       elPeriod.textContent = `期間：${start8||'—'} 開始到 ${end8||'—'} 結束`;
 
-      // 4) 設為基準
+      // 設為基準
       btnBase.disabled=false;
       btnBase.onclick = async ()=>{
         try{
@@ -194,12 +190,12 @@
         }catch(e){ set('寫入基準失敗：'+(e.message||e), true); }
       };
 
-      // 5) 分析
+      // 分析
       set('已載入（合併後）資料，開始分析…');
       const bt = ETF_ENGINE.backtest(rowsMerged, CFG);
       const kpi = ETF_ENGINE.statsKPI(bt, CFG);
 
-      // 6) 圖表 / KPI / 明細
+      // 圖表 / KPI / 明細
       ETF_CHART.renderEquity($('#eqChart'), bt.eqSeries);
       ETF_CHART.renderDrawdown($('#ddChart'), bt.ddSeries);
       renderKPIs(kpi);
