@@ -2,10 +2,9 @@
 // v7: 任何行只要偵測出表頭(含「日期,時間,價格」或第一欄非8碼日期)都會跳過
 (function (root){
   const DAY_MS = 24*60*60*1000;
-
   const to6 = t => String(t||'').padStart(6,'0');
   function parseTs(ts14){
-    const Y=+ts14.slice(0,4), M=+ts14.slice(4,6)-1, D=+ts14.slice(6,8),
+    const Y=+ts14.slice(0,4), M=+ts14.slice(4,6)-1, D=+ts14.slice(0+6,8),
           h=+ts14.slice(8,10), m=+ts14.slice(10,12), s=+ts14.slice(12,14);
     return new Date(Date.UTC(Y,M,D,h,m,s)).getTime();
   }
