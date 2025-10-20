@@ -9,8 +9,10 @@
   }
   const ymd = ms => new Date(ms).toISOString().slice(0,10).replace(/-/g,'');
 
+  // 純做多只保留新買/平賣（仍支援 canonical）
   const CANON_RE = /^(\d{14})\.0{6}\s+(\d+\.\d{6})\s+(新買|平賣)\s*$/;
 
+  // ---- 解析：rows + __debug ----
   function parseCanon(text){
     const rows=[]; if(!text) return rows;
     const norm = text.replace(/\ufeff/gi,'').replace(/\r\n?/g,'\n').replace(/\u3000/g,' ').replace(/，/g,',');
@@ -20,15 +22,18 @@
     for (let idx=0; idx<lines.length; idx++){
       let line=(lines[idx]||'').trim(); if(!line) continue; dbg.total++;
 
+      // 任意位置的表頭/說明列
       if (/日期\s*[,|\t]\s*時間\s*[,|\t]\s*價格/i.test(line) ||
           /^日期$|^時間$|^價格$|^動作$|^說明$/i.test(line)) continue;
 
+      // canonical
       let m=line.match(CANON_RE);
       if (m){
         const rec={ ts:m[1], tsMs:parseTs(m[1]), day:m[1].slice(0,8), price:+m[2], kind:(m[3]==='平賣'?'sell':'buy'), units:undefined };
         rows.push(rec); dbg.parsed++; dbg[rec.kind]++; if(dbg.samples.length<5) dbg.samples.push({idx,line}); continue;
       }
 
+      // 超寬鬆 CSV：逗號或 Tab 皆可
       const parts=line.split(/[\t,]+/).map(s=>s.trim()).filter(Boolean);
       if (parts.length>=4){
         const d=parts[0];
@@ -56,6 +61,7 @@
     return rows;
   }
 
+  // ---- 費用（台股ETF）----
   function fees(price, shares, cfg, isSell){
     const gross=price*shares;
     const fee=Math.max(cfg.minFee, gross*cfg.feeRate);
@@ -63,6 +69,7 @@
     return { fee, tax, total:fee+tax };
   }
 
+  // ---- 回測：純做多；賣出＝全數出清 ----
   function backtest(rows, cfg){
     const lot=cfg.unitShares ?? 1000, init=cfg.initialCapital ?? 1_000_000;
     let shares=0, avgCost=0, cash=init, realized=0;
@@ -88,7 +95,7 @@
         realized+=pnl;
         trades.push({ side:'LONG', inTs:openTs||r.ts, outTs:r.ts, inPx:openPx||avgCost, outPx:r.price,
                       shares:qty, buyFee:Math.round(buyFeeAcc), sellFee:Math.round(f.fee), sellTax:Math.round(f.tax),
-                      pnl, holdDays:(parseTs(r.ts)-(openTs?parseTs(openTs):parseTs(r.ts)))/(24*60*60*1000) });
+                      pnl, holdDays:(parseTs(r.ts)-(openTs?parseTs(openTs):parseTs(r.ts)))/DAY_MS });
         shares=0; avgCost=0; openTs=null; openPx=null; buyFeeAcc=0;
       }
 
@@ -102,7 +109,7 @@
              lastPx: rows.length? rows[rows.length-1].price:0 };
   }
 
-  // KPI（同前版，略）
+  // ---- KPI ----
   const sum=a=>a.reduce((s,x)=>s+(+x||0),0);
   const avg=a=>a.length? sum(a)/a.length : 0;
   const std=a=>{ if(a.length<2) return 0; const m=avg(a); return Math.sqrt(avg(a.map(x=>(x-m)*(x-m)))); };
@@ -119,7 +126,7 @@
   function statsKPI(bt, cfg){
     const eq=bt.eqSeries.map(x=>x.v), v0=bt.initial, v1=eq.length?eq[eq.length-1]:v0;
     const tr=v1/v0-1, t0=bt.eqSeries[0]?.t ?? Date.now(), t1=bt.eqSeries.at(-1)?.t ?? t0;
-    const yrs=Math.max(1/365,(t1-t0)/(365*24*60*60*1000));
+    const yrs=Math.max(1/365,(t1-t0)/DAY_MS/365);
     const CAGR=Math.pow(1+tr,1/yrs)-1;
     let peak=-Infinity, maxDD=0; for(const v of eq){ if(v>peak) peak=v; const dd=(v-peak)/peak; if(dd<maxDD) maxDD=dd; }
     const dR=dailyReturns(bt.eqSeries); const vol=dR.length>1? std(dR)*Math.sqrt(252):0; const rf=cfg.rf??0; const mean=dR.length?avg(dR):0;
