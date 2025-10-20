@@ -27,11 +27,10 @@
     #ddBox{height:220px}
     @media(max-width:1200px){ .grid{grid-template-columns:repeat(3,minmax(0,1fr));} }
     @media(max-width:700px){ .grid{grid-template-columns:repeat(2,minmax(0,1fr));} }
-
     /* 逐筆成交底色 */
     .buy-row  { background:#ffecec; }
     .sell-row { background:#ecffec; }
-    /* 損益配色（台股：賺=紅、虧=綠） */
+    /* 損益配色：賺紅虧綠 */
     .pnl-pos{ color:#d0021b; font-weight:600; }
     .pnl-neg{ color:#0f8a00; font-weight:600; }
   </style>
@@ -97,9 +96,9 @@
     </div>
   </div>
 
-  <script src="etf-engine.js?v=etf-core-v7f"></script>
+  <!-- 換版號清快取 -->
+  <script src="etf-engine.js?v=fullfee-v1"></script>
   <script src="etf-chart.js?v=etf-chart-v1"></script>
-  <script src="etf-00909.js?v=etf-00909-controller-v10c"></script>
-  <script>console.log('[00909] loaded versions:', {engine:'v7f', controller:'v10c', chart:'v1'});</script>
+  <script src="etf-00909.js?v=fullfee-controller-v1"></script>
 </body>
 </html>
