@@ -1,15 +1,13 @@
-// etf-00909.js — 控制器（多編碼打分選優；偵錯摘要；渲染 round-trip + 逐筆成交）
+// etf-00909.js — 控制器（多編碼打分選優；偵錯摘要；渲染 round-trip + 逐筆成交新欄位）
 (function(){
   const $=s=>document.querySelector(s);
   const status=$('#autostatus');
   const set=(m,b=false)=>{ if(status){ status.textContent=m; status.style.color=b?'#c62828':'#666'; } };
 
-  const CFG={
-    symbol:'00909', bucket:'reports', want:/00909/i,
+  const CFG={ symbol:'00909', bucket:'reports', want:/00909/i,
     manifestPath:'manifests/etf-00909.json',
     feeRate:0.001425, taxRate:0.001, minFee:20,
-    tickSize:0.01, slippageTick:0, unitShares:1000, rf:0.00, initialCapital:1_000_000
-  };
+    tickSize:0.01, slippageTick:0, unitShares:1000, rf:0.00, initialCapital:1_000_000 };
 
   // chips
   $('#feeRateChip').textContent=(CFG.feeRate*100).toFixed(4)+'%';
@@ -55,7 +53,6 @@
     return best.txt;
   }
 
-  // 合併（以基準最後 ts 為錨）
   function mergeRowsByBaseline(baseRows,newRows){
     const A=[...baseRows].sort((x,y)=>x.ts.localeCompare(y.ts));
     const B=[...newRows].sort((x,y)=>x.ts.localeCompare(y.ts));
@@ -67,7 +64,7 @@
     return { merged, start8, end8 };
   }
 
-  // ===== 渲染：round-trip & 逐筆成交 =====
+  // ===== 渲染 =====
   function renderKPIs(kpi){
     const core=[
       ['累積報酬',(kpi.core.totalReturn*100).toFixed(2)+'%'],
@@ -96,6 +93,7 @@
     adv.forEach(([l,v])=>{ const d=document.createElement('div'); d.className='kpi'; d.innerHTML=`<span class="muted">${l}</span><b>${v}</b>`; advBox.appendChild(d); });
   }
 
+  // round-trip（原表）
   function renderTradesTable(trades){
     const thead=$('#tradeTable thead'), tbody=$('#tradeTable tbody');
     thead.innerHTML=`
@@ -124,46 +122,51 @@
     }
   }
 
+  // 新：逐筆成交（彩色）
   function tsPretty(ts14){
     const d=`${ts14.slice(0,4)}/${ts14.slice(4,6)}/${ts14.slice(6,8)}`;
     const t=`${ts14.slice(8,10)}:${ts14.slice(10,12)}`;
     return `${d} ${t}`;
   }
+  function pct(n){ return (n==null||!isFinite(n))? '—' : (n*100).toFixed(2)+'%'; }
 
   function renderExecsTable(execs){
     const thead=$('#execTable thead'), tbody=$('#execTable tbody');
     thead.innerHTML=`
       <tr>
-        <th>動作</th><th>時間</th><th>價格</th><th>股數</th>
-        <th>手續費</th><th>交易稅</th><th>現金變動</th><th>變動後現金</th><th>持股</th>
+        <th>種類</th><th>日期</th><th>成交價格</th><th>成本均價</th><th>成交數量</th>
+        <th>買進金額</th><th>賣出金額</th><th>手續費</th><th>交易稅</th>
+        <th>付出成本</th><th>損益</th><th>報酬率</th><th>變動後現金</th><th>持股</th>
       </tr>`;
     tbody.innerHTML='';
     for(const e of execs){
       const tr=document.createElement('tr');
       tr.className = (e.side==='BUY' ? 'buy-row' : 'sell-row');
       tr.innerHTML=`
-        <td>${e.side}</td>
+        <td>${e.side==='BUY'?'買進':'賣出'}</td>
         <td>${tsPretty(e.ts)}</td>
         <td>${e.price.toFixed(2)}</td>
+        <td>${e.avgCost!=null? e.avgCost.toFixed(2) : '—'}</td>
         <td>${e.shares.toLocaleString()}</td>
-        <td>${Math.round(e.fee).toLocaleString()}</td>
-        <td>${Math.round(e.tax).toLocaleString()}</td>
-        <td>${Math.round(e.cashDelta).toLocaleString()}</td>
-        <td>${Math.round(e.cashAfter).toLocaleString()}</td>
-        <td>${e.sharesAfter.toLocaleString()}</td>
-      `;
+        <td>${Math.round(e.buyAmount||0).toLocaleString()}</td>
+        <td>${Math.round(e.sellAmount||0).toLocaleString()}</td>
+        <td>${Math.round(e.fee||0).toLocaleString()}</td>
+        <td>${Math.round(e.tax||0).toLocaleString()}</td>
+        <td>${Math.round(e.costOut||0).toLocaleString()}</td>
+        <td>${Math.round(e.pnl||0).toLocaleString()}</td>
+        <td>${pct(e.retPct)}</td>
+        <td>${Math.round(e.cashAfter||0).toLocaleString()}</td>
+        <td>${e.sharesAfter.toLocaleString()}</td>`;
       tbody.appendChild(tr);
     }
   }
 
   async function boot(){
     try{
-      console.log('[00909] controller v10');
       const url=new URL(location.href);
       const paramFile=url.searchParams.get('file');
-      const forceDebug=true;
 
-      // 最新檔
+      // 找最新 + 基準
       let latest=null, list=[];
       if(paramFile){
         latest={ name:paramFile.split('/').pop()||'00909.txt', fullPath:paramFile, from:'url' };
@@ -181,40 +184,24 @@
       if(!latest){ set('找不到檔名含「00909」的 TXT（可用 ?file= 指定）。',true); return; }
       $('#latestName').textContent=latest.name;
 
-      // 基準（讀不到就當無基準）
-      let base=null;
-      const manifest=await readManifest();
+      let base=null; const manifest=await readManifest();
       if(manifest?.baseline_path){
         base=list.find(x=>x.fullPath===manifest.baseline_path) || { name:manifest.baseline_path.split('/').pop(), fullPath:manifest.baseline_path };
-      }else{
-        base=list[1]||null;
-      }
+      }else{ base=list[1]||null; }
       $('#baseName').textContent=base? base.name : '（尚無）';
 
-      // 下載與解析
+      // 下載 + 解析
       const latestUrl = latest.from==='url' ? latest.fullPath : pubUrl(latest.fullPath);
       const txtNew   = await fetchText(latestUrl);
-
-      if(forceDebug){
-        console.group('[00909 DEBUG] 下載內容(最新檔)');
-        console.log('raw head(300):', txtNew.slice(0,300));
-        console.log('first 8 lines:', txtNew.replace(/\r\n?/g,'\n').split('\n').slice(0,8));
-        console.groupEnd();
-      }
-
       const rowsNew  = ETF_ENGINE.parseCanon(txtNew);
       const dbgNew = rowsNew.__debug || {};
       set(`解析中… 最新檔摘要：總行數 ${dbgNew.total||0}；成功 ${dbgNew.parsed||0}（buy=${dbgNew.buy||0}, sell=${dbgNew.sell||0}）`);
-      if(rowsNew.length===0){ set('最新檔沒有可解析的交易行（純做多：需包含「買進/加碼/再加碼/賣出」）。',true); return; }
+      if(rowsNew.length===0){ set('最新檔沒有可解析的交易行。',true); return; }
 
-      // 合併
       let rowsMerged=rowsNew, start8='', end8='';
       if(base){
         const baseUrl = base.from==='url' ? base.fullPath : pubUrl(base.fullPath);
         const txtBase = await fetchText(baseUrl);
-        if(forceDebug){
-          console.group('[00909 DEBUG] 基準檔頭幾行'); console.log(txtBase.replace(/\r\n?/g,'\n').split('\n').slice(0,5)); console.groupEnd();
-        }
         const rowsBase= ETF_ENGINE.parseCanon(txtBase);
         const m=mergeRowsByBaseline(rowsBase, rowsNew);
         rowsMerged=m.merged; start8=m.start8; end8=m.end8;
@@ -239,9 +226,11 @@
       const bt  = ETF_ENGINE.backtest(rowsMerged, CFG);
       const kpi = ETF_ENGINE.statsKPI(bt, CFG);
 
-      // 圖表 / KPI / 明細 / 逐筆
-      ETF_CHART.renderEquity($('#eqChart'), bt.eqSeries);
-      ETF_CHART.renderDrawdown($('#ddChart'), bt.ddSeries);
+      // 圖表 / KPI / 兩表
+      if (window.ETF_CHART){
+        ETF_CHART.renderEquity($('#eqChart'), bt.eqSeries);
+        ETF_CHART.renderDrawdown($('#ddChart'), bt.ddSeries);
+      }
       renderKPIs(kpi);
       renderTradesTable(bt.trades);
       renderExecsTable(bt.execs);
