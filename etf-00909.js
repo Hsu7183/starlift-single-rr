@@ -1,14 +1,14 @@
-// etf-00909.js — 控制器（渲染 round-trip + 逐筆成交：新版欄位與損益配色）
+// etf-00909.js — 控制器（全費口徑 + 累計成本 + 多單位平均報酬率）
 (function(){
   const $=s=>document.querySelector(s);
-  const status=$('#autostatus');
-  const set=(m,b=false)=>{ if(status){ status.textContent=m; status.style.color=b?'#c62828':'#666'; } };
+  const status=$('#autostatus'); const set=(m,b=false)=>{ if(status){ status.textContent=m; status.style.color=b?'#c62828':'#666'; } };
 
-  const CFG={ symbol:'00909', bucket:'reports', want:/00909/i,
+  const CFG={
+    symbol:'00909', bucket:'reports', want:/00909/i,
     manifestPath:'manifests/etf-00909.json',
     feeRate:0.001425, taxRate:0.001, minFee:20,
-    tickSize:0.01, slippageTick:0, unitShares:1000, rf:0.00, initialCapital:1_000_000 };
-
+    tickSize:0.01, slippageTick:0, unitShares:1000, rf:0.00, initialCapital:1_000_000
+  };
   // chips
   $('#feeRateChip').textContent=(CFG.feeRate*100).toFixed(4)+'%';
   $('#taxRateChip').textContent=(CFG.taxRate*100).toFixed(3)+'%';
@@ -23,6 +23,7 @@
   const sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY,{ global:{ fetch:(u,o={})=>fetch(u,{...o,cache:'no-store'}) } });
   const pubUrl=(path)=>{ const {data}=sb.storage.from(CFG.bucket).getPublicUrl(path); return data?.publicUrl||'#'; };
 
+  // list / manifest
   async function listOnce(prefix){
     const p=(prefix && !prefix.endsWith('/'))?(prefix+'/'):(prefix||'');
     const {data,error}=await sb.storage.from(CFG.bucket).list(p,{limit:1000,sortBy:{column:'name',order:'asc'}});
@@ -31,11 +32,10 @@
   }
   async function listCandidates(){ const u=new URL(location.href); const prefix=u.searchParams.get('prefix')||''; return listOnce(prefix); }
   const lastDateScore=(name)=>{ const m=String(name).match(/\b(20\d{6})\b/g); return m&&m.length? Math.max(...m.map(s=>+s||0)) : 0; };
-
   async function readManifest(){ try{ const {data}=await sb.storage.from(CFG.bucket).download(CFG.manifestPath); if(!data) return null; return JSON.parse(await data.text()); }catch{ return null; } }
   async function writeManifest(obj){ const blob=new Blob([JSON.stringify(obj,null,2)],{type:'application/json'}); await sb.storage.from(CFG.bucket).upload(CFG.manifestPath,blob,{upsert:true,cacheControl:'0',contentType:'application/json'}); }
 
-  // 多編碼打分選優（略）
+  // 多編碼打分選優（big5/utf-8/utf-16le/utf-16be/win-1252）
   async function fetchText(url){
     const res=await fetch(url,{cache:'no-store'}); if(!res.ok) throw new Error(`${res.status} ${res.statusText}`);
     const buf=await res.arrayBuffer();
@@ -43,7 +43,7 @@
     let best={score:-1, enc:'', txt:''};
     for(const enc of trials){
       let txt=''; try{ txt=new TextDecoder(enc,{fatal:false}).decode(buf).replace(/\ufeff/gi,''); }catch{ continue; }
-      const head=txt.slice(0,1200), bad=(head.match(/\uFFFD/g)||[]).length, kw=(/日期|時間|動作|買進|賣出|加碼/.test(head)?1:0);
+      const head=txt.slice(0,1000), bad=(head.match(/\uFFFD/g)||[]).length, kw=(/日期|時間|動作|買進|賣出|加碼/.test(head)?1:0);
       const lines=(txt.match(/^\d{8}[,\t]\d{5,6}[,\t]\d+(?:\.\d+)?[,\t].+$/gm)||[]).length;
       const score=kw*1000 + lines*10 - bad;
       if(score>best.score) best={score, enc, txt};
@@ -92,12 +92,8 @@
   }
 
   function tsPretty(ts14){ const d=`${ts14.slice(0,4)}/${ts14.slice(4,6)}/${ts14.slice(6,8)}`; const t=`${ts14.slice(8,10)}:${ts14.slice(10,12)}`; return `${d} ${t}`; }
-  function pct(n){ return (n==null||!isFinite(n))? '—' : (n*100).toFixed(2)+'%'; }
-  function pnlCell(n){
-    const v=Math.round(n||0).toLocaleString();
-    const cls = n>0 ? 'pnl-pos' : (n<0 ? 'pnl-neg' : '');
-    return `<span class="${cls}">${v}</span>`;
-  }
+  const fmtPct=v=> (v==null||!isFinite(v))?'—':(v*100).toFixed(2)+'%';
+  const pnlSpan=v=>{ const cls=v>0?'pnl-pos':(v<0?'pnl-neg':''); return `<span class="${cls}">${Math.round(v||0).toLocaleString()}</span>`; };
 
   function renderExecsTable(execs){
     const thead=$('#execTable thead'), tbody=$('#execTable tbody');
@@ -105,7 +101,7 @@
       <tr>
         <th>種類</th><th>日期</th><th>成交價格</th><th>成本均價</th><th>成交數量</th>
         <th>買進金額</th><th>賣出金額</th><th>手續費</th><th>交易稅</th>
-        <th>付出成本</th><th>損益</th><th>報酬率</th><th>累計損益</th><th>變動後現金</th><th>持股</th>
+        <th>成本</th><th>累計成本</th><th>損益</th><th>報酬率</th><th>累計損益</th>
       </tr>`;
     tbody.innerHTML='';
     for(const e of execs){
@@ -120,22 +116,20 @@
         <td>${Math.round(e.sellAmount||0).toLocaleString()}</td>
         <td>${Math.round(e.fee||0).toLocaleString()}</td>
         <td>${Math.round(e.tax||0).toLocaleString()}</td>
-        <td>${Math.round(e.costOut||0).toLocaleString()}</td>
-        <td>${e.pnlUser==null?'—':pnlCell(e.pnlUser)}</td>
-        <td>${pct(e.retPct)}</td>
-        <td>${e.cumPnlUser==null?'—':pnlCell(e.cumPnlUser)}</td>
-        <td>${Math.round(e.cashAfter||0).toLocaleString()}</td>
-        <td>${e.sharesAfter.toLocaleString()}</td>`;
+        <td>${Math.round(e.cost||0).toLocaleString()}</td>
+        <td>${Math.round(e.cumCost||0).toLocaleString()}</td>
+        <td>${e.pnlFull==null?'—':pnlSpan(e.pnlFull)}</td>
+        <td>${fmtPct(e.retPctUnit)}</td>
+        <td>${e.cumPnlFull==null?'—':pnlSpan(e.cumPnlFull)}</td>`;
       tbody.appendChild(tr);
     }
   }
 
   async function boot(){
     try{
-      const u=new URL(location.href);
-      const paramFile=u.searchParams.get('file');
+      const u=new URL(location.href); const paramFile=u.searchParams.get('file');
 
-      // 最新檔
+      // 最新 + 基準
       let latest=null, list=[];
       if(paramFile){ latest={ name:paramFile.split('/').pop()||'00909.txt', fullPath:paramFile, from:'url' }; }
       else{
@@ -148,44 +142,44 @@
       if(!latest){ set('找不到檔名含「00909」的 TXT（可用 ?file= 指定）。',true); return; }
       $('#latestName').textContent=latest.name;
 
-      // 基準
       let base=null; const manifest=await readManifest();
-      if(manifest?.baseline_path){ base=list.find(x=>x.fullPath===manifest.baseline_path) || { name:manifest.baseline_path.split('/').pop(), fullPath:manifest.baseline_path }; }
-      else{ base=list[1]||null; }
+      if(manifest?.baseline_path){
+        base=list.find(x=>x.fullPath===manifest.baseline_path) || { name:manifest.baseline_path.split('/').pop(), fullPath:manifest.baseline_path };
+      }else{ base=list[1]||null; }
       $('#baseName').textContent=base? base.name : '（尚無）';
 
       // 下載/解析/合併
-      const latestUrl = latest.from==='url' ? latest.fullPath : pubUrl(latest.fullPath);
-      const txtNew   = await fetchText(latestUrl);
-      const rowsNew  = ETF_ENGINE.parseCanon(txtNew);
+      const latestUrl= latest.from==='url'? latest.fullPath : pubUrl(latest.fullPath);
+      const rowsNew = root.ETF_ENGINE.parseCanon(await fetchText(latestUrl));
       if(rowsNew.length===0){ set('最新檔沒有可解析的交易行。',true); return; }
 
       let rowsMerged=rowsNew, start8='', end8='';
       if(base){
-        const baseUrl= base.from==='url' ? base.fullPath : pubUrl(base.fullPath);
-        const rowsBase= ETF_ENGINE.parseCanon(await fetchText(baseUrl));
-        const m=mergeRowsByBaseline(rowsBase, rowsNew);
+        const baseUrl= base.from==='url'? base.fullPath : pubUrl(base.fullPath);
+        const rowsBase = root.ETF_ENGINE.parseCanon(await fetchText(baseUrl));
+        const m = mergeRowsByBaseline(rowsBase, rowsNew);
         rowsMerged=m.merged; start8=m.start8; end8=m.end8;
       }else{ start8=rowsNew[0].day; end8=rowsNew.at(-1).day; }
       $('#periodText').textContent=`期間：${start8||'—'} 開始到 ${end8||'—'} 結束`;
 
-      // 設基準按鈕
+      // 設基準
       const btn=$('#btnSetBaseline'); btn.disabled=false; btn.onclick=async()=>{
         try{ await writeManifest({ baseline_path: latest.from==='url'? latest.fullPath : latest.fullPath, updated_at:new Date().toISOString() });
              btn.textContent='已設為基準'; }catch(e){ set('寫入基準失敗：'+(e.message||e), true); }
       };
 
-      // 分析/渲染
+      // 分析 & 渲染
       set('已載入（合併後）資料，開始分析…');
-      const bt=ETF_ENGINE.backtest(rowsMerged, CFG);
+      const bt= root.ETF_ENGINE.backtest(rowsMerged, CFG);
       if(window.ETF_CHART){ ETF_CHART.renderEquity($('#eqChart'), bt.eqSeries); ETF_CHART.renderDrawdown($('#ddChart'), bt.ddSeries); }
       renderTradesTable(bt.trades);
       renderExecsTable(bt.execs);
-      set(`完成。`);
+      set('完成。');
     }catch(err){
       set('初始化失敗：'+(err && err.message ? err.message : String(err)), true);
       console.error('[00909 ERROR]', err);
     }
   }
+
   document.addEventListener('DOMContentLoaded', boot);
 })();
