@@ -1,4 +1,4 @@
-// etf-00909.js — 控制器（純做多；純內建多編碼解碼；偵錯摘要）
+// etf-00909.js — 控制器（純做多；多編碼打分選優；偵錯摘要）
 (function(){
   const $=s=>document.querySelector(s);
   const status=$('#autostatus');
@@ -46,30 +46,37 @@
     if(error) throw new Error(error.message);
   }
 
-  // === 純內建多編碼自動解碼 ===
+  // === 多編碼打分選優 ===
   async function fetchText(url){
     const res=await fetch(url,{cache:'no-store'});
     if(!res.ok) throw new Error(`${res.status} ${res.statusText}`);
     const buf=await res.arrayBuffer();
 
-    // 依序嘗試：UTF-8 / UTF-16LE / UTF-16BE / BIG5 / Win-1252
-    const trials=['utf-8','utf-16le','utf-16be','big5','windows-1252'];
+    const trials=['big5','utf-8','utf-16le','utf-16be','windows-1252'];
+    let best={score:-1, enc:'', txt:''};
+
     for(const enc of trials){
-      try{
-        const txt=new TextDecoder(enc,{fatal:false}).decode(buf).replace(/\ufeff/gi,'');
-        const head=txt.slice(0,500);
-        // 成功判定：1) 出現欄位關鍵詞；或 2) 有以 "YYYYMMDD," 開頭的行
-        if(/日期|時間|動作|買進|賣出/.test(head) || /^\d{8}[,\t]/m.test(txt)){
-          console.log(`[00909] decoded as ${enc}`);
-          return txt;
-        }
-      }catch(e){ /* ignore and try next */ }
+      let txt='';
+      try{ txt=new TextDecoder(enc,{fatal:false}).decode(buf).replace(/\ufeff/gi,''); }
+      catch{ continue; }
+
+      const head=txt.slice(0,1200);
+      const bad=(head.match(/\uFFFD/g)||[]).length;                      // 亂碼字（�）
+      const kw = (/日期|時間|動作|買進|賣出|加碼/.test(head)?1:0);       // 關鍵字
+      const mLines = txt.match(/^\d{8}[,\t]\d{5,6}[,\t]\d+(?:\.\d+)?[,\t].+$/gm);
+      const lines = (mLines? mLines.length:0);                            // 符合資料行數
+      const score = kw*1000 + lines*10 - bad;                             // 打分
+
+      // debug（保留）
+      console.log(`[00909] try ${enc}: score=${score}, lines=${lines}, bad=${bad}, kw=${kw}`);
+
+      if(score>best.score) best={score, enc, txt};
     }
-    // 全失敗仍回 UTF-8（避免 throw 讓頁面可顯示原因）
-    console.warn('[00909] all decoders failed; fallback utf-8');
-    return new TextDecoder('utf-8').decode(buf);
+    console.log(`[00909] decoded as ${best.enc} (score=${best.score})`);
+    return best.txt;
   }
 
+  // 合併（基準最後 ts 為錨）
   function mergeRowsByBaseline(baseRows,newRows){
     const A=[...baseRows].sort((x,y)=>x.ts.localeCompare(y.ts));
     const B=[...newRows].sort((x,y)=>x.ts.localeCompare(y.ts));
@@ -81,6 +88,7 @@
     return { merged, start8, end8 };
   }
 
+  // KPI/明細渲染（略）
   function renderKPIs(kpi){
     const core=[
       ['累積報酬',(kpi.core.totalReturn*100).toFixed(2)+'%'],
@@ -139,7 +147,7 @@
 
   async function boot(){
     try{
-      console.log('[00909] controller v8');
+      console.log('[00909] controller v9');
       const url=new URL(location.href);
       const paramFile=url.searchParams.get('file');
       const forceDebug=true;
