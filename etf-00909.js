@@ -1,4 +1,5 @@
 // etf-00909.js — 控制器（全費口徑 + 累計成本 + 多單位平均報酬率）
+// 修正：將 root.ETF_ENGINE 改為 window.ETF_ENGINE，避免 "root is not defined"
 (function(){
   const $=s=>document.querySelector(s);
   const status=$('#autostatus'); const set=(m,b=false)=>{ if(status){ status.textContent=m; status.style.color=b?'#c62828':'#666'; } };
@@ -35,7 +36,7 @@
   async function readManifest(){ try{ const {data}=await sb.storage.from(CFG.bucket).download(CFG.manifestPath); if(!data) return null; return JSON.parse(await data.text()); }catch{ return null; } }
   async function writeManifest(obj){ const blob=new Blob([JSON.stringify(obj,null,2)],{type:'application/json'}); await sb.storage.from(CFG.bucket).upload(CFG.manifestPath,blob,{upsert:true,cacheControl:'0',contentType:'application/json'}); }
 
-  // 多編碼打分選優（big5/utf-8/utf-16le/utf-16be/win-1252）
+  // 多編碼打分選優
   async function fetchText(url){
     const res=await fetch(url,{cache:'no-store'}); if(!res.ok) throw new Error(`${res.status} ${res.statusText}`);
     const buf=await res.arrayBuffer();
@@ -150,13 +151,14 @@
 
       // 下載/解析/合併
       const latestUrl= latest.from==='url'? latest.fullPath : pubUrl(latest.fullPath);
-      const rowsNew = root.ETF_ENGINE.parseCanon(await fetchText(latestUrl));
+      const txtNew   = await fetchText(latestUrl);
+      const rowsNew  = window.ETF_ENGINE.parseCanon(txtNew);
       if(rowsNew.length===0){ set('最新檔沒有可解析的交易行。',true); return; }
 
       let rowsMerged=rowsNew, start8='', end8='';
       if(base){
         const baseUrl= base.from==='url'? base.fullPath : pubUrl(base.fullPath);
-        const rowsBase = root.ETF_ENGINE.parseCanon(await fetchText(baseUrl));
+        const rowsBase = window.ETF_ENGINE.parseCanon(await fetchText(baseUrl));
         const m = mergeRowsByBaseline(rowsBase, rowsNew);
         rowsMerged=m.merged; start8=m.start8; end8=m.end8;
       }else{ start8=rowsNew[0].day; end8=rowsNew.at(-1).day; }
@@ -170,7 +172,7 @@
 
       // 分析 & 渲染
       set('已載入（合併後）資料，開始分析…');
-      const bt= root.ETF_ENGINE.backtest(rowsMerged, CFG);
+      const bt= window.ETF_ENGINE.backtest(rowsMerged, CFG);
       if(window.ETF_CHART){ ETF_CHART.renderEquity($('#eqChart'), bt.eqSeries); ETF_CHART.renderDrawdown($('#ddChart'), bt.ddSeries); }
       renderTradesTable(bt.trades);
       renderExecsTable(bt.execs);
