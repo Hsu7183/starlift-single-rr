@@ -28,9 +28,9 @@
     @media(max-width:1200px){ .grid{grid-template-columns:repeat(3,minmax(0,1fr));} }
     @media(max-width:700px){ .grid{grid-template-columns:repeat(2,minmax(0,1fr));} }
 
-    /* 逐筆成交底色 */
-    .buy-row  { background:#ffecec; }
-    .sell-row { background:#ecffec; }
+    /* 交易明細底色 */
+    .buy-row  { background:#ffecec; } /* 買進：淺紅 */
+    .sell-row { background:#ecffec; } /* 賣出：淺綠 */
     /* 損益配色：賺紅虧綠 */
     .pnl-pos{ color:#d0021b; font-weight:600; }
     .pnl-neg{ color:#0f8a00; font-weight:600; }
@@ -98,16 +98,29 @@
       </div>
     </div>
 
-    <!-- 逐筆成交（全費口徑＋累計成本＋平均報酬率） -->
+    <!-- 逐筆成交（改名：交易明細） -->
     <div class="card">
-      <h3 style="margin:6px 0">逐筆成交（彩色）</h3>
+      <h3 style="margin:6px 0">交易明細</h3>
       <div class="scroll-x">
         <table id="execTable"><thead></thead><tbody></tbody></table>
       </div>
     </div>
+
+    <!-- 新增：最佳化交易明細（本金 100 萬，1-1-2 風控比例） -->
+    <div class="card">
+      <div class="row" style="margin-bottom:6px">
+        <h3 style="margin:0">最佳化交易明細</h3>
+        <span class="chip">本金：1,000,000</span>
+        <span class="chip">風控比例：1 / 1 / 2</span>
+        <span class="chip">單位＝每張 1,000 股</span>
+      </div>
+      <div class="scroll-x">
+        <table id="optTable"><thead></thead><tbody></tbody></table>
+      </div>
+    </div>
   </div>
 
-  <!-- 主程式（已對應：全費口徑＋累計成本＋單位平均報酬率；控制器已改 window.ETF_ENGINE） -->
+  <!-- 主程式（全費口徑＋累計成本＋單位平均報酬率；控制器已用 window.ETF_ENGINE） -->
   <script src="etf-engine.js?v=fullfee-v1"></script>
   <script src="etf-chart.js?v=etf-chart-v1"></script>
   <script src="etf-00909.js?v=fullfee-controller-v2"></script>
