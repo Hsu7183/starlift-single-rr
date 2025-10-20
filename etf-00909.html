@@ -27,6 +27,7 @@
     #ddBox{height:220px}
     @media(max-width:1200px){ .grid{grid-template-columns:repeat(3,minmax(0,1fr));} }
     @media(max-width:700px){ .grid{grid-template-columns:repeat(2,minmax(0,1fr));} }
+
     /* 逐筆成交底色 */
     .buy-row  { background:#ffecec; }
     .sell-row { background:#ecffec; }
@@ -34,6 +35,8 @@
     .pnl-pos{ color:#d0021b; font-weight:600; }
     .pnl-neg{ color:#0f8a00; font-weight:600; }
   </style>
+
+  <!-- 依賴 -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="shared.js?v=txfee45tax2"></script>
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
@@ -44,6 +47,7 @@
     <h1>00909 股票/ETF 分析</h1>
     <p class="muted">自動擷取檔名含 <code>00909</code> 的最新 TXT，以「基準檔最後日期」為錨：分析資料＝基準全段＋之後新增。</p>
 
+    <!-- 差異/期間摘要 -->
     <div class="card" id="diffCard">
       <div class="row">
         <strong>差異檢查</strong>
@@ -55,8 +59,10 @@
       <div id="periodText" class="muted" style="margin-top:6px;"></div>
     </div>
 
+    <!-- 自動流程狀態 -->
     <div class="card"><span id="autostatus" class="muted">初始化中…</span></div>
 
+    <!-- 參數小卡 -->
     <div class="card row">
       <div class="chip">手續費率：<span id="feeRateChip">—</span></div>
       <div class="chip">交易稅率：<span id="taxRateChip">—</span></div>
@@ -66,14 +72,17 @@
       <div class="chip">Rf：<span id="rfChip">—</span></div>
     </div>
 
+    <!-- 圖表 -->
     <div id="eqBox" class="card"><canvas id="eqChart"></canvas></div>
     <div id="ddBox" class="card"><canvas id="ddChart"></canvas></div>
 
+    <!-- KPI -->
     <div class="card">
       <h3 style="margin:6px 0">核心 KPI</h3>
       <div id="kpiCore" class="grid"></div>
     </div>
 
+    <!-- 進階 KPI -->
     <div class="card">
       <details open>
         <summary style="cursor:pointer;font-weight:600">進階 KPI</summary>
@@ -81,6 +90,7 @@
       </details>
     </div>
 
+    <!-- round-trip 明細（保留） -->
     <div class="card">
       <h3 style="margin:6px 0">交易明細（買/賣費用分列）</h3>
       <div class="scroll-x">
@@ -88,6 +98,7 @@
       </div>
     </div>
 
+    <!-- 逐筆成交（全費口徑＋累計成本＋平均報酬率） -->
     <div class="card">
       <h3 style="margin:6px 0">逐筆成交（彩色）</h3>
       <div class="scroll-x">
@@ -96,9 +107,9 @@
     </div>
   </div>
 
-  <!-- 換版號清快取 -->
-  <script src="etf-00909.js?v=fullfee-controller-v2"></script>
+  <!-- 主程式（已對應：全費口徑＋累計成本＋單位平均報酬率；控制器已改 window.ETF_ENGINE） -->
+  <script src="etf-engine.js?v=fullfee-v1"></script>
   <script src="etf-chart.js?v=etf-chart-v1"></script>
-  <script src="etf-00909.js?v=fullfee-controller-v1"></script>
+  <script src="etf-00909.js?v=fullfee-controller-v2"></script>
 </body>
 </html>
