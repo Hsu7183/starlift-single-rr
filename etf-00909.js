@@ -1,14 +1,12 @@
-// etf-00909.js — 控制器（純做多；Big5 自動解碼；強化偵錯：頁面摘要 + Console 詳列）
+// etf-00909.js — 控制器（純做多；純內建多編碼解碼；偵錯摘要）
 (function(){
   const $=s=>document.querySelector(s);
-  const status=$('#autostatus'); 
-  function set(m,b=false){ if(status){ status.textContent=m; status.style.color=b?'#c62828':'#666'; } }
+  const status=$('#autostatus');
+  const set=(m,b=false)=>{ if(status){ status.textContent=m; status.style.color=b?'#c62828':'#666'; } };
   const elLatest=$('#latestName'), elBase=$('#baseName'), elPeriod=$('#periodText'), btnBase=$('#btnSetBaseline');
 
   const CFG={
-    symbol:'00909',
-    bucket:'reports',
-    want:/00909/i,
+    symbol:'00909', bucket:'reports', want:/00909/i,
     manifestPath:'manifests/etf-00909.json',
     feeRate:0.001425, taxRate:0.001, minFee:20,
     tickSize:0.01, slippageTick:0,
@@ -28,7 +26,7 @@
   const SUPABASE_ANON_KEY="sb_publishable_xVe8fGbqQ0XGwi4DsmjPMg_Y2RBOD3t";
   const sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY,{ global:{ fetch:(u,o={})=>fetch(u,{...o,cache:'no-store'}) } });
 
-  function pubUrl(path){ const {data}=sb.storage.from(CFG.bucket).getPublicUrl(path); return data?.publicUrl||'#'; }
+  const pubUrl=(path)=>{ const {data}=sb.storage.from(CFG.bucket).getPublicUrl(path); return data?.publicUrl||'#'; };
   async function listOnce(prefix){
     const p=(prefix && !prefix.endsWith('/'))?(prefix+'/'):(prefix||'');
     const {data,error}=await sb.storage.from(CFG.bucket).list(p,{limit:1000,sortBy:{column:'name',order:'asc'}});
@@ -36,14 +34,11 @@
     return (data||[]).map(it=>({name:it.name, fullPath:p+it.name, updatedAt:it.updated_at?Date.parse(it.updated_at):0, size:it.metadata?.size||0}));
   }
   async function listCandidates(){ const u=new URL(location.href); const prefix=u.searchParams.get('prefix')||''; return listOnce(prefix); }
-  function lastDateScore(name){ const m=String(name).match(/\b(20\d{6})\b/g); return m&&m.length? Math.max(...m.map(s=>+s||0)) : 0; }
+  const lastDateScore=(name)=>{ const m=String(name).match(/\b(20\d{6})\b/g); return m&&m.length? Math.max(...m.map(s=>+s||0)) : 0; };
 
   async function readManifest(){
-    try{
-      const {data,error}=await sb.storage.from(CFG.bucket).download(CFG.manifestPath);
-      if(error||!data) return null;
-      return JSON.parse(await data.text());
-    }catch{ return null; }
+    try{ const {data,error}=await sb.storage.from(CFG.bucket).download(CFG.manifestPath);
+      if(error||!data) return null; return JSON.parse(await data.text()); }catch{ return null; }
   }
   async function writeManifest(obj){
     const blob=new Blob([JSON.stringify(obj,null,2)],{type:'application/json'});
@@ -51,50 +46,41 @@
     if(error) throw new Error(error.message);
   }
 
-  // === 關鍵：多編碼自動解碼（內建 Big5 fallback via iconv-lite）====
+  // === 純內建多編碼自動解碼 ===
   async function fetchText(url){
-    const res = await fetch(url,{cache:'no-store'});
+    const res=await fetch(url,{cache:'no-store'});
     if(!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-    const buf = await res.arrayBuffer();
+    const buf=await res.arrayBuffer();
 
-    // 1) 先試 UTF-8 / UTF-16
-    const trials = ['utf-8','utf-16le','utf-16be'];
+    // 依序嘗試：UTF-8 / UTF-16LE / UTF-16BE / BIG5 / Win-1252
+    const trials=['utf-8','utf-16le','utf-16be','big5','windows-1252'];
     for(const enc of trials){
       try{
-        const txt = new TextDecoder(enc,{fatal:false}).decode(buf).replace(/\ufeff/gi,'');
-        if(/日期|時間|買進|賣出/.test(txt.slice(0,400))){
-          console.log(`[00909] decoded ${enc}`);
+        const txt=new TextDecoder(enc,{fatal:false}).decode(buf).replace(/\ufeff/gi,'');
+        const head=txt.slice(0,500);
+        // 成功判定：1) 出現欄位關鍵詞；或 2) 有以 "YYYYMMDD," 開頭的行
+        if(/日期|時間|動作|買進|賣出/.test(head) || /^\d{8}[,\t]/m.test(txt)){
+          console.log(`[00909] decoded as ${enc}`);
           return txt;
         }
-      }catch{}
+      }catch(e){ /* ignore and try next */ }
     }
-
-    // 2) Big5 fallback：動態載入 iconv-lite
-    if(!window.iconvlite){
-      await new Promise((resolve,reject)=>{
-        const s=document.createElement('script');
-        s.src="https://cdn.jsdelivr.net/npm/iconv-lite@0.6.3/dist/iconv-lite.min.js";
-        s.onload=resolve; s.onerror=reject; document.head.appendChild(s);
-      });
-    }
-    const big5Txt = window.iconvlite.decode(new Uint8Array(buf), 'big5');
-    console.log('[00909] decoded big5');
-    return big5Txt;
+    // 全失敗仍回 UTF-8（避免 throw 讓頁面可顯示原因）
+    console.warn('[00909] all decoders failed; fallback utf-8');
+    return new TextDecoder('utf-8').decode(buf);
   }
 
-  // 合併：以基準最後 ts 為錨
   function mergeRowsByBaseline(baseRows,newRows){
     const A=[...baseRows].sort((x,y)=>x.ts.localeCompare(y.ts));
     const B=[...newRows].sort((x,y)=>x.ts.localeCompare(y.ts));
-    const start8 = A.length? A[0].day : (B.length? B[0].day : '');
-    const baseMax= A.length? A[A.length-1].ts : '';
-    const added  = baseMax ? B.filter(x=>x.ts>baseMax) : B;
-    const merged = [...A,...added];
-    const end8   = merged.length? merged[merged.length-1].day : start8;
+    const start8=A.length?A[0].day:(B.length?B[0].day:'');
+    const baseMax=A.length?A[A.length-1].ts:'';
+    const added=baseMax? B.filter(x=>x.ts>baseMax) : B;
+    const merged=[...A,...added];
+    const end8=merged.length? merged[merged.length-1].day : start8;
     return { merged, start8, end8 };
   }
 
-  // KPI & 明細渲染
   function renderKPIs(kpi){
     const core=[
       ['累積報酬',(kpi.core.totalReturn*100).toFixed(2)+'%'],
@@ -153,9 +139,10 @@
 
   async function boot(){
     try{
+      console.log('[00909] controller v8');
       const url=new URL(location.href);
       const paramFile=url.searchParams.get('file');
-      const forceDebug=true; // 先開著，定位完成再關
+      const forceDebug=true;
 
       // 最新檔
       let latest=null, list=[];
@@ -199,19 +186,15 @@
       const rowsNew  = ETF_ENGINE.parseCanon(txtNew);
       const dbgNew = rowsNew.__debug || {};
       set(`解析中… 最新檔摘要：總行數 ${dbgNew.total||0}；成功 ${dbgNew.parsed||0}（buy=${dbgNew.buy||0}, sell=${dbgNew.sell||0}）`);
-      if(forceDebug){
-        console.group('[00909 DEBUG] 最新檔解析摘要'); console.log(dbgNew); console.groupEnd();
-      }
       if(rowsNew.length===0){ set('最新檔沒有可解析的交易行（純做多：需包含「買進/加碼/再加碼/賣出」）。',true); return; }
 
+      // 合併
       let rowsMerged=rowsNew, start8='', end8='';
       if(base){
         const baseUrl = base.from==='url' ? base.fullPath : pubUrl(base.fullPath);
         const txtBase = await fetchText(baseUrl);
         if(forceDebug){
-          console.group('[00909 DEBUG] 基準檔頭幾行'); 
-          console.log(txtBase.replace(/\r\n?/g,'\n').split('\n').slice(0,5)); 
-          console.groupEnd();
+          console.group('[00909 DEBUG] 基準檔頭幾行'); console.log(txtBase.replace(/\r\n?/g,'\n').split('\n').slice(0,5)); console.groupEnd();
         }
         const rowsBase= ETF_ENGINE.parseCanon(txtBase);
         const m=mergeRowsByBaseline(rowsBase, rowsNew);
@@ -244,7 +227,7 @@
 
       set(`完成。共 ${bt.trades.length} 筆 round-trip。`);
     }catch(err){
-      set('初始化失敗：'+(err.message||err), true);
+      set('初始化失敗：'+(err && err.message ? err.message : String(err)), true);
       console.error('[00909 ERROR]', err);
     }
   }
