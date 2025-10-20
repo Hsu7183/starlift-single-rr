@@ -28,15 +28,20 @@
     @media(max-width:1200px){ .grid{grid-template-columns:repeat(3,minmax(0,1fr));} }
     @media(max-width:700px){ .grid{grid-template-columns:repeat(2,minmax(0,1fr));} }
 
-    /* 交易明細底色 */
-    .buy-row  { background:#ffecec; } /* 買進：淺紅 */
-    .sell-row { background:#ecffec; } /* 賣出：淺綠 */
+    /* 明細底色 */
+    .buy-row  { background:#ffecec; }
+    .sell-row { background:#ecffec; }
     /* 損益配色：賺紅虧綠 */
     .pnl-pos{ color:#d0021b; font-weight:600; }
     .pnl-neg{ color:#0f8a00; font-weight:600; }
+
+    /* KPI 判等色塊 */
+    .rate-strong{color:#0f8a00;font-weight:600}
+    .rate-adequate{color:#b8860b;font-weight:600}
+    .rate-improve{color:#d0021b;font-weight:600}
+    .subtle{color:#888}
   </style>
 
-  <!-- 依賴 -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="shared.js?v=txfee45tax2"></script>
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
@@ -47,7 +52,6 @@
     <h1>00909 股票/ETF 分析</h1>
     <p class="muted">自動擷取檔名含 <code>00909</code> 的最新 TXT，以「基準檔最後日期」為錨：分析資料＝基準全段＋之後新增。</p>
 
-    <!-- 差異/期間摘要 -->
     <div class="card" id="diffCard">
       <div class="row">
         <strong>差異檢查</strong>
@@ -59,10 +63,8 @@
       <div id="periodText" class="muted" style="margin-top:6px;"></div>
     </div>
 
-    <!-- 自動流程狀態 -->
     <div class="card"><span id="autostatus" class="muted">初始化中…</span></div>
 
-    <!-- 參數小卡 -->
     <div class="card row">
       <div class="chip">手續費率：<span id="feeRateChip">—</span></div>
       <div class="chip">交易稅率：<span id="taxRateChip">—</span></div>
@@ -72,17 +74,14 @@
       <div class="chip">Rf：<span id="rfChip">—</span></div>
     </div>
 
-    <!-- 圖表 -->
     <div id="eqBox" class="card"><canvas id="eqChart"></canvas></div>
     <div id="ddBox" class="card"><canvas id="ddChart"></canvas></div>
 
-    <!-- KPI -->
     <div class="card">
       <h3 style="margin:6px 0">核心 KPI</h3>
       <div id="kpiCore" class="grid"></div>
     </div>
 
-    <!-- 進階 KPI -->
     <div class="card">
       <details open>
         <summary style="cursor:pointer;font-weight:600">進階 KPI</summary>
@@ -90,39 +89,71 @@
       </details>
     </div>
 
-    <!-- round-trip 明細（保留） -->
     <div class="card">
       <h3 style="margin:6px 0">交易明細（買/賣費用分列）</h3>
-      <div class="scroll-x">
-        <table id="tradeTable"><thead></thead><tbody></tbody></table>
-      </div>
+      <div class="scroll-x"><table id="tradeTable"><thead></thead><tbody></tbody></table></div>
     </div>
 
-    <!-- 逐筆成交（改名：交易明細） -->
     <div class="card">
       <h3 style="margin:6px 0">交易明細</h3>
-      <div class="scroll-x">
-        <table id="execTable"><thead></thead><tbody></tbody></table>
-      </div>
+      <div class="scroll-x"><table id="execTable"><thead></thead><tbody></tbody></table></div>
     </div>
 
-    <!-- 新增：最佳化交易明細（本金 100 萬，1-1-2 風控比例） -->
     <div class="card">
-      <div class="row" style="margin-bottom:6px">
-        <h3 style="margin:0">最佳化交易明細</h3>
-        <span class="chip">本金：1,000,000</span>
-        <span class="chip">風控比例：1 / 1 / 2</span>
-        <span class="chip">單位＝每張 1,000 股</span>
+      <h3 style="margin:6px 0">最佳化交易明細</h3>
+      <div class="scroll-x"><table id="optTable"><thead></thead><tbody></tbody></table></div>
+    </div>
+
+    <!-- 新增：最佳化 KPI（含判等） -->
+    <div class="card" id="kpiOptCard" style="display:none">
+      <h3 style="margin:6px 0">最佳化 KPI（含判等）</h3>
+
+      <div class="card" style="border-color:#f1dada;background:#fff6f6">
+        <strong>建議優化指標</strong>
+        <div class="scroll-x">
+          <table id="kpiOptSuggest" style="margin-top:6px;width:100%">
+            <thead><tr><th>指標</th><th>數值</th><th>建議</th><th>機構評語</th><th>參考區間</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
       </div>
-      <div class="scroll-x">
-        <table id="optTable"><thead></thead><tbody></tbody></table>
+
+      <div class="card" style="margin-top:12px">
+        <strong>一、報酬 (Return)</strong>
+        <div class="scroll-x"><table id="kpiOptReturn" style="margin-top:6px;width:100%">
+          <thead><tr><th>指標</th><th>數值</th><th>說明</th><th>機構評語</th><th>參考區間</th></tr></thead>
+          <tbody></tbody>
+        </table></div>
+      </div>
+
+      <div class="card" style="margin-top:12px">
+        <strong>二、風險 (Risk)</strong>
+        <div class="scroll-x"><table id="kpiOptRisk" style="margin-top:6px;width:100%">
+          <thead><tr><th>指標</th><th>數值</th><th>說明</th><th>機構評語</th><th>參考區間</th></tr></thead>
+          <tbody></tbody>
+        </table></div>
+      </div>
+
+      <div class="card" style="margin-top:12px">
+        <strong>三、效率 (Efficiency)</strong>
+        <div class="scroll-x"><table id="kpiOptEff" style="margin-top:6px;width:100%">
+          <thead><tr><th>指標</th><th>數值</th><th>說明</th><th>機構評語</th><th>參考區間</th></tr></thead>
+          <tbody></tbody>
+        </table></div>
+      </div>
+
+      <div class="card" style="margin-top:12px">
+        <strong>四、穩定 (Stability)</strong>
+        <div class="scroll-x"><table id="kpiOptStab" style="margin-top:6px;width:100%">
+          <thead><tr><th>指標</th><th>數值</th><th>說明</th><th>機構評語</th><th>參考區間</th></tr></thead>
+          <tbody></tbody>
+        </table></div>
       </div>
     </div>
   </div>
 
-  <!-- 主程式（全費口徑＋累計成本＋單位平均報酬率；控制器已用 window.ETF_ENGINE） -->
   <script src="etf-engine.js?v=fullfee-v1"></script>
   <script src="etf-chart.js?v=etf-chart-v1"></script>
-  <script src="etf-00909.js?v=fullfee-controller-v2"></script>
+  <script src="etf-00909.js?v=kpi-opt-v1"></script>
 </body>
 </html>
