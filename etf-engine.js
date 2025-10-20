@@ -1,4 +1,4 @@
-// etf-engine.js — 純做多ETF核心（超寬鬆 CSV / Canonical；賣出全數出清；費用分列；debug + 逐筆成交）
+// etf-engine.js — 純做多ETF核心（超寬鬆 CSV / Canonical；賣出全數出清；費用分列；debug + 完整逐筆成交欄位）
 (function (root){
   const DAY_MS = 24*60*60*1000;
   const to6 = t => String(t||'').padStart(6,'0');
@@ -9,8 +9,10 @@
   }
   const ymd = ms => new Date(ms).toISOString().slice(0,10).replace(/-/g,'');
 
+  // canonical（純做多保留新買/平賣）
   const CANON_RE = /^(\d{14})\.0{6}\s+(\d+\.\d{6})\s+(新買|平賣)\s*$/;
 
+  // ---- 解析：rows + __debug ----
   function parseCanon(text){
     const rows=[]; if(!text) return rows;
     const norm = text.replace(/\ufeff/gi,'').replace(/\r\n?/g,'\n').replace(/\u3000/g,' ').replace(/，/g,',');
@@ -20,15 +22,18 @@
     for (let idx=0; idx<lines.length; idx++){
       let line=(lines[idx]||'').trim(); if(!line) continue; dbg.total++;
 
+      // 任意位置的表頭/說明列
       if (/日期\s*[,|\t]\s*時間\s*[,|\t]\s*價格/i.test(line) ||
           /^日期$|^時間$|^價格$|^動作$|^說明$/i.test(line)) continue;
 
+      // canonical
       let m=line.match(CANON_RE);
       if (m){
         const rec={ ts:m[1], tsMs:parseTs(m[1]), day:m[1].slice(0,8), price:+m[2], kind:(m[3]==='平賣'?'sell':'buy'), units:undefined };
         rows.push(rec); dbg.parsed++; dbg[rec.kind]++; if(dbg.samples.length<5) dbg.samples.push({idx,line}); continue;
       }
 
+      // 超寬鬆 CSV（逗號/Tab）
       const parts=line.split(/[\t,]+/).map(s=>s.trim()).filter(Boolean);
       if (parts.length>=4){
         const d=parts[0];
@@ -43,7 +48,7 @@
         let units; const rest=parts.slice(4).join(',');
         if(kind==='buy'){ const mm=rest.match(/本次單位\s*[:=]\s*(\d+)/); units = mm? +mm[1] : 1; }
 
-        const ts=d+t;
+        const ts=d+to6(t);
         const rec={ ts, tsMs:parseTs(ts), day:d, price:+px, kind, units };
         rows.push(rec); dbg.parsed++; dbg[kind]++; if(dbg.samples.length<5) dbg.samples.push({idx,line}); continue;
       }
@@ -61,10 +66,10 @@
     const gross=price*shares;
     const fee=Math.max(cfg.minFee, gross*cfg.feeRate);
     const tax=isSell ? (gross*cfg.taxRate) : 0;
-    return { fee, tax, total:fee+tax };
+    return { fee, tax, gross, total:fee+tax };
   }
 
-  // 回測（純做多；賣出＝全數出清）＋ 逐筆成交 execs
+  // 回測（純做多；賣出＝全數出清）＋ 逐筆成交 execs（含你要的欄位）
   function backtest(rows, cfg){
     const lot=cfg.unitShares ?? 1000, init=cfg.initialCapital ?? 1_000_000;
     let shares=0, avgCost=0, cash=init, realized=0;
@@ -77,35 +82,60 @@
       if (r.kind==='buy'){
         const qty=(r.units ?? 1)*lot;
         const f=fees(r.price, qty, cfg, false);
-        const delta = -(r.price*qty + f.fee);
-        cash += delta;
-        avgCost=(shares*avgCost + r.price*qty) / (shares + qty || 1);
-        shares += qty;
+        const buyAmt = f.gross;                       // 買進金額（不含費用）
+        const outlay = f.gross + f.fee;               // 付出成本（含費用）
+        cash -= outlay;
+
+        // 新均價（含所有既有股數）
+        const newAvg = (shares*avgCost + r.price*qty) / (shares + qty || 1);
+        shares += qty; avgCost = newAvg;
+
         if(openTs==null){ openTs=r.ts; openPx=r.price; buyFeeAcc=0; }
         buyFeeAcc += f.fee;
 
         execs.push({
-          side:'BUY', ts:r.ts, tsMs:r.tsMs, price:r.price, shares:qty,
-          fee:f.fee, tax:0, cashDelta:delta, cashAfter:cash, sharesAfter:shares
+          side:'BUY', ts:r.ts, tsMs:r.tsMs, price:r.price,
+          avgCost:newAvg, shares:qty,
+          buyAmount:buyAmt, sellAmount:0,
+          fee:f.fee, tax:0,
+          costOut: outlay,               // 付出成本（買才有）
+          pnl: 0, retPct: null,          // 買進不計損益
+          cashDelta: -outlay, cashAfter: cash, sharesAfter: shares
         });
       }else if (r.kind==='sell'){
         if(shares<=0) continue;
-        const qty=shares;
+        const qty=shares;                           // 全部出清
         const f=fees(r.price, qty, cfg, true);
-        const delta = +(r.price*qty - f.fee - f.tax);
-        cash += delta;
-        const pnl=(r.price - avgCost)*qty - f.fee - f.tax;
-        realized+=pnl;
-        trades.push({ side:'LONG', inTs:openTs||r.ts, outTs:r.ts, inPx:openPx||avgCost, outPx:r.price,
-                      shares:qty, buyFee:Math.round(buyFeeAcc), sellFee:Math.round(f.fee), sellTax:Math.round(f.tax),
-                      pnl, holdDays:(parseTs(r.ts)-(openTs?parseTs(openTs):parseTs(r.ts)))/DAY_MS });
+        const sellAmt = f.gross;                    // 賣出金額（不含費用/稅）
+        const costBasis = avgCost * qty;            // 成本基礎（均價*數量）
+        const pnl = sellAmt - f.fee - f.tax - costBasis;
+        const retPct = costBasis>0 ? (pnl / costBasis) : 0;
 
-        shares=0; avgCost=0; openTs=null; openPx=null; buyFeeAcc=0;
+        cash += (sellAmt - f.fee - f.tax);
+        realized += pnl;
+
+        trades.push({
+          side:'LONG',
+          inTs:openTs||r.ts, outTs:r.ts,
+          inPx:openPx||avgCost, outPx:r.price,
+          shares:qty, buyFee:Math.round(buyFeeAcc),
+          sellFee:Math.round(f.fee), sellTax:Math.round(f.tax),
+          pnl, holdDays:(parseTs(r.ts)-(openTs?parseTs(openTs):parseTs(r.ts)))/DAY_MS
+        });
 
         execs.push({
-          side:'SELL', ts:r.ts, tsMs:r.tsMs, price:r.price, shares:qty,
-          fee:f.fee, tax:f.tax, cashDelta:delta, cashAfter:cash, sharesAfter:shares
+          side:'SELL', ts:r.ts, tsMs:r.tsMs, price:r.price,
+          avgCost:avgCost, shares:qty,
+          buyAmount:0, sellAmount:sellAmt,
+          fee:f.fee, tax:f.tax,
+          costOut: 0,                   // 賣出不屬於付出成本
+          pnl, retPct,
+          cashDelta: (sellAmt - f.fee - f.tax),
+          cashAfter: cash, sharesAfter: 0
         });
+
+        // 重置
+        shares=0; avgCost=0; openTs=null; openPx=null; buyFeeAcc=0;
       }
 
       const equity=cash + shares*r.price;
