@@ -1,4 +1,4 @@
-// etf-engine.js — 純做多ETF核心（超寬鬆 CSV / Canonical；賣出全數出清；費用分列；debug）
+// etf-engine.js — 純做多ETF核心（超寬鬆 CSV / Canonical；賣出全數出清；費用分列；debug + 逐筆成交）
 (function (root){
   const DAY_MS = 24*60*60*1000;
   const to6 = t => String(t||'').padStart(6,'0');
@@ -9,10 +9,8 @@
   }
   const ymd = ms => new Date(ms).toISOString().slice(0,10).replace(/-/g,'');
 
-  // 純做多只保留新買/平賣（仍支援 canonical）
   const CANON_RE = /^(\d{14})\.0{6}\s+(\d+\.\d{6})\s+(新買|平賣)\s*$/;
 
-  // ---- 解析：rows + __debug ----
   function parseCanon(text){
     const rows=[]; if(!text) return rows;
     const norm = text.replace(/\ufeff/gi,'').replace(/\r\n?/g,'\n').replace(/\u3000/g,' ').replace(/，/g,',');
@@ -22,18 +20,15 @@
     for (let idx=0; idx<lines.length; idx++){
       let line=(lines[idx]||'').trim(); if(!line) continue; dbg.total++;
 
-      // 任意位置的表頭/說明列
       if (/日期\s*[,|\t]\s*時間\s*[,|\t]\s*價格/i.test(line) ||
           /^日期$|^時間$|^價格$|^動作$|^說明$/i.test(line)) continue;
 
-      // canonical
       let m=line.match(CANON_RE);
       if (m){
         const rec={ ts:m[1], tsMs:parseTs(m[1]), day:m[1].slice(0,8), price:+m[2], kind:(m[3]==='平賣'?'sell':'buy'), units:undefined };
         rows.push(rec); dbg.parsed++; dbg[rec.kind]++; if(dbg.samples.length<5) dbg.samples.push({idx,line}); continue;
       }
 
-      // 超寬鬆 CSV：逗號或 Tab 皆可
       const parts=line.split(/[\t,]+/).map(s=>s.trim()).filter(Boolean);
       if (parts.length>=4){
         const d=parts[0];
@@ -61,7 +56,7 @@
     return rows;
   }
 
-  // ---- 費用（台股ETF）----
+  // 費用
   function fees(price, shares, cfg, isSell){
     const gross=price*shares;
     const fee=Math.max(cfg.minFee, gross*cfg.feeRate);
@@ -69,34 +64,48 @@
     return { fee, tax, total:fee+tax };
   }
 
-  // ---- 回測：純做多；賣出＝全數出清 ----
+  // 回測（純做多；賣出＝全數出清）＋ 逐筆成交 execs
   function backtest(rows, cfg){
     const lot=cfg.unitShares ?? 1000, init=cfg.initialCapital ?? 1_000_000;
     let shares=0, avgCost=0, cash=init, realized=0;
 
     let openTs=null, openPx=null, buyFeeAcc=0;
-    const eqSeries=[], ddSeries=[], trades=[]; let peak=init;
+    const eqSeries=[], ddSeries=[], trades=[], execs=[];
+    let peak=init;
 
     for (const r of rows){
       if (r.kind==='buy'){
         const qty=(r.units ?? 1)*lot;
         const f=fees(r.price, qty, cfg, false);
-        cash -= (r.price*qty + f.fee);
+        const delta = -(r.price*qty + f.fee);
+        cash += delta;
         avgCost=(shares*avgCost + r.price*qty) / (shares + qty || 1);
         shares += qty;
         if(openTs==null){ openTs=r.ts; openPx=r.price; buyFeeAcc=0; }
         buyFeeAcc += f.fee;
+
+        execs.push({
+          side:'BUY', ts:r.ts, tsMs:r.tsMs, price:r.price, shares:qty,
+          fee:f.fee, tax:0, cashDelta:delta, cashAfter:cash, sharesAfter:shares
+        });
       }else if (r.kind==='sell'){
         if(shares<=0) continue;
         const qty=shares;
         const f=fees(r.price, qty, cfg, true);
-        cash += (r.price*qty - f.fee - f.tax);
+        const delta = +(r.price*qty - f.fee - f.tax);
+        cash += delta;
         const pnl=(r.price - avgCost)*qty - f.fee - f.tax;
         realized+=pnl;
         trades.push({ side:'LONG', inTs:openTs||r.ts, outTs:r.ts, inPx:openPx||avgCost, outPx:r.price,
                       shares:qty, buyFee:Math.round(buyFeeAcc), sellFee:Math.round(f.fee), sellTax:Math.round(f.tax),
                       pnl, holdDays:(parseTs(r.ts)-(openTs?parseTs(openTs):parseTs(r.ts)))/DAY_MS });
+
         shares=0; avgCost=0; openTs=null; openPx=null; buyFeeAcc=0;
+
+        execs.push({
+          side:'SELL', ts:r.ts, tsMs:r.tsMs, price:r.price, shares:qty,
+          fee:f.fee, tax:f.tax, cashDelta:delta, cashAfter:cash, sharesAfter:shares
+        });
       }
 
       const equity=cash + shares*r.price;
@@ -105,11 +114,11 @@
       ddSeries.push({t:r.tsMs, v:(equity-peak)/peak});
     }
 
-    return { initial:init, eqSeries, ddSeries, trades, realized, lastCash:cash, lastShares:shares,
-             lastPx: rows.length? rows[rows.length-1].price:0 };
+    return { initial:init, eqSeries, ddSeries, trades, execs, realized,
+             lastCash:cash, lastShares:shares, lastPx: rows.length? rows[rows.length-1].price:0 };
   }
 
-  // ---- KPI ----
+  // KPI（同前）
   const sum=a=>a.reduce((s,x)=>s+(+x||0),0);
   const avg=a=>a.length? sum(a)/a.length : 0;
   const std=a=>{ if(a.length<2) return 0; const m=avg(a); return Math.sqrt(avg(a.map(x=>(x-m)*(x-m)))); };
@@ -138,7 +147,7 @@
     const exp=bt.trades.length? sum(bt.trades.map(t=>t.pnl))/bt.trades.length:0;
     const hold=bt.trades.length? avg(bt.trades.map(t=>t.holdDays)):0;
     const ddVals=bt.ddSeries.map(x=>x.v).filter(x=>x<0).map(x=>Math.abs(x));
-    return { startDate: new Date(t0).toISOString().slice(0,10).replace(/-/g,''), endDate: new Date(t1).toISOString().slice(0,10).replace(/-/g,''),
+    return { startDate: ymd(t0), endDate: ymd(t1),
       core:{ totalReturn:tr, CAGR, annVol:vol, sharpe, sortino, maxDD, calmar, profitFactor:pf, winRate:wr, expectancy:exp, avgHoldDays:hold },
       risk:{ downsideDev:downside, ddAvg:avg(ddVals), ddP95:pct(ddVals,0.95), skew:skew(dR), kurt:kurt(dR) } };
   }
