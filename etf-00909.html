@@ -27,9 +27,13 @@
     #ddBox{height:220px}
     @media(max-width:1200px){ .grid{grid-template-columns:repeat(3,minmax(0,1fr));} }
     @media(max-width:700px){ .grid{grid-template-columns:repeat(2,minmax(0,1fr));} }
-    /* 逐筆成交配色 */
-    .buy-row  { background:#ffecec; } /* 淺紅 */
-    .sell-row { background:#ecffec; } /* 淺綠 */
+
+    /* 逐筆成交底色 */
+    .buy-row  { background:#ffecec; }
+    .sell-row { background:#ecffec; }
+    /* 損益配色（台股：賺=紅、虧=綠） */
+    .pnl-pos{ color:#d0021b; font-weight:600; }
+    .pnl-neg{ color:#0f8a00; font-weight:600; }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="shared.js?v=txfee45tax2"></script>
@@ -78,7 +82,6 @@
       </details>
     </div>
 
-    <!-- round-trip 明細 (保留) -->
     <div class="card">
       <h3 style="margin:6px 0">交易明細（買/賣費用分列）</h3>
       <div class="scroll-x">
@@ -86,7 +89,6 @@
       </div>
     </div>
 
-    <!-- 新增：逐筆成交（彩色） -->
     <div class="card">
       <h3 style="margin:6px 0">逐筆成交（彩色）</h3>
       <div class="scroll-x">
@@ -95,10 +97,9 @@
     </div>
   </div>
 
-  <!-- 強制清快取版號 -->
-  <script src="etf-engine.js?v=etf-core-v7d"></script>
+  <script src="etf-engine.js?v=etf-core-v7f"></script>
   <script src="etf-chart.js?v=etf-chart-v1"></script>
-  <script src="etf-00909.js?v=etf-00909-controller-v10"></script>
-  <script>console.log('[00909] loaded versions:', {engine:'v7d', controller:'v10', chart:'v1'});</script>
+  <script src="etf-00909.js?v=etf-00909-controller-v10c"></script>
+  <script>console.log('[00909] loaded versions:', {engine:'v7f', controller:'v10c', chart:'v1'});</script>
 </body>
 </html>
