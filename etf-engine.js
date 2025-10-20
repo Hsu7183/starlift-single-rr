@@ -1,4 +1,5 @@
-// etf-engine.js — 純做多ETF核心（超寬鬆 CSV / Canonical；賣出全數出清；費用分列；支援 debug 摘要）
+// etf-engine.js — 純做多ETF核心（超寬鬆 CSV / Canonical；賣出全數出清；費用分列；debug）
+// v7: 任何行只要偵測出表頭(含「日期,時間,價格」或第一欄非8碼日期)都會跳過
 (function (root){
   const DAY_MS = 24*60*60*1000;
 
@@ -10,32 +11,35 @@
   }
   const ymd = ms => new Date(ms).toISOString().slice(0,10).replace(/-/g,'');
 
-  // canonical（僅保留純做多需要的兩種）
+  // 只保留純做多需要的兩種
   const CANON_RE = /^(\d{14})\.0{6}\s+(\d+\.\d{6})\s+(新買|平賣)\s*$/;
 
   // ---- 解析：傳回 rows 並附帶 __debug ----
   function parseCanon(text){
     const rows=[]; if(!text) return rows;
 
-    // 正規化：換行、去掉奇怪字元、全形逗號→半形
+    // 正規化：換行/空白/全形逗號
     const norm = text
       .replace(/\ufeff/gi,'')
       .replace(/\r\n?/g,'\n')
-      .replace(/[\u3000]/g,' ')          // 全形空白
-      .replace(/，/g,',');                // 全形逗號
+      .replace(/\u3000/g,' ')
+      .replace(/，/g,',');
 
     const lines = norm.split('\n');
     const dbg = { total:0, parsed:0, buy:0, sell:0, samples:[], rejects:[] };
 
     for (let idx=0; idx<lines.length; idx++){
       let line = (lines[idx]||'').trim();
-      if(!line){ continue; }
+      if(!line) continue;
       dbg.total++;
 
-      // 1) 表頭（第一欄=日期）直接跳過
-      if (idx===0 && /^日期\s*,/i.test(line)) continue;
+      // 0) 任意位置的表頭/說明列：出現關鍵欄名就跳過
+      if (/日期\s*[,|\t]\s*時間\s*[,|\t]\s*價格/i.test(line) ||
+          /^日期$|^時間$|^價格$|^動作$|^說明$/i.test(line)) {
+        continue;
+      }
 
-      // 2) canonical 行
+      // 1) canonical
       let m = line.match(CANON_RE);
       if (m){
         const rec = { ts:m[1], tsMs:parseTs(m[1]), day:m[1].slice(0,8),
@@ -43,38 +47,40 @@
         rows.push(rec); dbg.parsed++; dbg[rec.kind]++; if(dbg.samples.length<5) dbg.samples.push({idx,line}); continue;
       }
 
-      // 3) 極寬鬆 CSV：允許逗號/Tab/多空白做為分隔
-      const parts = line.split(/[\t,]+/).map(s=>s.trim()).filter(s=>s.length>0);
+      // 2) 超寬鬆 CSV：逗號/Tab 多分隔
+      const parts = line.split(/[\t,]+/).map(s=>s.trim()).filter(Boolean);
       if (parts.length>=4){
-        const d = parts[0];     // YYYYMMDD
-        const t = to6(parts[1]); // hhmmss (5 or 6)
-        const px= parts[2];
-        const zh= parts[3];
-
-        // 需要：日期8碼 + 價格為數字
-        if (/^\d{8}$/.test(d) && !isNaN(+px)){
-          const ts = d + t;
-          // 動作分類（純做多）
-          const actTxt = (zh||'').replace(/\s+/g,'');
-          let kind = null;
-          if (/賣/.test(actTxt)) kind='sell';
-          else if (/買|加碼/.test(actTxt)) kind='buy';
-
-          if (kind){
-            // 從後續欄位揀 units
-            let units;
-            const rest = parts.slice(4).join(',');
-            if (kind==='buy'){
-              const mm = rest.match(/本次單位\s*[:=]\s*(\d+)/);
-              units = mm ? +mm[1] : 1;
-            }
-            const rec = { ts, tsMs:parseTs(ts), day:d, price:+px, kind, units };
-            rows.push(rec); dbg.parsed++; dbg[kind]++; if(dbg.samples.length<5) dbg.samples.push({idx,line}); continue;
-          }
+        const d = parts[0];                 // YYYYMMDD 或 表頭文字
+        if (!/^\d{8}$/.test(d)) {           // 第一欄不是8碼日期 → 視為表頭/無效列，跳過
+          continue;
         }
+        const t  = to6(parts[1]);           // hhmmss(5/6都可)
+        const px = parts[2];
+        const zh = parts[3];
+        if (isNaN(+px)) { dbg.rejects.push({idx,line}); continue; }
+
+        // 動作分類（純做多）
+        const actTxt = (zh||'').replace(/\s+/g,'');
+        let kind = null;
+        if (/賣/.test(actTxt)) kind='sell';
+        else if (/買|加碼/.test(actTxt)) kind='buy';
+        if (!kind){ dbg.rejects.push({idx,line}); continue; }
+
+        // 取 units
+        let units;
+        const rest = parts.slice(4).join(',');
+        if (kind==='buy'){
+          const mm = rest.match(/本次單位\s*[:=]\s*(\d+)/);
+          units = mm ? +mm[1] : 1;
+        }
+
+        const ts = d + t;
+        const rec = { ts, tsMs:parseTs(ts), day:d, price:+px, kind, units };
+        rows.push(rec); dbg.parsed++; dbg[kind]++; if(dbg.samples.length<5) dbg.samples.push({idx,line});
+        continue;
       }
 
-      // 4) 不符合就收進 rejects
+      // 3) 不符合就收進 rejects（不影響其它行）
       dbg.rejects.push({idx,line});
     }
 
@@ -104,9 +110,8 @@
     for (const r of rows){
       if (r.kind==='buy'){
         const qty = (r.units ?? 1) * lot;
-        const f = fees(r.price, qty, cfg, false);          // 僅手續費
-        const cost = r.price*qty + f.fee;
-        cash -= cost;
+        const f = fees(r.price, qty, cfg, false);          // 買：只手續費
+        cash -= (r.price*qty + f.fee);
         avgCost = (shares*avgCost + r.price*qty) / (shares + qty || 1);
         shares += qty;
 
@@ -115,11 +120,10 @@
       }else if (r.kind==='sell'){
         if(shares<=0) continue;
         const qty = shares;                                 // 全數出清
-        const f = fees(r.price, qty, cfg, true);            // 手續費 + 稅
-        const proceeds = r.price*qty - f.fee - f.tax;
-        cash += proceeds;
+        const f = fees(r.price, qty, cfg, true);            // 賣：手續費 + 稅
+        cash += (r.price*qty - f.fee - f.tax);
 
-        const pnl = (r.price - avgCost)*qty - f.fee - f.tax; // 買方手續費已扣在買時
+        const pnl = (r.price - avgCost)*qty - f.fee - f.tax; // 買方手續費已於買時扣
         realized += pnl;
 
         trades.push({
@@ -136,7 +140,6 @@
           holdDays: (parseTs(r.ts)-(openTs?parseTs(openTs):parseTs(r.ts)))/DAY_MS
         });
 
-        // 重置一段
         shares=0; avgCost=0; openTs=null; openPx=null; buyFeeAcc=0;
       }
 
