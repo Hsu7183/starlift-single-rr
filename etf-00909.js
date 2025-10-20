@@ -1,4 +1,4 @@
-// etf-00909.js — 控制器（純做多資料流：取檔→合併→計算→圖表/KPI/明細）
+// etf-00909.js — 控制器（純做多；帶偵錯模式）
 (function(){
   const $=s=>document.querySelector(s);
   const status=$('#autostatus'); function set(m,b=false){ if(status){ status.textContent=m; status.style.color=b?'#c62828':'#666'; } }
@@ -38,8 +38,11 @@
   function lastDateScore(name){ const m=String(name).match(/\b(20\d{6})\b/g); return m&&m.length? Math.max(...m.map(s=>+s||0)) : 0; }
 
   async function readManifest(){
-    try{ const {data,error}=await sb.storage.from(CFG.bucket).download(CFG.manifestPath);
-      if(error||!data) return null; return JSON.parse(await data.text()); }catch{ return null; }
+    try{
+      const {data,error}=await sb.storage.from(CFG.bucket).download(CFG.manifestPath);
+      if(error||!data) return null;
+      return JSON.parse(await data.text());
+    }catch{ return null; }
   }
   async function writeManifest(obj){
     const blob=new Blob([JSON.stringify(obj,null,2)],{type:'application/json'});
@@ -56,7 +59,6 @@
     return new TextDecoder('utf-8').decode(buf);
   }
 
-  // 基準合併（以基準最後 ts 為錨）
   function mergeRowsByBaseline(baseRows,newRows){
     const A=[...baseRows].sort((x,y)=>x.ts.localeCompare(y.ts));
     const B=[...newRows].sort((x,y)=>x.ts.localeCompare(y.ts));
@@ -128,6 +130,7 @@
     try{
       const url=new URL(location.href);
       const paramFile=url.searchParams.get('file');
+      const debug = url.searchParams.get('debug')==='1';
 
       // 最新檔
       let latest=null, list=[];
@@ -147,7 +150,7 @@
       if(!latest){ set('找不到檔名含「00909」的 TXT（可用 ?file= 指定）。',true); return; }
       elLatest.textContent=latest.name;
 
-      // 基準
+      // 基準（讀不到就當無基準）
       let base=null;
       const manifest=await readManifest();
       if(manifest?.baseline_path){
@@ -161,13 +164,25 @@
       const latestUrl = latest.from==='url' ? latest.fullPath : pubUrl(latest.fullPath);
       const txtNew   = await fetchText(latestUrl);
       const rowsNew  = ETF_ENGINE.parseCanon(txtNew);
-      if(rowsNew.length===0){ set('最新檔沒有可解析的交易行（純做多模式請確保有「買進/加碼/再加碼/賣出」）。',true); return; }
+      if(debug && rowsNew.__debug){
+        console.group('[00909 DEBUG] 最新檔解析');
+        console.log('摘要：', rowsNew.__debug);
+        console.log('前幾筆樣本：', rowsNew.__debug.samples);
+        if(rowsNew.__debug.rejects.length) console.warn('無法解析行(前10)：', rowsNew.__debug.rejects.slice(0,10));
+        console.groupEnd();
+      }
+      if(rowsNew.length===0){ set('最新檔沒有可解析的交易行（純做多：需包含「買進/加碼/再加碼/賣出」）。',true); return; }
 
       let rowsMerged=rowsNew, start8='', end8='';
       if(base){
         const baseUrl = base.from==='url' ? base.fullPath : pubUrl(base.fullPath);
         const txtBase = await fetchText(baseUrl);
         const rowsBase= ETF_ENGINE.parseCanon(txtBase);
+        if(debug && rowsBase.__debug){
+          console.group('[00909 DEBUG] 基準檔解析');
+          console.log('摘要：', rowsBase.__debug);
+          console.groupEnd();
+        }
         const m=mergeRowsByBaseline(rowsBase, rowsNew);
         rowsMerged=m.merged; start8=m.start8; end8=m.end8;
       }else{
@@ -196,9 +211,18 @@
       renderKPIs(kpi);
       renderTradesTable(bt.trades);
 
+      if(debug){
+        console.group('[00909 DEBUG] 結果');
+        console.log('trades:', bt.trades);
+        console.log('eq points:', bt.eqSeries.length, 'dd points:', bt.ddSeries.length);
+        console.log('kpi:', kpi);
+        console.groupEnd();
+      }
+
       set('完成。');
     }catch(err){
       set('初始化失敗：'+(err.message||err), true);
+      console.error('[00909 ERROR]', err);
     }
   }
 
