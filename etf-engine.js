@@ -1,4 +1,4 @@
-// etf-engine.js — 純做多ETF核心（CSV與canonical；賣出一律全數出清；費用分列）
+// etf-engine.js — 純做多ETF核心（CSV/Canonical；賣出一律全數出清；費用分列；帶偵錯資訊）
 (function (root){
   const DAY_MS = 24*60*60*1000;
 
@@ -14,7 +14,6 @@
   const CANON_RE = /^(\d{14})\.0{6}\s+(\d+\.\d{6})\s+(新買|平賣)\s*$/;   // 純做多只用 新買/平賣
   const CSV_RE   = /^(\d{8})\s*,\s*(\d{5,6})\s*,\s*([0-9]+(?:\.[0-9]+)?)\s*,\s*([^,]+)\s*(?:,(.*))?$/i;
 
-  // 將中文動作歸類到「buy / sell」（純做多）
   function classify(zh){
     const s=(zh||'').replace(/\s+/g,'');
     if(/賣/.test(s)) return 'sell';
@@ -22,19 +21,26 @@
     return null;
   }
 
-  // 解析文字為 rows：{ ts, tsMs, day, price, kind, units? }
+  // 解析文字為 rows：{ ts, tsMs, day, price, kind, units? }，並附帶 debug 訊息
   function parseCanon(text){
     const rows=[]; if(!text) return rows;
     const lines=text.replace(/\r\n?/g,'\n').split('\n');
 
-    for(const raw0 of lines){
-      const line=(raw0||'').trim(); if(!line) continue;
+    let dbg = { total:0, parsed:0, buy:0, sell:0, samples:[], rejects:[] };
+
+    for(let idx=0; idx<lines.length; idx++){
+      const raw0 = lines[idx];
+      const line=(raw0||'').trim();
+      if(!line){ continue; }
+      dbg.total++;
 
       // canonical（僅新買/平賣）
       let m=line.match(CANON_RE);
       if(m){
-        rows.push({ ts:m[1], tsMs:parseTs(m[1]), day:m[1].slice(0,8), price:+m[2],
-                    kind:(m[3]==='平賣'?'sell':'buy'), units:undefined });
+        const rec={ ts:m[1], tsMs:parseTs(m[1]), day:m[1].slice(0,8), price:+m[2],
+                    kind:(m[3]==='平賣'?'sell':'buy'), units:undefined };
+        rows.push(rec);
+        dbg.parsed++; dbg[rec.kind]++; if(dbg.samples.length<5) dbg.samples.push({idx, line});
         continue;
       }
 
@@ -42,13 +48,16 @@
       m=line.match(CSV_RE);
       if(m){
         const d=m[1], t=pad6(m[2]), ts=d+t, px=+m[3], zh=m[4], tail=m[5]||'';
-        const k=classify(zh); if(!k) continue;
+        const k=classify(zh);
+        if(!k){ dbg.rejects.push({idx, line}); continue; }
         let units;
         if(k==='buy'){
           const mm = tail.match(/本次單位\s*[:=]\s*(\d+)/);
           units = mm ? +mm[1] : 1; // 沒寫就視為1單位
         }
-        rows.push({ ts, tsMs:parseTs(ts), day:d, price:px, kind:k, units });
+        const rec={ ts, tsMs:parseTs(ts), day:d, price:px, kind:k, units };
+        rows.push(rec);
+        dbg.parsed++; dbg[k]++; if(dbg.samples.length<5) dbg.samples.push({idx, line});
         continue;
       }
 
@@ -56,16 +65,23 @@
       const p=line.split(',').map(s=>s.trim());
       if(p.length>=4 && /^\d{8}$/.test(p[0]) && /^\d{5,6}$/.test(p[1]) && !isNaN(+p[2])){
         const d=p[0], t=pad6(p[1]), ts=d+t, px=+p[2], zh=p[3], rest=p.slice(4).join(',');
-        const k=classify(zh); if(!k) continue;
+        const k=classify(zh);
+        if(!k){ dbg.rejects.push({idx, line}); continue; }
         let units;
         if(k==='buy'){
           const mm = rest.match(/本次單位\s*[:=]\s*(\d+)/);
           units = mm ? +mm[1] : 1;
         }
-        rows.push({ ts, tsMs:parseTs(ts), day:d, price:px, kind:k, units });
+        const rec={ ts, tsMs:parseTs(ts), day:d, price:px, kind:k, units };
+        rows.push(rec);
+        dbg.parsed++; dbg[k]++; if(dbg.samples.length<5) dbg.samples.push({idx, line});
+      }else{
+        dbg.rejects.push({idx, line});
       }
     }
     rows.sort((a,b)=>a.ts.localeCompare(b.ts));
+    // 把 debug 附在函式屬性上，供控制器讀取（避免破壞既有回傳型別）
+    rows.__debug = dbg;
     return rows;
   }
 
@@ -79,40 +95,32 @@
 
   // === 回測（純做多；賣出永遠全數出清）===
   function backtest(rows, cfg){
-    const lot = cfg.unitShares ?? 1000;        // 每「單位」股數
+    const lot = cfg.unitShares ?? 1000;
     const init = cfg.initialCapital ?? 1_000_000;
-
     let shares = 0, avgCost = 0, cash = init, realized = 0;
 
-    // 一段 round-trip 的累積資訊
     let openTs=null, openPx=null, buyFeeAcc=0;
-
     const eqSeries=[], ddSeries=[], trades=[];
     let peak = init;
 
     for(const r of rows){
       if(r.kind==='buy'){
         const qty = (r.units ?? 1) * lot;
-        const f = fees(r.price, qty, cfg, false);       // 買進：只有手續費
+        const f = fees(r.price, qty, cfg, false);
         const cost = r.price*qty + f.fee;
-
         cash   -= cost;
         avgCost = (shares*avgCost + r.price*qty) / (shares + qty || 1);
         shares += qty;
-
         if(openTs==null){ openTs=r.ts; openPx=r.price; buyFeeAcc=0; }
         buyFeeAcc += f.fee;
       }else if(r.kind==='sell'){
-        if(shares<=0) continue;                         // 沒部位就略過
-
-        const qty = shares;                             // ❶ 全數出清
-        const f = fees(r.price, qty, cfg, true);        // 賣出：手續費 + 稅
+        if(shares<=0) continue;
+        const qty = shares; // 全部出清
+        const f = fees(r.price, qty, cfg, true);
         const proceeds = r.price*qty - f.fee - f.tax;
-
         cash += proceeds;
-        const pnl = (r.price - avgCost)*qty - f.fee - f.tax;   // 買方手續費已在買進扣現金
+        const pnl = (r.price - avgCost)*qty - f.fee - f.tax;
         realized += pnl;
-
         trades.push({
           side:'LONG',
           inTs: openTs || r.ts,
@@ -126,9 +134,7 @@
           pnl,
           holdDays: (parseTs(r.ts)-(openTs?parseTs(openTs):parseTs(r.ts)))/DAY_MS
         });
-
-        // 重置
-        shares = 0; avgCost = 0; openTs=null; openPx=null; buyFeeAcc=0;
+        shares=0; avgCost=0; openTs=null; openPx=null; buyFeeAcc=0;
       }
 
       const markEquity = cash + shares * r.price;
