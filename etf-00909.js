@@ -1,7 +1,8 @@
-// etf-00909.js — 控制器（純做多；帶偵錯模式）
+// etf-00909.js — 控制器（純做多；強化偵錯：頁面摘要 + Console 詳列）
 (function(){
   const $=s=>document.querySelector(s);
-  const status=$('#autostatus'); function set(m,b=false){ if(status){ status.textContent=m; status.style.color=b?'#c62828':'#666'; } }
+  const status=$('#autostatus'); 
+  function set(m,b=false){ if(status){ status.textContent=m; status.style.color=b?'#c62828':'#666'; } }
   const elLatest=$('#latestName'), elBase=$('#baseName'), elPeriod=$('#periodText'), btnBase=$('#btnSetBaseline');
 
   const CFG={
@@ -51,7 +52,8 @@
   }
 
   async function fetchText(url){
-    const res=await fetch(url,{cache:'no-store'}); if(!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+    const res=await fetch(url,{cache:'no-store'}); 
+    if(!res.ok) throw new Error(`${res.status} ${res.statusText}`);
     const buf=await res.arrayBuffer();
     for(const enc of ['utf-8','big5','utf-16le','utf-16be']){
       try{ const s=new TextDecoder(enc,{fatal:false}).decode(buf); return s.replace(/\ufeff/gi,''); }catch(e){}
@@ -130,7 +132,7 @@
     try{
       const url=new URL(location.href);
       const paramFile=url.searchParams.get('file');
-      const debug = url.searchParams.get('debug')==='1';
+      const forceDebug=true; // 先強制開啟，定位完再改回參數開關
 
       // 最新檔
       let latest=null, list=[];
@@ -163,25 +165,43 @@
       // 下載與解析
       const latestUrl = latest.from==='url' ? latest.fullPath : pubUrl(latest.fullPath);
       const txtNew   = await fetchText(latestUrl);
-      const rowsNew  = ETF_ENGINE.parseCanon(txtNew);
-      if(debug && rowsNew.__debug){
-        console.group('[00909 DEBUG] 最新檔解析');
-        console.log('摘要：', rowsNew.__debug);
-        console.log('前幾筆樣本：', rowsNew.__debug.samples);
-        if(rowsNew.__debug.rejects.length) console.warn('無法解析行(前10)：', rowsNew.__debug.rejects.slice(0,10));
+
+      if(forceDebug){
+        console.group('[00909 DEBUG] 下載內容(最新檔)');
+        console.log('raw head(300):', txtNew.slice(0,300));
+        const firstLines = txtNew.replace(/\r\n?/g,'\n').split('\n').slice(0,8);
+        console.log('first 8 lines:', firstLines);
         console.groupEnd();
       }
-      if(rowsNew.length===0){ set('最新檔沒有可解析的交易行（純做多：需包含「買進/加碼/再加碼/賣出」）。',true); return; }
+
+      const rowsNew  = ETF_ENGINE.parseCanon(txtNew);
+      const dbgNew = rowsNew.__debug || {};
+      set(`解析中… 最新檔摘要：總行數 ${dbgNew.total||0}；成功 ${dbgNew.parsed||0}（buy=${dbgNew.buy||0}, sell=${dbgNew.sell||0}）`);
+
+      if(forceDebug){
+        console.group('[00909 DEBUG] 最新檔解析摘要');
+        console.log(dbgNew);
+        if(dbgNew.rejects && dbgNew.rejects.length) console.warn('rejects(前10):', dbgNew.rejects.slice(0,10));
+        console.groupEnd();
+      }
+
+      if(rowsNew.length===0){ 
+        set('最新檔沒有可解析的交易行（純做多：需包含「買進/加碼/再加碼/賣出」）。',true); 
+        return; 
+      }
 
       let rowsMerged=rowsNew, start8='', end8='';
       if(base){
         const baseUrl = base.from==='url' ? base.fullPath : pubUrl(base.fullPath);
         const txtBase = await fetchText(baseUrl);
+        if(forceDebug){
+          const firstLines = txtBase.replace(/\r\n?/g,'\n').split('\n').slice(0,5);
+          console.group('[00909 DEBUG] 基準檔頭幾行'); console.log(firstLines); console.groupEnd();
+        }
         const rowsBase= ETF_ENGINE.parseCanon(txtBase);
-        if(debug && rowsBase.__debug){
-          console.group('[00909 DEBUG] 基準檔解析');
-          console.log('摘要：', rowsBase.__debug);
-          console.groupEnd();
+        const dbgBase = rowsBase.__debug || {};
+        if(forceDebug){
+          console.group('[00909 DEBUG] 基準檔解析摘要'); console.log(dbgBase); console.groupEnd();
         }
         const m=mergeRowsByBaseline(rowsBase, rowsNew);
         rowsMerged=m.merged; start8=m.start8; end8=m.end8;
@@ -211,15 +231,7 @@
       renderKPIs(kpi);
       renderTradesTable(bt.trades);
 
-      if(debug){
-        console.group('[00909 DEBUG] 結果');
-        console.log('trades:', bt.trades);
-        console.log('eq points:', bt.eqSeries.length, 'dd points:', bt.ddSeries.length);
-        console.log('kpi:', kpi);
-        console.groupEnd();
-      }
-
-      set('完成。');
+      set(`完成。共 ${bt.trades.length} 筆 round-trip。`);
     }catch(err){
       set('初始化失敗：'+(err.message||err), true);
       console.error('[00909 ERROR]', err);
