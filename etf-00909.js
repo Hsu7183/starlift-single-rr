@@ -1,16 +1,14 @@
-// etf-00909.js — 控制器（純做多；多編碼打分選優；偵錯摘要）
+// etf-00909.js — 控制器（多編碼打分選優；偵錯摘要；渲染 round-trip + 逐筆成交）
 (function(){
   const $=s=>document.querySelector(s);
   const status=$('#autostatus');
   const set=(m,b=false)=>{ if(status){ status.textContent=m; status.style.color=b?'#c62828':'#666'; } };
-  const elLatest=$('#latestName'), elBase=$('#baseName'), elPeriod=$('#periodText'), btnBase=$('#btnSetBaseline');
 
   const CFG={
     symbol:'00909', bucket:'reports', want:/00909/i,
     manifestPath:'manifests/etf-00909.json',
     feeRate:0.001425, taxRate:0.001, minFee:20,
-    tickSize:0.01, slippageTick:0,
-    unitShares:1000, rf:0.00, initialCapital:1_000_000
+    tickSize:0.01, slippageTick:0, unitShares:1000, rf:0.00, initialCapital:1_000_000
   };
 
   // chips
@@ -36,47 +34,28 @@
   async function listCandidates(){ const u=new URL(location.href); const prefix=u.searchParams.get('prefix')||''; return listOnce(prefix); }
   const lastDateScore=(name)=>{ const m=String(name).match(/\b(20\d{6})\b/g); return m&&m.length? Math.max(...m.map(s=>+s||0)) : 0; };
 
-  async function readManifest(){
-    try{ const {data,error}=await sb.storage.from(CFG.bucket).download(CFG.manifestPath);
-      if(error||!data) return null; return JSON.parse(await data.text()); }catch{ return null; }
-  }
-  async function writeManifest(obj){
-    const blob=new Blob([JSON.stringify(obj,null,2)],{type:'application/json'});
-    const {error}=await sb.storage.from(CFG.bucket).upload(CFG.manifestPath,blob,{upsert:true,cacheControl:'0',contentType:'application/json'});
-    if(error) throw new Error(error.message);
-  }
+  async function readManifest(){ try{ const {data,error}=await sb.storage.from(CFG.bucket).download(CFG.manifestPath); if(error||!data) return null; return JSON.parse(await data.text()); }catch{ return null; } }
+  async function writeManifest(obj){ const blob=new Blob([JSON.stringify(obj,null,2)],{type:'application/json'}); const {error}=await sb.storage.from(CFG.bucket).upload(CFG.manifestPath,blob,{upsert:true,cacheControl:'0',contentType:'application/json'}); if(error) throw new Error(error.message); }
 
-  // === 多編碼打分選優 ===
+  // 多編碼打分選優
   async function fetchText(url){
-    const res=await fetch(url,{cache:'no-store'});
-    if(!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+    const res=await fetch(url,{cache:'no-store'}); if(!res.ok) throw new Error(`${res.status} ${res.statusText}`);
     const buf=await res.arrayBuffer();
-
     const trials=['big5','utf-8','utf-16le','utf-16be','windows-1252'];
     let best={score:-1, enc:'', txt:''};
-
     for(const enc of trials){
-      let txt='';
-      try{ txt=new TextDecoder(enc,{fatal:false}).decode(buf).replace(/\ufeff/gi,''); }
-      catch{ continue; }
-
-      const head=txt.slice(0,1200);
-      const bad=(head.match(/\uFFFD/g)||[]).length;                      // 亂碼字（�）
-      const kw = (/日期|時間|動作|買進|賣出|加碼/.test(head)?1:0);       // 關鍵字
-      const mLines = txt.match(/^\d{8}[,\t]\d{5,6}[,\t]\d+(?:\.\d+)?[,\t].+$/gm);
-      const lines = (mLines? mLines.length:0);                            // 符合資料行數
-      const score = kw*1000 + lines*10 - bad;                             // 打分
-
-      // debug（保留）
-      console.log(`[00909] try ${enc}: score=${score}, lines=${lines}, bad=${bad}, kw=${kw}`);
-
+      let txt=''; try{ txt=new TextDecoder(enc,{fatal:false}).decode(buf).replace(/\ufeff/gi,''); }catch{ continue; }
+      const head=txt.slice(0,1200), bad=(head.match(/\uFFFD/g)||[]).length, kw=(/日期|時間|動作|買進|賣出|加碼/.test(head)?1:0);
+      const lines=(txt.match(/^\d{8}[,\t]\d{5,6}[,\t]\d+(?:\.\d+)?[,\t].+$/gm)||[]).length;
+      const score=kw*1000 + lines*10 - bad;
       if(score>best.score) best={score, enc, txt};
+      console.log(`[00909] try ${enc}: score=${score}, lines=${lines}, bad=${bad}, kw=${kw}`);
     }
     console.log(`[00909] decoded as ${best.enc} (score=${best.score})`);
     return best.txt;
   }
 
-  // 合併（基準最後 ts 為錨）
+  // 合併（以基準最後 ts 為錨）
   function mergeRowsByBaseline(baseRows,newRows){
     const A=[...baseRows].sort((x,y)=>x.ts.localeCompare(y.ts));
     const B=[...newRows].sort((x,y)=>x.ts.localeCompare(y.ts));
@@ -88,7 +67,7 @@
     return { merged, start8, end8 };
   }
 
-  // KPI/明細渲染（略）
+  // ===== 渲染：round-trip & 逐筆成交 =====
   function renderKPIs(kpi){
     const core=[
       ['累積報酬',(kpi.core.totalReturn*100).toFixed(2)+'%'],
@@ -145,9 +124,41 @@
     }
   }
 
+  function tsPretty(ts14){
+    const d=`${ts14.slice(0,4)}/${ts14.slice(4,6)}/${ts14.slice(6,8)}`;
+    const t=`${ts14.slice(8,10)}:${ts14.slice(10,12)}`;
+    return `${d} ${t}`;
+  }
+
+  function renderExecsTable(execs){
+    const thead=$('#execTable thead'), tbody=$('#execTable tbody');
+    thead.innerHTML=`
+      <tr>
+        <th>動作</th><th>時間</th><th>價格</th><th>股數</th>
+        <th>手續費</th><th>交易稅</th><th>現金變動</th><th>變動後現金</th><th>持股</th>
+      </tr>`;
+    tbody.innerHTML='';
+    for(const e of execs){
+      const tr=document.createElement('tr');
+      tr.className = (e.side==='BUY' ? 'buy-row' : 'sell-row');
+      tr.innerHTML=`
+        <td>${e.side}</td>
+        <td>${tsPretty(e.ts)}</td>
+        <td>${e.price.toFixed(2)}</td>
+        <td>${e.shares.toLocaleString()}</td>
+        <td>${Math.round(e.fee).toLocaleString()}</td>
+        <td>${Math.round(e.tax).toLocaleString()}</td>
+        <td>${Math.round(e.cashDelta).toLocaleString()}</td>
+        <td>${Math.round(e.cashAfter).toLocaleString()}</td>
+        <td>${e.sharesAfter.toLocaleString()}</td>
+      `;
+      tbody.appendChild(tr);
+    }
+  }
+
   async function boot(){
     try{
-      console.log('[00909] controller v9');
+      console.log('[00909] controller v10');
       const url=new URL(location.href);
       const paramFile=url.searchParams.get('file');
       const forceDebug=true;
@@ -168,7 +179,7 @@
         latest=list[0];
       }
       if(!latest){ set('找不到檔名含「00909」的 TXT（可用 ?file= 指定）。',true); return; }
-      elLatest.textContent=latest.name;
+      $('#latestName').textContent=latest.name;
 
       // 基準（讀不到就當無基準）
       let base=null;
@@ -178,7 +189,7 @@
       }else{
         base=list[1]||null;
       }
-      elBase.textContent=base? base.name : '（尚無）';
+      $('#baseName').textContent=base? base.name : '（尚無）';
 
       // 下載與解析
       const latestUrl = latest.from==='url' ? latest.fullPath : pubUrl(latest.fullPath);
@@ -210,9 +221,10 @@
       }else{
         start8=rowsNew[0].day; end8=rowsNew[rowsNew.length-1].day;
       }
-      elPeriod.textContent=`期間：${start8||'—'} 開始到 ${end8||'—'} 結束`;
+      $('#periodText').textContent=`期間：${start8||'—'} 開始到 ${end8||'—'} 結束`;
 
       // 設基準
+      const btnBase=$('#btnSetBaseline');
       btnBase.disabled=false;
       btnBase.onclick=async()=>{
         try{
@@ -227,13 +239,14 @@
       const bt  = ETF_ENGINE.backtest(rowsMerged, CFG);
       const kpi = ETF_ENGINE.statsKPI(bt, CFG);
 
-      // 渲染
+      // 圖表 / KPI / 明細 / 逐筆
       ETF_CHART.renderEquity($('#eqChart'), bt.eqSeries);
       ETF_CHART.renderDrawdown($('#ddChart'), bt.ddSeries);
       renderKPIs(kpi);
       renderTradesTable(bt.trades);
+      renderExecsTable(bt.execs);
 
-      set(`完成。共 ${bt.trades.length} 筆 round-trip。`);
+      set(`完成。共 ${bt.trades.length} 筆 round-trip、${bt.execs.length} 筆逐筆成交。`);
     }catch(err){
       set('初始化失敗：'+(err && err.message ? err.message : String(err)), true);
       console.error('[00909 ERROR]', err);
