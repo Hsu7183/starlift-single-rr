@@ -1,4 +1,4 @@
-// etf-00909.js — 控制器（純做多；強化偵錯：頁面摘要 + Console 詳列）
+// etf-00909.js — 控制器（純做多；Big5 自動解碼；強化偵錯：頁面摘要 + Console 詳列）
 (function(){
   const $=s=>document.querySelector(s);
   const status=$('#autostatus'); 
@@ -51,16 +51,38 @@
     if(error) throw new Error(error.message);
   }
 
+  // === 關鍵：多編碼自動解碼（內建 Big5 fallback via iconv-lite）====
   async function fetchText(url){
-    const res=await fetch(url,{cache:'no-store'}); 
+    const res = await fetch(url,{cache:'no-store'});
     if(!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-    const buf=await res.arrayBuffer();
-    for(const enc of ['utf-8','big5','utf-16le','utf-16be']){
-      try{ const s=new TextDecoder(enc,{fatal:false}).decode(buf); return s.replace(/\ufeff/gi,''); }catch(e){}
+    const buf = await res.arrayBuffer();
+
+    // 1) 先試 UTF-8 / UTF-16
+    const trials = ['utf-8','utf-16le','utf-16be'];
+    for(const enc of trials){
+      try{
+        const txt = new TextDecoder(enc,{fatal:false}).decode(buf).replace(/\ufeff/gi,'');
+        if(/日期|時間|買進|賣出/.test(txt.slice(0,400))){
+          console.log(`[00909] decoded ${enc}`);
+          return txt;
+        }
+      }catch{}
     }
-    return new TextDecoder('utf-8').decode(buf);
+
+    // 2) Big5 fallback：動態載入 iconv-lite
+    if(!window.iconvlite){
+      await new Promise((resolve,reject)=>{
+        const s=document.createElement('script');
+        s.src="https://cdn.jsdelivr.net/npm/iconv-lite@0.6.3/dist/iconv-lite.min.js";
+        s.onload=resolve; s.onerror=reject; document.head.appendChild(s);
+      });
+    }
+    const big5Txt = window.iconvlite.decode(new Uint8Array(buf), 'big5');
+    console.log('[00909] decoded big5');
+    return big5Txt;
   }
 
+  // 合併：以基準最後 ts 為錨
   function mergeRowsByBaseline(baseRows,newRows){
     const A=[...baseRows].sort((x,y)=>x.ts.localeCompare(y.ts));
     const B=[...newRows].sort((x,y)=>x.ts.localeCompare(y.ts));
@@ -72,6 +94,7 @@
     return { merged, start8, end8 };
   }
 
+  // KPI & 明細渲染
   function renderKPIs(kpi){
     const core=[
       ['累積報酬',(kpi.core.totalReturn*100).toFixed(2)+'%'],
@@ -132,7 +155,7 @@
     try{
       const url=new URL(location.href);
       const paramFile=url.searchParams.get('file');
-      const forceDebug=true; // 先強制開啟，定位完再改回參數開關
+      const forceDebug=true; // 先開著，定位完成再關
 
       // 最新檔
       let latest=null, list=[];
@@ -169,40 +192,28 @@
       if(forceDebug){
         console.group('[00909 DEBUG] 下載內容(最新檔)');
         console.log('raw head(300):', txtNew.slice(0,300));
-        const firstLines = txtNew.replace(/\r\n?/g,'\n').split('\n').slice(0,8);
-        console.log('first 8 lines:', firstLines);
+        console.log('first 8 lines:', txtNew.replace(/\r\n?/g,'\n').split('\n').slice(0,8));
         console.groupEnd();
       }
 
       const rowsNew  = ETF_ENGINE.parseCanon(txtNew);
       const dbgNew = rowsNew.__debug || {};
       set(`解析中… 最新檔摘要：總行數 ${dbgNew.total||0}；成功 ${dbgNew.parsed||0}（buy=${dbgNew.buy||0}, sell=${dbgNew.sell||0}）`);
-
       if(forceDebug){
-        console.group('[00909 DEBUG] 最新檔解析摘要');
-        console.log(dbgNew);
-        if(dbgNew.rejects && dbgNew.rejects.length) console.warn('rejects(前10):', dbgNew.rejects.slice(0,10));
-        console.groupEnd();
+        console.group('[00909 DEBUG] 最新檔解析摘要'); console.log(dbgNew); console.groupEnd();
       }
-
-      if(rowsNew.length===0){ 
-        set('最新檔沒有可解析的交易行（純做多：需包含「買進/加碼/再加碼/賣出」）。',true); 
-        return; 
-      }
+      if(rowsNew.length===0){ set('最新檔沒有可解析的交易行（純做多：需包含「買進/加碼/再加碼/賣出」）。',true); return; }
 
       let rowsMerged=rowsNew, start8='', end8='';
       if(base){
         const baseUrl = base.from==='url' ? base.fullPath : pubUrl(base.fullPath);
         const txtBase = await fetchText(baseUrl);
         if(forceDebug){
-          const firstLines = txtBase.replace(/\r\n?/g,'\n').split('\n').slice(0,5);
-          console.group('[00909 DEBUG] 基準檔頭幾行'); console.log(firstLines); console.groupEnd();
+          console.group('[00909 DEBUG] 基準檔頭幾行'); 
+          console.log(txtBase.replace(/\r\n?/g,'\n').split('\n').slice(0,5)); 
+          console.groupEnd();
         }
         const rowsBase= ETF_ENGINE.parseCanon(txtBase);
-        const dbgBase = rowsBase.__debug || {};
-        if(forceDebug){
-          console.group('[00909 DEBUG] 基準檔解析摘要'); console.log(dbgBase); console.groupEnd();
-        }
         const m=mergeRowsByBaseline(rowsBase, rowsNew);
         rowsMerged=m.merged; start8=m.start8; end8=m.end8;
       }else{
