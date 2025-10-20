@@ -1,307 +1,216 @@
-/* ===========================================================================
- * etf-engine.js  (ETF/股票策略計算核心；與期貨線完全分離)
- * 專為 00909-ETF TXT（CSV + key=value）而寫。
- * 只納入「買進 / 加碼攤平 / 再加碼攤平 / 賣出」，忽略「平買 / 平賣 / 強制平倉(強平)」。
- *
- * API：
- *   const parsed = ETFEngine.parseEtfTxt(rawTxt)
- *     -> {
- *          events,         // 每行事件（含 kv.lotsThisRow）
- *          trades,         // 每筆 tid 一筆完整交易
- *          days, pnl,      // 以出場日入帳的日序列（元）
- *          equity, rets,   // 每百萬 Equity / 近似日報酬
- *          extras,         // 原始 kv 彙總
- *          FEE_RATE, FEE_MIN, TAX_RATE, BASE_CAP
- *        }
- *   const kpis   = ETFEngine.calcEtfKpis(parsed)
- *     -> { core, risk, trade, capacity, meta }
- *
- *   ETFEngine.setDebug(true|false)
- * =========================================================================== */
+// etf-engine.js — 股票/ETF 計算核心（支援 canonical 與 CSV 中文格式）
+(function (root){
+  const DAY_MS = 24*60*60*1000;
 
-(function (global) {
-  'use strict';
-
-  /* ======================== 依法常數（台灣） ======================== */
-  var BASE_CAP = 1_000_000;     // 基準資金（每 100 萬）
-  var FEE_RATE = 0.001425;      // 手續費率（單邊）
-  var FEE_MIN  = 20;            // 最低手續費
-  var TAX_RATE = 0.001;         // ETF 證交稅率 0.1%（僅賣出）
-
-  function fee(amt){ return Math.max(Math.round(amt * FEE_RATE), FEE_MIN); }
-  function taxOnSell(amt){ return Math.round(amt * TAX_RATE); }
-
-  /* ======================== 開關 ======================== */
-  var DEBUG = false;
-
-  /* ======================== utils ======================== */
-  function toNum(x, d){ var v = Number(x); return isFinite(v) ? v : (d != null ? d : 0); }
-  function sum(a){ var s=0; for(var i=0;i<a.length;i++) s+=a[i]; return s; }
-  function mean(a){ return a.length ? sum(a)/a.length : 0; }
-  function std(a){
-    if(a.length<2) return 0;
-    var m=mean(a), s=0;
-    for(var i=0;i<a.length;i++){ var d=a[i]-m; s+=d*d; }
-    return Math.sqrt(s/(a.length-1));
-  }
-  function quantile(a,q){
-    if(!a.length) return 0;
-    var b=a.slice().sort(function(x,y){return x-y;});
-    var i=Math.min(b.length-1,Math.max(0,Math.floor(q*(b.length-1))));
-    return b[i];
-  }
-  function percentile(a,p){ return quantile(a,p/100); }
-  function ymdToDate(d8){ return new Date(d8.slice(0,4)+'-'+d8.slice(4,6)+'-'+d8.slice(6,8)+'T00:00:00'); }
-
-  function maxDrawdown(eq){
-    var peak=-Infinity, mdd=0, ds=0, de=0, cs=0;
-    for(var i=0;i<eq.length;i++){
-      var v=eq[i];
-      if(v>peak){ peak=v; cs=i; }
-      var dd=peak-v;
-      if(dd>mdd){ mdd=dd; ds=cs; de=i; }
-    }
-    return { mdd:mdd, ddStart:ds, ddEnd:de, duration:Math.max(0,de-ds) };
-  }
-  // Ulcer Index：以百分比單位輸出（前端除以 100 再以 % 顯示）
-  function ulcerIndex(eq){
-    if(eq.length<2) return 0;
-    var peak=eq[0], s=0;
-    for(var i=0;i<eq.length;i++){
-      if(eq[i]>peak) peak=eq[i];
-      var ddPct = peak===0? 0 : ((eq[i]-peak)/Math.abs(peak))*100;
-      s += ddPct*ddPct;
-    }
-    return Math.sqrt(s/eq.length);
-  }
-  function cvarLeftTail(rets,q){
-    if(!rets.length) return 0;
-    var b=rets.slice().sort(function(a,b){return a-b;});
-    var idx=Math.floor((1-q)*b.length);
-    var tail=b.slice(0,Math.max(1,idx+1));
-    return mean(tail);
+  function yyyymmdd(ts14){ return ts14 ? ts14.slice(0,8) : ''; }
+  function pad6(t){ t=String(t||''); return t.padStart(6,'0'); }
+  function parseTs(ts14){
+    const Y=+ts14.slice(0,4), M=+ts14.slice(4,6)-1, D=+ts14.slice(6,8),
+          h=+ts14.slice(8,10), m=+ts14.slice(10,12), s=+ts14.slice(12,14);
+    return new Date(Date.UTC(Y,M,D,h,m,s)).getTime();
   }
 
-  /* ======================== 僅保留四種動作 ======================== */
-  // 若來源日後更名（如「加碼」「再加碼」），請擴充下方正規式。
-  function mapAct(act){
-    var s = String(act||'').replace(/[\uFEFF\u200B-\u200D\u00A0\u3000]/g,'').trim();
-    if(/^買進$/.test(s))       return 'BUY';
-    if(/^加碼攤平$/.test(s))   return 'ADD1';
-    if(/^再加碼攤平$/.test(s)) return 'ADD2';
-    if(/^賣出$/.test(s))       return 'SELL';
-    return 'OTHER';
-  }
+  // ---------- 解析 ----------
+  const CANON_RE = /^(\d{14})\.0{6}\s+(\d+\.\d{6})\s+(新買|平賣|新賣|平買|強制平倉)\s*$/;
+  const CSV_RE   = /^(\d{8}),\s*(\d{5,6}),\s*(\d+(?:\.\d+)?),\s*(買進|賣出|加碼攤平|再加碼攤平)\s*(?:,(.*))?$/;
 
-  /* ======================== 解析 TXT ======================== */
-  function parseEtfTxt(rawTxt){
-    // 全域淨化
-    var norm = String(rawTxt||'').replace(/\r\n?/g,'\n').replace(/[\uFEFF\u200B-\u200D]/g,'');
-    var lines = norm.split('\n');
+  // 回傳 rows: [{ts, tsMs, day, price, act, qtyUnits?}]
+  function parseCanon(text){
+    const rows=[]; if(!text) return rows;
+    for(const raw of text.split('\n')){
+      const line = raw.trim(); if(!line) continue;
 
-    var events=[], extras=[];
-
-    for(var i=0;i<lines.length;i++){
-      var L=(lines[i]||'').replace(/[\u00A0\u3000]/g,' ').trim();
-      if(!L) continue;
-      if(/^日期\s*,\s*時間\s*,\s*價格/i.test(L)) continue;
-
-      // 允許全/半形逗號；動作中文；尾端 key=value
-      var m=L.match(/^(\d{8})[,，](\d{5,6})[,，](\d+(?:\.\d+)?)[,，]([^,，]+?)[,，](.+)$/);
-      if(!m){ if(DEBUG) console.warn('[ETFEngine] 行格式無法匹配：', L); continue; }
-
-      var d8=m[1], t6=m[2].padStart(6,'0'), price=toNum(m[3],0), actRaw=m[4].trim(), tail=m[5]||'';
-      var ts14=d8+t6, act=mapAct(actRaw); if(act==='OTHER') continue;
-
-      var kv={}, segs=tail.split(/[,，]/);
-      for(var j=0;j<segs.length;j++){
-        var s=segs[j].trim(); if(!s) continue;
-        var p=s.indexOf('=');
-        if(p===-1) continue;
-        var k=s.slice(0,p).trim(), v=s.slice(p+1).trim();
-        kv[k]=v;
+      // 1) canonical
+      let m = line.match(CANON_RE);
+      if(m){
+        rows.push({
+          ts: m[1],
+          tsMs: parseTs(m[1]),
+          day: m[1].slice(0,8),
+          price: +m[2],
+          act: m[3],         // 新買/平賣/新賣/平買/強制平倉
+          qtyUnits: undefined
+        });
+        continue;
       }
 
-      // lotsThisRow：BUY/ADD 用「本次單位」、SELL 用「總單位」
-      kv.ts=ts14; kv.price=price; kv.actRaw=actRaw;
-      kv.lotsThisRow = act==='SELL' ? toNum(kv['總單位'],0) : toNum(kv['本次單位'],0);
+      // 2) CSV 中文
+      m = line.match(CSV_RE);
+      if(m){
+        const d=m[1], t=pad6(m[2]); const ts = d + t;
+        const price = +m[3];
+        const zhAct = m[4];
+        const tail = m[5]||'';
 
-      events.push({ ts:ts14, d8:d8, t6:t6, price:price, action:act, kv:kv, raw:L });
-      extras.push(kv);
-    }
+        // 僅做多邏輯：買進 / 加碼攤平 / 再加碼攤平 => 新買；賣出 => 平賣
+        const act = (zhAct==='賣出') ? '平賣' : '新買';
 
-    // 依 tid 匯成 trades
-    var byTid={};
-    for(var k=0;k<events.length;k++){
-      var e=events[k];
-      var tid=e.kv.tid? String(e.kv.tid).trim() : null;
-      if(!tid) continue;
-      (byTid[tid]||(byTid[tid]=[])).push(e);
-    }
+        // 解析單位：買進用「本次單位=」，賣出用「總單位=」
+        let qtyUnits;
+        if (zhAct==='賣出'){
+          const mm = tail.match(/總單位\s*=\s*(\d+)/);
+          if(mm) qtyUnits = +mm[1];
+        }else{
+          const mm = tail.match(/本次單位\s*=\s*(\d+)/);
+          if(mm) qtyUnits = +mm[1];
+          else qtyUnits = 1; // 沒寫就視為 1 單位
+        }
 
-    var tids=Object.keys(byTid).sort(function(a,b){return +a - +b;});
-    var trades=[];
-
-    for(var x=0;x<tids.length;x++){
-      var tid=tids[x];
-      var arr=byTid[tid].sort(function(a,b){return a.ts.localeCompare(b.ts);});
-      var sell = null; for(var r=0;r<arr.length;r++){ if(arr[r].action==='SELL'){ sell=arr[r]; break; } }
-      if(!sell) continue;
-      var first=null; for(var f=0;f<arr.length;f++){ var a=arr[f].action; if(a==='BUY'||a==='ADD1'||a==='ADD2'){ first=arr[f]; break; } }
-      if(!first) continue;
-
-      var tsIn=first.ts, tsOut=sell.ts;
-      var pxIn=toNum(first.price,0), pxOut=toNum(sell.price,0);
-      var qtyLots=toNum(sell.kv['總單位'],1);
-      var shares=qtyLots*1000;
-
-      // 平均成本（含費）；若缺，退為買價
-      var pxInAvg = sell.kv['平均成本含稅']!=null ? toNum(sell.kv['平均成本含稅']) :
-                    first.kv['avgCalc']!=null       ? toNum(first.kv['avgCalc'])       : pxIn;
-
-      // 損益：若 TXT 有「稅後獲利」就採用，否則依法計算（買入淨額=pxInAvg×股數；賣出淨額=賣價×股數−fee−tax）
-      var gainNet;
-      if(sell.kv['稅後獲利']!=null){
-        gainNet = Math.round(toNum(sell.kv['稅後獲利'],0));
-      }else{
-        var buyNet  = Math.round(pxInAvg*shares);
-        var grossS  = pxOut*shares;
-        var sellNet = Math.round(grossS - fee(grossS) - taxOnSell(grossS));
-        gainNet = sellNet - buyNet;
+        rows.push({
+          ts, tsMs: parseTs(ts), day:d, price, act, qtyUnits
+        });
       }
+    }
+    rows.sort((a,b)=> a.ts.localeCompare(b.ts));
+    return rows;
+  }
 
-      // 其他欄位（若有）
-      var mae = sell.kv['MAEpct']!=null ? toNum(sell.kv['MAEpct'],null) : null;
-      var mfe = sell.kv['MFEpct']!=null ? toNum(sell.kv['MFEpct'],null) : null;
-      var holdMin = sell.kv['holdMin']!=null ? toNum(sell.kv['holdMin'],null) : null;
+  // ---------- 費用/滑價 ----------
+  function fees(price, shares, cfg, isSell){
+    const gross = price * shares;
+    const fee = Math.max(cfg.minFee, gross * cfg.feeRate);
+    const tax = isSell ? gross * cfg.taxRate : 0;
+    return { fee, tax, total: fee + tax };
+  }
+  function slipPrice(price, side, cfg){
+    const adj = (cfg.slippageTick||0) * (cfg.tickSize||0);
+    return side==='buy' ? price + adj : price - adj;
+  }
 
-      // 參考聚合欄位：ISbps / 進場名目 / ADV / 成交價中位
-      var isbpsList=[], notionals=[], advs=[], prices=[];
-      for(var q=0;q<arr.length;q++){
-        var ev=arr[q];
-        if(ev.action==='BUY'||ev.action==='ADD1'||ev.action==='ADD2'||ev.action==='SELL'){
-          var kvw=ev.kv;
-          if(kvw['ISbps']!=null)         isbpsList.push(toNum(kvw['ISbps'],0));
-          if(kvw['entryNotional']!=null) notionals.push(toNum(kvw['entryNotional'],0));
-          if(kvw['ADV20']!=null)         advs.push(toNum(kvw['ADV20'],0));
-          prices.push( kvw['execPx']!=null ? toNum(kvw['execPx'],ev.price) : ev.price );
+  // ---------- 回測 ----------
+  function backtest(rows, cfg){
+    const initial = cfg.initialCapital ?? 1_000_000;
+    const lot = cfg.unitShares ?? 1000; // 每「單位」股數
+    let shares = 0, avgCost = 0, cash = initial, realized = 0;
+
+    const tradeRecs=[];
+    let openSide=null, openTs=null, openPx=null, openShares=0, openFee=0;
+
+    const eqSeries=[], ddSeries=[];
+    let peak = initial;
+
+    for(const r of rows){
+      const isBuyAct  = (r.act==='新買' || r.act==='平買');  // 此 CSV 僅會用到 新買 / 平賣
+      const isSellAct = (r.act==='平賣' || r.act==='新賣');
+
+      if(!(isBuyAct||isSellAct)) continue;
+
+      // 決定本筆股數
+      const qtyUnits = r.qtyUnits ?? 1;
+      const qty = qtyUnits * lot;
+
+      // 成交價（含滑價）
+      const side = isBuyAct ? 'buy' : 'sell';
+      const px = slipPrice(r.price, side, cfg);
+
+      if(isBuyAct){ // 開多 or 回補
+        const f = fees(px, qty, cfg, false);
+        const cost = px*qty + f.total;
+        cash -= cost;
+        avgCost = (shares*avgCost + px*qty) / (shares + qty || 1);
+        shares += qty;
+
+        // 記錄最近一次開倉（用於 tradeRecs；簡化：逐段視為獨立 round-trip）
+        openSide='long'; openTs=r.ts; openPx=px; openShares=qty; openFee=f.total;
+      }else{        // 出清（此 CSV 的賣出本就對應「總單位」）
+        if(shares<=0){ /* 無部位，略過 */ }
+        else{
+          const f = fees(px, qty, cfg, true);
+          const proceeds = px*qty - f.total;
+          cash += proceeds;
+          const pnl = (px - avgCost)*qty - f.total;
+          realized += pnl;
+          shares -= qty;
+          tradeRecs.push({
+            side:'LONG', inTs:openTs, outTs:r.ts,
+            inPx:openPx, outPx:px, shares:qty,
+            feesIn:openFee, feesOut:f.total,
+            pnl, holdDays:(parseTs(r.ts)-parseTs(openTs))/DAY_MS
+          });
+          if(shares===0) avgCost=0;
         }
       }
 
-      trades.push({
-        tid:+tid, tsIn:tsIn, tsOut:tsOut,
-        qtyLots:qtyLots,
-        pxIn:pxIn, pxOut:pxOut, pxInAvg:pxInAvg,
-        gainSlip:Math.round(gainNet),
-        maePct:mae, mfePct:mfe, holdMin:holdMin,
-        ISbps: isbpsList.length? mean(isbpsList):null,
-        entryNotionalSum: notionals.length? sum(notionals):0,
-        ADV20avg: advs.length? mean(advs):null,
-        medExecPx: prices.length? quantile(prices,0.5):null
-      });
-    }
-
-    // 以出場日計入損益
-    var dailyMap={};
-    for(var y=0;y<trades.length;y++){
-      var t=trades[y];
-      var d8=String(t.tsOut).slice(0,8);
-      dailyMap[d8]=(dailyMap[d8]||0)+t.gainSlip;
-    }
-    var days=Object.keys(dailyMap).sort();
-    var pnl=[]; for(var d=0; d<days.length; d++) pnl.push(dailyMap[days[d]]);
-
-    // Equity（每百萬）
-    var equity=[], acc=0;
-    for(var z=0; z<pnl.length; z++){ acc+=pnl[z]; equity.push(acc/BASE_CAP); }
-    var rets=pnl.map(function(v){ return v/BASE_CAP; });
-
-    if(DEBUG){
-      console.log('[JETF] events=',events.length,' trades=',trades.length,' days=',days.length);
-      if(events.length) console.log('[JETF] sample event:', events[0]);
-      if(trades.length) console.log('[JETF] sample trade:', trades[0]);
+      const markPx = px;
+      const equity = cash + (shares!==0 ? shares*markPx : 0);
+      if(equity>peak) peak=equity;
+      const dd = (equity-peak)/peak;
+      eqSeries.push({ t:r.tsMs, v:equity });
+      ddSeries.push({ t:r.tsMs, v:dd });
     }
 
     return {
-      events:events, trades:trades, days:days, pnl:pnl, equity:equity, rets:rets,
-      extras:extras, FEE_RATE:FEE_RATE, FEE_MIN:FEE_MIN, TAX_RATE:TAX_RATE, BASE_CAP:BASE_CAP
+      initial, eqSeries, ddSeries,
+      trades: tradeRecs,
+      realized, lastCash: cash, lastShares: shares,
+      lastPx: rows.length? rows[rows.length-1].price:0
     };
   }
 
-  /* ======================== KPI 計算 ======================== */
-  function calcEtfKpis(parsed){
-    var days=parsed.days, pnl=parsed.pnl, eq=parsed.equity, rets=parsed.rets, T=parsed.trades;
-    var N=T.length, totalRet=sum(pnl)/BASE_CAP;
-
-    var cover=0, cagr=null;
-    if(days.length){
-      var d0=ymdToDate(days[0]), d1=ymdToDate(days[days.length-1]);
-      cover=Math.max(1, Math.round((d1-d0)/86400000)+1);
-      if(cover>365) cagr=Math.pow(1+totalRet, 365/cover) - 1;
+  // ---------- KPI ----------
+  function dailyReturnsFromSeries(eqSeries){
+    if(eqSeries.length<2) return [];
+    const byDay=new Map();
+    for(const p of eqSeries){
+      const d = new Date(p.t).toISOString().slice(0,10);
+      byDay.set(d, p.v);
     }
+    const days=[...byDay.keys()].sort(); const rets=[];
+    for(let i=1;i<days.length;i++){
+      const prev=byDay.get(days[i-1]), cur=byDay.get(days[i]);
+      if(prev>0) rets.push((cur/prev)-1);
+    }
+    return rets;
+  }
 
-    var volAnn=std(rets)*Math.sqrt(252);
-    var dn=std(rets.filter(function(x){return x<0;}))*Math.sqrt(252);
-    var md=maxDrawdown(eq), ui=ulcerIndex(eq);
+  function sum(a){ return a.reduce((s,x)=>s+(+x||0),0); }
+  function avg(a){ return a.length? sum(a)/a.length : 0; }
+  function std(a){ if(a.length<2) return 0; const m=avg(a); return Math.sqrt(avg(a.map(x=>(x-m)*(x-m)))); }
+  function percentile(arr, p){ if(!arr.length) return 0; const a=[...arr].sort((x,y)=>x-y); const i=Math.min(a.length-1,Math.max(0,Math.floor(p*(a.length-1)))); return a[i]; }
+  function skewness(a){ if(a.length<3) return 0; const m=avg(a), s=std(a); if(s===0) return 0; const n=a.length; return (n/((n-1)*(n-2))) * sum(a.map(x=>Math.pow((x-m)/s,3))); }
+  function kurtosis(a){ if(a.length<4) return 0; const m=avg(a), s=std(a); if(s===0) return 0; const n=a.length; const num=(n*(n+1))/((n-1)*(n-2)*(n-3))*sum(a.map(x=>Math.pow((x-m)/s,4))); const den=(3*(n-1)*(n-1))/((n-2)*(n-3)); return num - den; }
 
-    var meanDaily = mean(rets);
-    var sharpe = volAnn>0 ? (meanDaily*252)/volAnn : null;
-    var sortino= dn>0    ? (meanDaily*252)/dn     : null;
-    var annualized = (cagr!=null ? cagr : meanDaily*252);
-    var calmar = md.mdd>0? (annualized/md.mdd) : null;
-    var var95  = percentile(rets,5), cvar95=cvarLeftTail(rets,0.95);
+  function statsKPI(bt, cfg){
+    const eq = bt.eqSeries.map(x=>x.v);
+    const startV = bt.initial;
+    const endV = eq.length? eq[eq.length-1] : bt.initial;
+    const totalRet = (endV/startV)-1;
 
-    // trade 區
-    var gains=T.map(function(t){return t.gainSlip;}).filter(function(v){return v!=null;});
-    var wins=gains.filter(function(v){return v>0;});
-    var losses=gains.filter(function(v){return v<0;}).map(function(v){return -v;});
-    var winRate=gains.length? wins.length/gains.length : 0;
-    var PF = sum(wins)/(sum(losses)||Infinity);
-    var avgTrade = N? (sum(pnl)/N)/BASE_CAP : 0;
+    const t0 = bt.eqSeries.length? bt.eqSeries[0].t : Date.now();
+    const t1 = bt.eqSeries.length? bt.eqSeries[bt.eqSeries.length-1].t : t0;
+    const years = Math.max(1/365, (t1 - t0)/(365*DAY_MS));
+    const CAGR = Math.pow(1+totalRet, 1/years) - 1;
 
-    var MAEs=T.map(function(t){return t.maePct;}).filter(function(v){return v!=null;});
-    var MFEs=T.map(function(t){return t.mfePct;}).filter(function(v){return v!=null;});
-    var holds=T.map(function(t){return t.holdMin;}).filter(function(v){return v!=null;});
-    var avgMAE=mean(MAEs)||0, avgMFE=mean(MFEs)||0;
-    var avgHold=mean(holds)||0, medHold=holds.length? quantile(holds,0.5):0;
+    let peak = -Infinity, maxDD = 0;
+    for(const v of eq){ if(v>peak) peak=v; const dd=(v-peak)/peak; if(dd<maxDD) maxDD=dd; }
 
-    // avgISbps：由 trades.ISbps 平均
-    var isbpsArr = T.map(function(t){ return t.ISbps; }).filter(function(v){ return v != null; });
-    var avgISbps = isbpsArr.length ? mean(isbpsArr) : 0;
+    const dR = dailyReturnsFromSeries(bt.eqSeries);
+    const annVol = dR.length>1 ? (std(dR) * Math.sqrt(252)) : 0;
+    const rf = cfg.rf ?? 0;
+    const avgD = dR.length? avg(dR):0;
+    const sharpe = annVol>0 ? ((avgD - rf/252) * 252) / annVol : 0;
+    const downside = std(dR.filter(x=>x<0)) * Math.sqrt(252);
+    const sortino = downside>0 ? ((avgD - rf/252) * 252) / downside : 0;
+    const calmar = maxDD<0 ? (CAGR/Math.abs(maxDD)) : 0;
 
-    // capacity（若有 ADV/Notional 可估；沒資料時回 0）
-    var parts=T.map(function(t){
-      var adv=t.ADV20avg, med=t.medExecPx, notional=t.entryNotionalSum;
-      return (adv && med)? (notional/(adv*med)) : null;
-    }).filter(function(v){return v!=null;});
-    var avgPart = mean(parts)||0, p75Part = parts.length? quantile(parts.map(function(x){return x*100;}),0.75)/100 : 0;
+    const wins = bt.trades.filter(t=>t.pnl>0), losses=bt.trades.filter(t=>t.pnl<0);
+    const pf = (sum(wins.map(t=>t.pnl)))/(Math.abs(sum(losses.map(t=>t.pnl)))||1);
+    const winRate = bt.trades.length? wins.length/bt.trades.length : 0;
+    const expectancy = bt.trades.length? sum(bt.trades.map(t=>t.pnl))/bt.trades.length : 0;
+    const avgHoldDays = bt.trades.length? avg(bt.trades.map(t=>t.holdDays)) : 0;
+
+    const ddVals = bt.ddSeries.map(x=>x.v).filter(x=>x<0).map(x=>Math.abs(x));
+    const ddAvg = ddVals.length? avg(ddVals):0;
+    const ddP95 = percentile(ddVals,0.95);
+    const skew = skewness(dR), kurt = kurtosis(dR);
 
     return {
-      core: { totalReturn:totalRet, CAGR:cagr, coverDays:cover, trades:N },
-      risk: { volAnn:volAnn, MDD:md.mdd, ddDuration:md.duration, UlcerIndex:ui, Sharpe:sharpe, Sortino:sortino, Calmar:calmar, VaR95:var95, CVaR95:cvar95 },
-      trade:{ winRate:winRate, PF:PF, avgTrade:avgTrade, avgHoldMin:avgHold, medHoldMin:medHold, avgMAEpct:avgMAE, avgMFEpct:avgMFE, avgISbps:avgISbps },
-      capacity:{ avgParticipation:avgPart, p75Participation:p75Part },
-      meta:{ baseCapital:BASE_CAP, firstDay:days[0]||null, lastDay:days[days.length-1]||null }
+      startDate: yyyymmdd(new Date(t0).toISOString().replaceAll('-','')),
+      endDate:   yyyymmdd(new Date(t1).toISOString().replaceAll('-','')),
+      core:{ totalReturn:totalRet, CAGR, annVol, sharpe, sortino, maxDD, calmar, profitFactor:pf, winRate, expectancy, avgHoldDays },
+      risk:{ downsideDev:downside, ddAvg, ddP95, skew, kurt }
     };
   }
 
-  /* ======================== 匯出 ======================== */
-  global.ETFEngine = {
-    parseEtfTxt: parseEtfKpisSafe(parseEtfTxt),
-    calcEtfKpis : calcEtfKpis,
-    FEE_RATE:FEE_RATE, FEE_MIN:FEE_MIN, TAX_RATE:TAX_RATE, BASE_CAP:BASE_CAP,
-    setDebug: function(flag){ DEBUG = !!flag; }
-  };
-
-  // 包一層錯誤提示，避免整頁掛掉
-  function parseEtfKpisSafe(fn){
-    return function(txt){
-      try{ return fn(txt); }
-      catch(e){
-        if(DEBUG) console.error('[JETF] parse error:', e);
-        return {events:[],trades:[],days:[],pnl:[],equity:[],rets:[],extras:[],FEE_RATE:FEE_RATE,FEE_MIN:FEE_MIN,TAX_RATE:TAX_RATE,BASE_CAP:BASE_CAP};
-      }
-    };
-  }
-
+  root.ETF_ENGINE = { parseCanon, backtest, statsKPI };
 })(window);
