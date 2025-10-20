@@ -83,8 +83,16 @@
     </div>
   </div>
 
-  <script src="etf-engine.js?v=etf-core-v3"></script>
+  <!-- 這兩行的版本號「一定要」更新，避免吃到舊快取 -->
+  <script src="etf-engine.js?v=etf-core-v7"></script>
   <script src="etf-chart.js?v=etf-chart-v1"></script>
-  <script src="etf-00909.js?v=etf-00909-controller-v3"></script>
+  <script src="etf-00909.js?v=etf-00909-controller-v5"></script>
+
+  <script>
+    // 小提示：在 Console 印出目前載入版本，方便確認有清到快取
+    console.log('[00909] loaded versions:', {
+      engine: 'v7', controller: 'v5', chart: 'v1'
+    });
+  </script>
 </body>
 </html>
