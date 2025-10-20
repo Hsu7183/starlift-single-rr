@@ -1,4 +1,4 @@
-// etf-00909.js — 控制器：Supabase 取檔 → 基準合併（row-level）→ 引擎計算 → 圖表/KPI/明細
+// etf-00909.js — 控制器：Supabase 取檔 → 基準合併（row-level）→ 計算 → 圖表/KPI/明細
 (function(){
   const $ = s => document.querySelector(s);
   const status = $('#autostatus'); function set(msg,bad=false){ if(status){ status.textContent=msg; status.style.color=bad?'#c62828':'#666'; } }
@@ -11,7 +11,7 @@
     manifestPath:'manifests/etf-00909.json',
     feeRate:0.001425, taxRate:0.001, minFee:20,
     tickSize:0.01, slippageTick:0,
-    unitShares:1000,  // 每「單位」= 1000 股
+    unitShares:1000,
     rf:0.00, initialCapital:1_000_000
   };
 
@@ -29,6 +29,7 @@
   const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     global:{ fetch:(u,o={})=>fetch(u,{...o,cache:'no-store'}) }
   });
+
   function pubUrl(path){ const { data } = sb.storage.from(CFG.bucket).getPublicUrl(path); return data?.publicUrl||'#'; }
   async function listOnce(prefix){
     const p=(prefix && !prefix.endsWith('/'))?(prefix+'/'): (prefix||'');
@@ -38,8 +39,19 @@
   }
   async function listCandidates(){ const u=new URL(location.href); const prefix=u.searchParams.get('prefix')||''; return listOnce(prefix); }
   function lastDateScore(name){ const m=String(name).match(/\b(20\d{6})\b/g); return m && m.length ? Math.max(...m.map(s=>+s||0)) : 0; }
-  async function readManifest(){ const { data }=await sb.storage.from(CFG.bucket).download(CFG.manifestPath); if(!data) return null; try{ return JSON.parse(await data.text()); }catch{ return null; } }
-  async function writeManifest(obj){ const blob=new Blob([JSON.stringify(obj,null,2)],{type:'application/json'}); const { error }=await sb.storage.from(CFG.bucket).upload(CFG.manifestPath,blob,{upsert:true,cacheControl:'0',contentType:'application/json'}); if(error) throw new Error(error.message); }
+
+  async function readManifest(){
+    try{
+      const { data, error } = await sb.storage.from(CFG.bucket).download(CFG.manifestPath);
+      if(error || !data) return null;
+      return JSON.parse(await data.text());
+    }catch{ return null; }
+  }
+  async function writeManifest(obj){
+    const blob=new Blob([JSON.stringify(obj,null,2)],{type:'application/json'});
+    const { error }=await sb.storage.from(CFG.bucket).upload(CFG.manifestPath,blob,{upsert:true,cacheControl:'0',contentType:'application/json'});
+    if(error) throw new Error(error.message);
+  }
 
   // 解碼（保留原始文字，由引擎同時支援 CSV/Canonical）
   async function fetchText(url){
@@ -98,7 +110,7 @@
       <tr>
         <th>方向</th><th>進場時間</th><th>進場價</th>
         <th>出場時間</th><th>出場價</th><th>股數</th>
-        <th>進場費用</th><th>出場費用</th>
+        <th>買方手續費</th><th>賣方手續費</th><th>賣方交易稅</th>
         <th>損益</th><th>持有天數</th>
       </tr>`;
     tbody.innerHTML='';
@@ -111,8 +123,9 @@
         <td>${t.outTs}</td>
         <td>${t.outPx.toFixed(2)}</td>
         <td>${t.shares.toLocaleString()}</td>
-        <td>${Math.round(t.feesIn).toLocaleString()}</td>
-        <td>${Math.round(t.feesOut).toLocaleString()}</td>
+        <td>${t.buyFee.toLocaleString()}</td>
+        <td>${t.sellFee.toLocaleString()}</td>
+        <td>${t.sellTax.toLocaleString()}</td>
         <td>${Math.round(t.pnl).toLocaleString()}</td>
         <td>${t.holdDays.toFixed(2)}</td>
       `;
