@@ -32,6 +32,7 @@
     /* 明細底色：賺紅虧綠來自損益欄位；列底色仍為買=粉紅、賣=粉綠 */
     .buy-row  { background:#ffecec; }
     .sell-row { background:#ecffec; }
+
     /* 損益配色（表格損益/累計損益）：賺=紅、虧=綠 */
     .pnl-pos{ color:#d0021b; font-weight:600; }
     .pnl-neg{ color:#0f8a00; font-weight:600; }
@@ -77,28 +78,86 @@
       <div class="chip">Rf：<span id="rfChip">—</span></div>
     </div>
 
-    <!-- 圖表 -->
+    <!-- ✅ KPI 置頂（含「自動挑問題指標」） -->
+    <div class="card" id="kpiOptCard" style="display:none">
+      <h3 style="margin:6px 0">最佳化 KPI（含判等）</h3>
+
+      <div class="card" style="border-color:#f1dada;background:#fff6f6">
+        <strong>建議優化指標（自動挑選：先列 <span class="rate-improve">Improve</span>，再列 <span class="rate-adequate">Adequate</span>）</strong>
+        <div class="scroll-x">
+          <table id="kpiOptSuggest" style="margin-top:6px;width:100%">
+            <thead><tr><th>指標</th><th>數值</th><th>建議</th><th>機構評語</th><th>參考區間</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 一、報酬 -->
+      <div class="card" style="margin-top:12px">
+        <strong>一、報酬 (Return)</strong>
+        <div class="scroll-x"><table id="kpiOptReturn" style="margin-top:6px;width:100%">
+          <thead><tr><th>指標</th><th>數值</th><th>說明</th><th>機構評語</th><th>參考區間</th></tr></thead>
+          <tbody></tbody>
+        </table></div>
+      </div>
+
+      <!-- 二、風險 -->
+      <div class="card" style="margin-top:12px">
+        <strong>二、風險 (Risk)</strong>
+        <div class="scroll-x"><table id="kpiOptRisk" style="margin-top:6px;width:100%">
+          <thead><tr><th>指標</th><th>數值</th><th>說明</th><th>機構評語</th><th>參考區間</th></tr></thead>
+          <tbody></tbody>
+        </table></div>
+      </div>
+
+      <!-- 三、效率 -->
+      <div class="card" style="margin-top:12px">
+        <strong>三、效率 (Efficiency)</strong>
+        <div class="scroll-x"><table id="kpiOptEff" style="margin-top:6px;width:100%">
+          <thead><tr><th>指標</th><th>數值</th><th>說明</th><th>機構評語</th><th>參考區間</th></tr></thead>
+          <tbody></tbody>
+        </table></div>
+      </div>
+
+      <!-- 四、穩定 -->
+      <div class="card" style="margin-top:12px">
+        <strong>四、穩定 (Stability)</strong>
+        <div class="scroll-x"><table id="kpiOptStab" style="margin-top:6px;width:100%">
+          <thead><tr><th>指標</th><th>數值</th><th>說明</th><th>機構評語</th><th>參考區間</th></tr></thead>
+          <tbody></tbody>
+        </table></div>
+      </div>
+
+      <!-- 五、成本 / 流動 / 基金級 -->
+      <div class="card" style="margin-top:12px">
+        <strong>五、成本 / 流動 / 基金級 (Cost & Liquidity & Fund-level)</strong>
+        <div class="scroll-x"><table id="kpiOptCost" style="margin-top:6px;width:100%">
+          <thead><tr><th>指標</th><th>數值</th><th>說明</th><th>機構評語</th><th>參考區間</th></tr></thead>
+          <tbody></tbody>
+        </table></div>
+      </div>
+
+      <!-- 六、基準相關（需市場基準） -->
+      <div class="card" style="margin-top:12px">
+        <strong>六、基準相關（Alpha / Beta / IR / TE / R² / 上下行捕捉 / Treynor 等）</strong>
+        <div class="scroll-x"><table id="kpiOptBench" style="margin-top:6px;width:100%">
+          <thead><tr><th>指標</th><th>數值</th><th>說明</th><th>資料需求</th></tr></thead>
+          <tbody>
+            <tr><td>Alpha (Jensen)</td><td>—</td><td>相對基準的超額</td><td>需連結基準日報酬</td></tr>
+            <tr><td>Beta</td><td>—</td><td>對市場敏感度</td><td>需連結基準日報酬</td></tr>
+            <tr><td>Information Ratio (IR)</td><td>—</td><td>超額報酬 / 追蹤誤差</td><td>需連結基準日報酬</td></tr>
+            <tr><td>Tracking Error (TE)</td><td>—</td><td>報酬差標準差</td><td>需連結基準日報酬</td></tr>
+            <tr><td>R²</td><td>—</td><td>回歸擬合度</td><td>需連結基準日報酬</td></tr>
+            <tr><td>Upside / Downside Capture</td><td>—</td><td>上/下行捕捉率</td><td>需連結基準日報酬</td></tr>
+            <tr><td>Treynor Ratio</td><td>—</td><td>超額報酬 / Beta</td><td>需連結基準日報酬</td></tr>
+          </tbody>
+        </table></div>
+      </div>
+    </div>
+
+    <!-- 圖表（保留） -->
     <div id="eqBox" class="card"><canvas id="eqChart"></canvas></div>
     <div id="ddBox" class="card"><canvas id="ddChart"></canvas></div>
-
-    <!-- round-trip KPI（保留但不動） -->
-    <div class="card">
-      <h3 style="margin:6px 0">核心 KPI</h3>
-      <div id="kpiCore" class="grid"></div>
-    </div>
-
-    <div class="card">
-      <details open>
-        <summary style="cursor:pointer;font-weight:600">進階 KPI</summary>
-        <div id="kpiAdv" class="grid" style="margin-top:10px"></div>
-      </details>
-    </div>
-
-    <!-- round-trip 明細（保留） -->
-    <div class="card">
-      <h3 style="margin:6px 0">交易明細（買/賣費用分列）</h3>
-      <div class="scroll-x"><table id="tradeTable"><thead></thead><tbody></tbody></table></div>
-    </div>
 
     <!-- 交易明細（逐筆，全費口徑） -->
     <div class="card">
@@ -111,66 +170,11 @@
       <h3 style="margin:6px 0">最佳化交易明細</h3>
       <div class="scroll-x"><table id="optTable"><thead></thead><tbody></tbody></table></div>
     </div>
-
-    <!-- 最佳化 KPI（含判等） -->
-    <div class="card" id="kpiOptCard" style="display:none">
-      <h3 style="margin:6px 0">最佳化 KPI（含判等）</h3>
-
-      <div class="card" style="border-color:#f1dada;background:#fff6f6">
-        <strong>建議優化指標</strong>
-        <div class="scroll-x">
-          <table id="kpiOptSuggest" style="margin-top:6px;width:100%">
-            <thead><tr><th>指標</th><th>數值</th><th>建議</th><th>機構評語</th><th>參考區間</th></tr></thead>
-            <tbody></tbody>
-          </table>
-        </div>
-      </div>
-
-      <div class="card" style="margin-top:12px">
-        <strong>一、報酬 (Return)</strong>
-        <div class="scroll-x"><table id="kpiOptReturn" style="margin-top:6px;width:100%">
-          <thead><tr><th>指標</th><th>數值</th><th>說明</th><th>機構評語</th><th>參考區間</th></tr></thead>
-          <tbody></tbody>
-        </table></div>
-      </div>
-
-      <div class="card" style="margin-top:12px">
-        <strong>二、風險 (Risk)</strong>
-        <div class="scroll-x"><table id="kpiOptRisk" style="margin-top:6px;width:100%">
-          <thead><tr><th>指標</th><th>數值</th><th>說明</th><th>機構評語</th><th>參考區間</th></tr></thead>
-          <tbody></tbody>
-        </table></div>
-      </div>
-
-      <div class="card" style="margin-top:12px">
-        <strong>三、效率 (Efficiency)</strong>
-        <div class="scroll-x"><table id="kpiOptEff" style="margin-top:6px;width:100%">
-          <thead><tr><th>指標</th><th>數值</th><th>說明</th><th>機構評語</th><th>參考區間</th></tr></thead>
-          <tbody></tbody>
-        </table></div>
-      </div>
-
-      <div class="card" style="margin-top:12px">
-        <strong>四、穩定 (Stability)</strong>
-        <div class="scroll-x"><table id="kpiOptStab" style="margin-top:6px;width:100%">
-          <thead><tr><th>指標</th><th>數值</th><th>說明</th><th>機構評語</th><th>參考區間</th></tr></thead>
-          <tbody></tbody>
-        </table></div>
-      </div>
-
-      <div class="card" style="margin-top:12px">
-        <strong>五、成本 / 流動 / 基金級 (Cost & Liquidity & Fund-level)</strong>
-        <div class="scroll-x"><table id="kpiOptCost" style="margin-top:6px;width:100%">
-          <thead><tr><th>指標</th><th>數值</th><th>說明</th><th>機構評語</th><th>參考區間</th></tr></thead>
-          <tbody></tbody>
-        </table></div>
-      </div>
-    </div>
   </div>
 
   <!-- 主程式 -->
   <script src="etf-engine.js?v=fullfee-v1"></script>
   <script src="etf-chart.js?v=etf-chart-v1"></script>
-  <script src="etf-00909.js?v=kpi-opt-v2"></script>
+  <script src="etf-00909.js?v=kpi-opt-v3"></script>
 </body>
 </html>
