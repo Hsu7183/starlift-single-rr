@@ -24,10 +24,6 @@
     th{background:#fafafa;text-align:left}
     .back-link{margin-bottom:12px;display:inline-block}
     #autostatus{white-space:pre-wrap}
-    #eqBox{height:520px}
-    #ddBox{height:220px}
-    @media(max-width:1200px){ .grid{grid-template-columns:repeat(3,minmax(0,1fr));} }
-    @media(max-width:700px){ .grid{grid-template-columns:repeat(2,minmax(0,1fr));} }
 
     .buy-row  { background:#ffecec; }
     .sell-row { background:#ecffec; }
@@ -35,10 +31,12 @@
     .pnl-pos{ color:#d0021b; font-weight:600; }
     .pnl-neg{ color:#0f8a00; font-weight:600; }
 
-    /* 評語：Strong=紅、Adequate=黑、Improve=綠 */
     .rate-strong{color:#d0021b;font-weight:600}
     .rate-adequate{color:#222;font-weight:600}
     .rate-improve{color:#0f8a00;font-weight:600}
+
+    /* 圖表高度 */
+    .chartbox{height:260px;margin-top:6px}
   </style>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -49,7 +47,10 @@
   <div class="wrap">
     <a class="back-link" href="index.html">← 返回首頁</a>
     <h1>00909 股票/ETF 分析</h1>
-    <p class="muted">本頁專責 00909；自動擷取檔名含 <code>00909</code> 的最新 TXT，以「基準檔最後日期」為錨：分析資料＝基準全段＋之後新增。可用 <code>?benchmark=0050</code> 或 <code>?benchmark=TWII</code>、<code>?benchfile=</code>、<code>?benchurl=</code> 指定基準資料。</p>
+    <p class="muted">
+      本頁專責 00909；自動擷取檔名含 <code>00909</code> 的最新 TXT，以「基準檔最後日期」為錨：分析資料＝基準全段＋之後新增。
+      可用 <code>?benchmark=0050</code>、<code>?benchmark=TWII</code>、<code>?benchfile=</code>、<code>?benchurl=</code> 指定基準。
+    </p>
 
     <!-- 差異/期間摘要 -->
     <div class="card" id="diffCard">
@@ -66,7 +67,7 @@
     <!-- 自動流程狀態 -->
     <div class="card"><span id="autostatus" class="muted">初始化中…</span></div>
 
-    <!-- 參數小卡 -->
+    <!-- 參數 chips -->
     <div class="card row">
       <div class="chip">手續費率：<span id="feeRateChip">—</span></div>
       <div class="chip">交易稅率：<span id="taxRateChip">—</span></div>
@@ -76,7 +77,17 @@
       <div class="chip">Rf：<span id="rfChip">—</span></div>
     </div>
 
-    <!-- ✅ KPI 置頂（含「自動挑問題指標」＋ 基準型 KPI） -->
+    <!-- ✅ 機構級圖表（置於 KPI 之上） -->
+    <div class="card" id="instCharts" style="display:none">
+      <h3 style="margin:6px 0">機構級圖表</h3>
+      <div class="chartbox"><canvas id="chEquity"></canvas></div>
+      <div class="chartbox"><canvas id="chUnderwater"></canvas></div>
+      <div class="chartbox"><canvas id="chRollVol"></canvas></div>
+      <div class="chartbox"><canvas id="chRollSharpe"></canvas></div>
+      <div class="chartbox"><canvas id="chHist"></canvas></div>
+    </div>
+
+    <!-- ✅ KPI 置頂 -->
     <div class="card" id="kpiOptCard" style="display:none">
       <h3 style="margin:6px 0">最佳化 KPI（含判等）</h3>
 
@@ -139,10 +150,6 @@
       </div>
     </div>
 
-    <!-- 圖表 -->
-    <div id="eqBox" class="card"><canvas id="eqChart"></canvas></div>
-    <div id="ddBox" class="card"><canvas id="ddChart"></canvas></div>
-
     <!-- 交易明細（逐筆，全費口徑） -->
     <div class="card">
       <h3 style="margin:6px 0">交易明細</h3>
@@ -158,7 +165,6 @@
 
   <!-- 主程式 -->
   <script src="etf-engine.js?v=fullfee-v1"></script>
-  <script src="etf-chart.js?v=etf-chart-v1"></script>
-  <script src="etf-00909.js?v=kpi-opt-v4"></script>
+  <script src="etf-00909.js?v=kpi-opt-v5"></script>
 </body>
 </html>
