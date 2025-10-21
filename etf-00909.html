@@ -32,11 +32,15 @@
     .rate-improve{color:#0f8a00;font-weight:600}
 
     .chartbox{height:300px;margin-top:6px}
+
+    /* Weekly Heatmap（CSS grid） */
+    .hm-grid{display:grid;gap:4px}
+    .hm-cell{min-width:26px;min-height:22px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:11px;color:#111}
+    .hm-legend{display:flex;gap:6px;align-items:center;font-size:12px;color:#666}
+    .hm-swatch{width:18px;height:12px;border-radius:4px;border:1px solid #ddd}
   </style>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <!-- 熱力圖外掛：matrix -->
-  <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-matrix@2.0.1/dist/chartjs-chart-matrix.min.js"></script>
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 </head>
 <body>
@@ -60,9 +64,9 @@
       <div id="periodText" class="muted" style="margin-top:6px;"></div>
     </div>
 
-    <!-- 狀態與參數 -->
+    <!-- 狀態 + 參數 -->
     <div class="card"><span id="autostatus" class="muted">初始化中…</span></div>
-    <div class="card row" id="chipsRow" style="gap:8px">
+    <div class="card row">
       <span class="chip">手續費率：<span id="feeRateChip">—</span></span>
       <span class="chip">交易稅率：<span id="taxRateChip">—</span></span>
       <span class="chip">最低手續費：<span id="minFeeChip">—</span></span>
@@ -71,21 +75,39 @@
       <span class="chip">Rf：<span id="rfChip">—</span></span>
     </div>
 
-    <!-- ✅ 機構級圖表（KPI 上方） -->
+    <!-- 🔷 機構級圖表區（置於 KPI 上方） -->
     <div class="card" id="instCharts" style="display:none">
       <h3 style="margin:6px 0">機構級圖表</h3>
+
+      <!-- 週次獲利 + 累積淨利 -->
+      <div class="chartbox"><canvas id="chWeekly"></canvas></div>
+
+      <!-- Waterfall（期間橋圖） -->
       <div class="chartbox"><canvas id="chWaterfall"></canvas></div>
-      <div class="chartbox"><canvas id="chWeekStack"></canvas></div>
-      <div class="chartbox"><canvas id="chWeekHeat"></canvas></div>
-      <div class="chartbox"><canvas id="chMonthHeat"></canvas></div>
+
+      <!-- 週度歸因堆疊（L1/L2/L3） -->
+      <div class="chartbox"><canvas id="chAttrib"></canvas></div>
+
+      <!-- Weekly Heatmap（52 週） -->
+      <div id="hmWrap" style="margin-top:6px">
+        <div class="hm-legend">
+          <span>週報酬熱力圖：</span>
+          <span class="hm-swatch" style="background:#e8f5e9"></span><span>小漲</span>
+          <span class="hm-swatch" style="background:#c8e6c9"></span><span>漲</span>
+          <span class="hm-swatch" style="background:#81c784"></span><span>大漲</span>
+          <span class="hm-swatch" style="background:#ffcdd2"></span><span>跌</span>
+          <span class="hm-swatch" style="background:#ef9a9a"></span><span>大跌</span>
+        </div>
+        <div id="hmGrid" class="hm-grid" style="grid-template-columns:repeat(26,1fr);margin-top:8px"></div>
+      </div>
     </div>
 
-    <!-- KPI 置頂 -->
+    <!-- KPI（置頂） -->
     <div class="card" id="kpiOptCard" style="display:none">
       <h3 style="margin:6px 0">最佳化 KPI（含判等）</h3>
 
       <div class="card" style="border-color:#f1dada;background:#fff6f6">
-        <strong>建議優化指標（先列 <span class="rate-improve">Improve (弱)</span> → 再 <span class="rate-adequate">Adequate (可)</span>；全部列出）</strong>
+        <strong>建議優化指標（先列 <span class="rate-improve">Improve (弱)</span> → 再 <span class="rate-adequate">Adequate (可)</span>，全部列出）</strong>
         <div class="scroll-x">
           <table id="kpiOptSuggest" style="margin-top:6px;width:100%">
             <thead><tr><th>指標</th><th>數值</th><th>建議</th><th>機構評語</th><th>參考區間</th></tr></thead>
