@@ -20,24 +20,23 @@
     th,td{border-bottom:1px solid #eee;padding:6px 8px;font-size:13px;white-space:nowrap}
     th{background:#fafafa;text-align:left}
     .back-link{margin-bottom:12px;display:inline-block}
-
     .buy-row  { background:#ffecec; }
     .sell-row { background:#ecffec; }
-
     .pnl-pos{ color:#d0021b; font-weight:600; }
     .pnl-neg{ color:#0f8a00; font-weight:600; }
-
     .rate-strong{color:#d0021b;font-weight:600}
     .rate-adequate{color:#222;font-weight:600}
     .rate-improve{color:#0f8a00;font-weight:600}
 
+    /* 圖表高度 */
     .chartbox{height:300px;margin-top:6px}
+    .chartgrid{display:grid;gap:12px;grid-template-columns:1fr; }
+    @media(min-width:1100px){ .chartgrid{grid-template-columns:1fr 1fr;} }
 
-    /* Weekly Heatmap（CSS grid） */
-    .hm-grid{display:grid;gap:4px}
-    .hm-cell{min-width:26px;min-height:22px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:11px;color:#111}
-    .hm-legend{display:flex;gap:6px;align-items:center;font-size:12px;color:#666}
-    .hm-swatch{width:18px;height:12px;border-radius:4px;border:1px solid #ddd}
+    /* Heatmap 表格 */
+    .hm{border-collapse:collapse;width:100%;font-size:12px}
+    .hm th,.hm td{border:1px solid #eee;padding:4px 6px;text-align:center;white-space:nowrap}
+    .hm th{background:#fafafa;position:sticky;top:0}
   </style>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -64,9 +63,9 @@
       <div id="periodText" class="muted" style="margin-top:6px;"></div>
     </div>
 
-    <!-- 狀態 + 參數 -->
+    <!-- 狀態＋參數 chips -->
     <div class="card"><span id="autostatus" class="muted">初始化中…</span></div>
-    <div class="card row">
+    <div class="card row" id="chipsRow" style="gap:8px">
       <span class="chip">手續費率：<span id="feeRateChip">—</span></span>
       <span class="chip">交易稅率：<span id="taxRateChip">—</span></span>
       <span class="chip">最低手續費：<span id="minFeeChip">—</span></span>
@@ -75,34 +74,42 @@
       <span class="chip">Rf：<span id="rfChip">—</span></span>
     </div>
 
-    <!-- 🔷 機構級圖表區（置於 KPI 上方） -->
+    <!-- ✅ 機構級圖表（置於 KPI 之上） -->
     <div class="card" id="instCharts" style="display:none">
       <h3 style="margin:6px 0">機構級圖表</h3>
 
-      <!-- 週次獲利 + 累積淨利 -->
-      <div class="chartbox"><canvas id="chWeekly"></canvas></div>
-
-      <!-- Waterfall（期間橋圖） -->
-      <div class="chartbox"><canvas id="chWaterfall"></canvas></div>
-
-      <!-- 週度歸因堆疊（L1/L2/L3） -->
-      <div class="chartbox"><canvas id="chAttrib"></canvas></div>
-
-      <!-- Weekly Heatmap（52 週） -->
-      <div id="hmWrap" style="margin-top:6px">
-        <div class="hm-legend">
-          <span>週報酬熱力圖：</span>
-          <span class="hm-swatch" style="background:#e8f5e9"></span><span>小漲</span>
-          <span class="hm-swatch" style="background:#c8e6c9"></span><span>漲</span>
-          <span class="hm-swatch" style="background:#81c784"></span><span>大漲</span>
-          <span class="hm-swatch" style="background:#ffcdd2"></span><span>跌</span>
-          <span class="hm-swatch" style="background:#ef9a9a"></span><span>大跌</span>
+      <div class="chartgrid">
+        <!-- (1) 週次 Waterfall -->
+        <div>
+          <div class="chartbox"><canvas id="chWaterfall"></canvas></div>
+          <p class="muted">週次 Waterfall（浮動長條）：正綠負紅；以前一週累積淨利為底。</p>
         </div>
-        <div id="hmGrid" class="hm-grid" style="grid-template-columns:repeat(26,1fr);margin-top:8px"></div>
+
+        <!-- (2) 週度歸因堆疊 -->
+        <div>
+          <div class="chartbox"><canvas id="chStackWeekly"></canvas></div>
+          <p class="muted">週度歸因：毛利 / 手續費 / 稅（堆疊），觀察成本侵蝕程度。</p>
+        </div>
+
+        <!-- (3) Weekly Heatmap -->
+        <div style="grid-column:1/-1">
+          <div id="weeklyHMWrap" class="scroll-x">
+            <table id="weeklyHM" class="hm"></table>
+          </div>
+          <p class="muted">Weekly Heatmap：縱軸年、橫軸週序（1~53），色階顯示每週報酬/獲利。</p>
+        </div>
+
+        <!-- (4) Monthly Heatmap -->
+        <div style="grid-column:1/-1">
+          <div id="monthlyHMWrap" class="scroll-x">
+            <table id="monthlyHM" class="hm"></table>
+          </div>
+          <p class="muted">Monthly Heatmap：縱軸年、橫軸月份（1~12），色階顯示月度報酬。</p>
+        </div>
       </div>
     </div>
 
-    <!-- KPI（置頂） -->
+    <!-- KPI 置頂 -->
     <div class="card" id="kpiOptCard" style="display:none">
       <h3 style="margin:6px 0">最佳化 KPI（含判等）</h3>
 
@@ -165,7 +172,7 @@
       </div>
     </div>
 
-    <!-- 交易明細 -->
+    <!-- 交易明細（逐筆） -->
     <div class="card">
       <h3 style="margin:6px 0">交易明細</h3>
       <div class="scroll-x"><table id="execTable"><thead></thead><tbody></tbody></table></div>
