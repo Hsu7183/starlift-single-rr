@@ -31,11 +31,12 @@
     .rate-adequate{color:#222;font-weight:600}
     .rate-improve{color:#0f8a00;font-weight:600}
 
-    /* 圖表高度 */
     .chartbox{height:300px;margin-top:6px}
   </style>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- 熱力圖外掛：matrix -->
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-matrix@2.0.1/dist/chartjs-chart-matrix.min.js"></script>
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 </head>
 <body>
@@ -59,7 +60,7 @@
       <div id="periodText" class="muted" style="margin-top:6px;"></div>
     </div>
 
-    <!-- 自動流程狀態 & 參數 chips -->
+    <!-- 狀態與參數 -->
     <div class="card"><span id="autostatus" class="muted">初始化中…</span></div>
     <div class="card row" id="chipsRow" style="gap:8px">
       <span class="chip">手續費率：<span id="feeRateChip">—</span></span>
@@ -70,13 +71,13 @@
       <span class="chip">Rf：<span id="rfChip">—</span></span>
     </div>
 
-    <!-- ✅（新增）每週獲利 + 累積獲利（浮動長條＋累計線，Y 軸=0~累計最大） -->
-    <div class="card" id="weeklyCard" style="display:none">
-      <h3 style="margin:6px 0">每週獲利（浮動長條）＋累積獲利（折線）</h3>
-      <div class="chartbox"><canvas id="chWeekly"></canvas></div>
-      <p class="muted" style="margin:6px 0 0">
-        X 軸為「週」（週一起算）。長條表示本週淨利（以前一週累積值為底的浮動長條），折線為累積淨利；Y 軸鎖定 0 ～ 累積淨利最大值，便於直觀閱讀。
-      </p>
+    <!-- ✅ 機構級圖表（KPI 上方） -->
+    <div class="card" id="instCharts" style="display:none">
+      <h3 style="margin:6px 0">機構級圖表</h3>
+      <div class="chartbox"><canvas id="chWaterfall"></canvas></div>
+      <div class="chartbox"><canvas id="chWeekStack"></canvas></div>
+      <div class="chartbox"><canvas id="chWeekHeat"></canvas></div>
+      <div class="chartbox"><canvas id="chMonthHeat"></canvas></div>
     </div>
 
     <!-- KPI 置頂 -->
@@ -84,7 +85,7 @@
       <h3 style="margin:6px 0">最佳化 KPI（含判等）</h3>
 
       <div class="card" style="border-color:#f1dada;background:#fff6f6">
-        <strong>建議優化指標（先列 <span class="rate-improve">Improve (弱)</span> → 再 <span class="rate-adequate">Adequate (可)</span>，全部列出）</strong>
+        <strong>建議優化指標（先列 <span class="rate-improve">Improve (弱)</span> → 再 <span class="rate-adequate">Adequate (可)</span>；全部列出）</strong>
         <div class="scroll-x">
           <table id="kpiOptSuggest" style="margin-top:6px;width:100%">
             <thead><tr><th>指標</th><th>數值</th><th>建議</th><th>機構評語</th><th>參考區間</th></tr></thead>
@@ -142,7 +143,7 @@
       </div>
     </div>
 
-    <!-- 交易明細（逐筆，全費口徑） -->
+    <!-- 交易明細 -->
     <div class="card">
       <h3 style="margin:6px 0">交易明細</h3>
       <div class="scroll-x"><table id="execTable"><thead></thead><tbody></tbody></table></div>
@@ -157,6 +158,6 @@
 
   <!-- 主程式 -->
   <script src="etf-engine.js?v=fullfee-v1"></script>
-  <script src="etf-00909.js?v=kpi-opt-v6"></script>
+  <script src="etf-00909.js?v=kpi-opt-v7"></script>
 </body>
 </html>
