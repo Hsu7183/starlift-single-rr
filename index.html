@@ -41,10 +41,7 @@
       column-gap:6px;
     }
     .label{ text-align:center; color:#111; }
-    .range{
-      text-align:center; color:#999; font-size:10px;
-      white-space: nowrap;
-    }
+    .range{ text-align:center; color:#999; font-size:10px; white-space: nowrap; }
     .val{ text-align:center; font-weight:700; }
     .val.pos{ color:#d32f2f; } .val.neg{ color:#10b981; } .val.neu{ color:#666; }
 
@@ -64,7 +61,6 @@
     <div class="strategy-col">
       <p class="subcat">順勢型</p>
 
-      <!-- 台指近-0807版本 -->
       <a class="card" href="0807.html">
         <p class="card-title red">台指近-0807版本</p>
         <div class="lines">
@@ -82,14 +78,13 @@
         </div>
       </a>
 
-      <!-- 台指近-1001版本 -->
       <a class="card" href="1001.html">
         <p class="card-title red">台指近-1001版本</p>
         <div class="lines">
           <p class="line"><span class="label">近1週報酬率</span><span id="wk1-range-1001" class="range">—</span><span id="wk1-1001" class="val neu">—</span></p>
           <p class="line"><span class="label">近2週報酬率</span><span id="wk2-range-1001" class="range">—</span><span id="wk2-1001" class="val neu">—</span></p>
           <p class="line"><span class="label">近1月報酬率</span><span id="m1-range-1001"  class="range">—</span><span id="m1-1001"  class="val neu">—</span></p>
-          <p class="line"><span class="label">近2月報酬率</span><span id="m2-range-1001"  class="range">—</span><span id="m2-1001"  class="val neu">—</span></p>
+          <p class="line"><span class="label">近2月報酱率</span><span id="m2-range-1001"  class="range">—</span><span id="m2-1001"  class="val neu">—</span></p>
           <p class="line"><span class="label">近3月報酬率</span><span id="m3-range-1001"  class="range">—</span><span id="m3-1001"  class="val neu">—</span></p>
           <p class="line"><span class="label">近6月報酬率</span><span id="m6-range-1001"  class="range">—</span><span id="m6-1001"  class="val neu">—</span></p>
           <p class="line"><span class="label">近1年報酬率</span><span id="y1-range-1001"  class="range">—</span><span id="y1-1001"  class="val neu">—</span></p>
@@ -104,7 +99,6 @@
     <div class="strategy-col">
       <p class="subcat">逆勢型</p>
 
-      <!-- 00909-ETF版本 -->
       <a class="card" href="etf-00909.html">
         <p class="card-title red">00909-ETF版本</p>
         <div class="lines">
@@ -121,7 +115,6 @@
           <p class="period">期間：<span id="period-00909">—</span></p>
         </div>
       </a>
-      <!-- 研發中卡片已刪除 -->
     </div>
 
     <div class="strategy-col">
@@ -166,37 +159,34 @@
 
     const WANT = { "0807": /0807/i, "1001": /1001/i, "00909": /00909/i };
 
-    function pubUrl(path){ const { data } = sb.storage.from(BUCKET).getPublicUrl(path); return data?.publicUrl || '#'; }
+    const pubUrl = (path) => sb.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
 
-    // ---- 這裡是修正重點：遞迴列 2 層資料夾，抓到放在日期資料夾內的檔案 ----
+    // 遞迴列兩層（根目錄 + 第一層資料夾）
     async function listDir(prefix){
-      const p = (prefix && !prefix.endsWith('/')) ? (prefix + '/') : (prefix || '');
+      const p = (prefix && !prefix.endsWith('/')) ? prefix + '/' : (prefix || '');
       const { data, error } = await sb.storage.from(BUCKET).list(p, { limit:1000, sortBy:{ column:'name', order:'asc' }});
       if (error) return [];
       return (data || []).map(it => ({ ...it, fullPath: p + it.name }));
     }
-    async function listDeep(prefixes=['']){
+    async function listDeep(){
       const out=[];
-      for(const pref of prefixes){
-        const level1 = await listDir(pref);
-        for(const it of level1){
-          if (it.id === null) {  // 這是資料夾
-            const level2 = await listDir(it.fullPath);
-            for(const f of level2){ if (f.id !== null) out.push(f); }
-          } else {
-            out.push(it);
-          }
+      const level1 = await listDir('');
+      for(const it of level1){
+        if (it.id === null){ // folder
+          const level2 = await listDir(it.fullPath);
+          for(const f of level2){ if (f.id !== null) out.push(f); }
+        }else{
+          out.push(it);
         }
       }
       return out;
     }
     async function latestFileDeep(regex){
-      const entries = await listDeep(['']);                     // 根目錄 + 一層日期資料夾
-      const files = entries.filter(it => it.id !== null && regex.test(it.name));
-      if(files.length===0) return null;
-      const scoreDateInName = n => { const m=(n||'').match(/\b(20\\d{6})\\b/g); return m? Math.max(...m.map(s=>+s)):0; };
+      const files = (await listDeep()).filter(it => it.id !== null && regex.test(it.name));
+      if (!files.length) return null;
+      const scoreInName = n => { const m = (n||'').match(/\b(20\d{6})\b/g); return m ? Math.max(...m.map(s=>+s)) : 0; };
       files.sort((a,b)=>{
-        const sa=scoreDateInName(a.name), sb=scoreDateInName(b.name);
+        const sa=scoreInName(a.name), sb=scoreInName(b.name);
         if(sa!==sb) return sb-sa;
         const ta=a.updated_at? Date.parse(a.updated_at):0, tb=b.updated_at? Date.parse(b.updated_at):0;
         if(ta!==tb) return tb-ta;
@@ -204,24 +194,27 @@
       });
       return files[0];
     }
-    // ----------------------------------------------------------------------
 
+    // 讀 manifest（讀不到就靜默回 null，不中斷）
     async function readManifest(name){
-      try{ const { data } = await sb.storage.from(BUCKET).download(`manifests/${name}.json`);
-           if (!data) return null; return JSON.parse(await data.text()); }
-      catch{ return null; }
+      try{
+        const { data } = await sb.storage.from(BUCKET).download(`manifests/${name}.json`);
+        if (!data) return null;
+        return JSON.parse(await data.text());
+      }catch{ return null; }
     }
 
-    const CANON_RE   = /^(\\d{14})\\.0{6}\\s+(\\d+\\.\\d{6})\\s+(新買|平賣|新賣|平買|強制平倉|強平)\\s*$/;
-    const EXTRACT_RE = /.*?(\\d{14})(?:\\.0{1,6})?\\s+(\\d+(?:\\.\\d{1,6})?)\\s*(新買|平賣|新賣|平買|強制平倉|強平)\\s*$/;
+    // 正規式（注意：這裡不能用雙反斜線）
+    const CANON_RE   = /^(\d{14})\.0{6}\s+(\d+\.\d{6})\s+(新買|平賣|新賣|平買|強制平倉|強平)\s*$/;
+    const EXTRACT_RE = /.*?(\d{14})(?:\.0{1,6})?\s+(\d+(?:\.\d{1,6})?)\s*(新買|平賣|新賣|平買|強制平倉|強平)\s*$/;
 
     function normalizeText(raw){
-      let s = raw.replace(/\\ufeff/gi,'').replace(/\\u200b|\\u200c|\\u200d/gi,'');
-      s = s.replace(/[\\x00-\\x09\\x0B-\\x1F\\x7F]/g,'').replace(/\\r\\n?/g,'\\n').replace(/\\u3000/g,' ');
-      return s.split('\\n').map(l=>l.replace(/\\s+/g,' ').trim()).filter(Boolean).join('\\n');
+      let s = raw.replace(/\ufeff/gi,'').replace(/\u200b|\u200c|\u200d/gi,'');
+      s = s.replace(/[\x00-\x09\x0B-\x1F\x7F]/g,'').replace(/\r\n?/g,'\n').replace(/\u3000/g,' ');
+      return s.split('\n').map(l=>l.replace(/\s+/g,' ').trim()).filter(Boolean).join('\n');
     }
     function canonicalize(txt){
-      const out=[], lines = txt.split('\\n'); let ok=0;
+      const out=[], lines = txt.split('\n'); let ok=0;
       for(const l of lines){
         const m = l.match(EXTRACT_RE);
         if(m){
@@ -230,7 +223,7 @@
           out.push(`${ts}.000000 ${p6} ${act}`); ok++;
         }
       }
-      return { canon: out.join('\\n'), ok };
+      return { canon: out.join('\n'), ok };
     }
     async function fetchSmart(url){
       const res = await fetch(url,{cache:'no-store'}); if(!res.ok) throw new Error(`${res.status} ${res.statusText}`);
@@ -249,7 +242,7 @@
     }
     function parseCanon(text){
       const rows=[]; if(!text) return rows;
-      for(const line of text.split('\\n')){ const m = line.match(CANON_RE); if (m) rows.push({ ts:m[1], line }); }
+      for(const line of text.split('\n')){ const m = line.match(CANON_RE); if (m) rows.push({ ts:m[1], line }); }
       rows.sort((a,b)=> a.ts.localeCompare(b.ts)); return rows;
     }
     function mergeByBaseline(baseText, latestText){
@@ -259,7 +252,7 @@
       const added = baseMax ? B.filter(x => x.ts > baseMax).map(x => x.line) : B.map(x => x.line);
       const mergedLines = [...A.map(x => x.line), ...added];
       const endDay = mergedLines.length ? mergedLines[mergedLines.length-1].match(CANON_RE)[1].slice(0,8) : baseMin;
-      return { combined: mergedLines.join('\\n'), start8: baseMin, end8: endDay };
+      return { combined: mergedLines.join('\n'), start8: baseMin, end8: endDay };
     }
 
     function dailySeriesFromMerged(mergedTxt){
@@ -272,8 +265,8 @@
       return {days, vals};
     }
 
-    function d8(s){ return new Date(`${s.slice(0,4)}-${s.slice(4,6)}-${s.slice(6,8)}T00:00:00`); }
-    function fmtD8(s){ return `${s.slice(0,4)}/${s.slice(4,6)}/${s.slice(6,8)}`; }
+    const d8=s=> new Date(`${s.slice(0,4)}-${s.slice(4,6)}-${s.slice(6,8)}T00:00:00`);
+    const fmtD8=s=> `${s.slice(0,4)}/${s.slice(4,6)}/${s.slice(6,8)}`;
 
     function simpleReturnWithRange(days, vals, winDays){
       if(!days.length) return {ret:null, range:'---'};
@@ -301,31 +294,30 @@
       return { ret: sum/1_000_000, range: `${fmtD8(startDay)} - ${fmtD8(end)}` };
     }
 
-    function setVal(id, v){
-      const el = document.getElementById(id); if(!el) return;
+    const setVal=(id,v)=>{
+      const el=document.getElementById(id); if(!el) return;
       el.classList.remove('pos','neg','neu');
-      if (v == null) { el.textContent='---'; el.classList.add('neu'); return; }
-      el.textContent = (v*100).toFixed(2)+'%';
-      el.classList.add(v>0 ? 'pos' : (v<0 ? 'neg' : 'neu'));
-    }
-    function setText(id, text){ const el=document.getElementById(id); if(el) el.textContent=text||'---'; }
+      if (v==null){ el.textContent='---'; el.classList.add('neu'); return; }
+      el.textContent=(v*100).toFixed(2)+'%';
+      el.classList.add(v>0?'pos':(v<0?'neg':'neu'));
+    };
+    const setText=(id,text)=>{ const el=document.getElementById(id); if(el) el.textContent=text||'---'; };
 
     async function fillCard(key){
       const set = (suf, v)=>setVal(`${suf}-${key}`, v);
       const setR = (suf, r)=>setText(`${suf}-range-${key}`, r);
-      const setPeriod = (text)=>{ const el=document.getElementById(`period-${key}`); if(el) el.textContent=text; };
+      const setPeriod = text => { const el=document.getElementById(`period-${key}`); if(el) el.textContent=text; };
 
       try{
-        // 改用遞迴列檔案（抓得到日期資料夾內的 00909 檔案）
         const latest = await latestFileDeep(WANT[key]);
         if(!latest){
           ['wk1','wk2','m1','m2','m3','m6','y1','y2','y3','y6'].forEach(x=> { set(x,null); setR(x,'---'); });
           setPeriod('—'); return;
         }
+        // 重要：要用 fullPath 取公開 URL（含資料夾）
         const latestText = (await fetchSmart(pubUrl(latest.fullPath))).canon;
 
-        // 基準
-        const manifest = await readManifest(key);
+        const manifest = await readManifest(key);  // 讀不到就 null，不擋流程
         let merged = latestText, start8='', end8='';
         if(manifest?.baseline_path){
           const baseText = (await fetchSmart(pubUrl(manifest.baseline_path))).canon;
