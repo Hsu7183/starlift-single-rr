@@ -84,7 +84,7 @@
           <p class="line"><span class="label">近1週報酬率</span><span id="wk1-range-1001" class="range">—</span><span id="wk1-1001" class="val neu">—</span></p>
           <p class="line"><span class="label">近2週報酬率</span><span id="wk2-range-1001" class="range">—</span><span id="wk2-1001" class="val neu">—</span></p>
           <p class="line"><span class="label">近1月報酬率</span><span id="m1-range-1001"  class="range">—</span><span id="m1-1001"  class="val neu">—</span></p>
-          <p class="line"><span class="label">近2月報酱率</span><span id="m2-range-1001"  class="range">—</span><span id="m2-1001"  class="val neu">—</span></p>
+          <p class="line"><span class="label">近2月報酬率</span><span id="m2-range-1001"  class="range">—</span><span id="m2-1001"  class="val neu">—</span></p>
           <p class="line"><span class="label">近3月報酬率</span><span id="m3-range-1001"  class="range">—</span><span id="m3-1001"  class="val neu">—</span></p>
           <p class="line"><span class="label">近6月報酬率</span><span id="m6-range-1001"  class="range">—</span><span id="m6-1001"  class="val neu">—</span></p>
           <p class="line"><span class="label">近1年報酬率</span><span id="y1-range-1001"  class="range">—</span><span id="y1-1001"  class="val neu">—</span></p>
@@ -161,28 +161,27 @@
 
     const pubUrl = (path) => sb.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
 
-    // 遞迴列兩層（根目錄 + 第一層資料夾）
+    // ===== 遞迴列最多 3 層（根 / 第一層 / 第二層）=====
     async function listDir(prefix){
       const p = (prefix && !prefix.endsWith('/')) ? prefix + '/' : (prefix || '');
       const { data, error } = await sb.storage.from(BUCKET).list(p, { limit:1000, sortBy:{ column:'name', order:'asc' }});
       if (error) return [];
       return (data || []).map(it => ({ ...it, fullPath: p + it.name }));
     }
-    async function listDeep(){
-      const out=[];
-      const level1 = await listDir('');
-      for(const it of level1){
-        if (it.id === null){ // folder
-          const level2 = await listDir(it.fullPath);
-          for(const f of level2){ if (f.id !== null) out.push(f); }
+    async function listDeepN(prefix, depth, maxDepth, out){
+      if(depth>maxDepth) return;
+      const entries = await listDir(prefix);
+      for(const it of entries){
+        if(it.id === null){
+          await listDeepN(it.fullPath, depth+1, maxDepth, out);
         }else{
           out.push(it);
         }
       }
-      return out;
     }
     async function latestFileDeep(regex){
-      const files = (await listDeep()).filter(it => it.id !== null && regex.test(it.name));
+      const all=[]; await listDeepN('', 0, 2, all);   // 0=root, 1=第一層, 2=第二層
+      const files = all.filter(it => it.id !== null && regex.test(it.name));
       if (!files.length) return null;
       const scoreInName = n => { const m = (n||'').match(/\b(20\d{6})\b/g); return m ? Math.max(...m.map(s=>+s)) : 0; };
       files.sort((a,b)=>{
@@ -195,7 +194,7 @@
       return files[0];
     }
 
-    // 讀 manifest（讀不到就靜默回 null，不中斷）
+    // 讀 manifest（404/400 靜默忽略）
     async function readManifest(name){
       try{
         const { data } = await sb.storage.from(BUCKET).download(`manifests/${name}.json`);
@@ -204,7 +203,7 @@
       }catch{ return null; }
     }
 
-    // 正規式（注意：這裡不能用雙反斜線）
+    // 解析（注意單反斜線）
     const CANON_RE   = /^(\d{14})\.0{6}\s+(\d+\.\d{6})\s+(新買|平賣|新賣|平買|強制平倉|強平)\s*$/;
     const EXTRACT_RE = /.*?(\d{14})(?:\.0{1,6})?\s+(\d+(?:\.\d{1,6})?)\s*(新買|平賣|新賣|平買|強制平倉|強平)\s*$/;
 
@@ -314,10 +313,9 @@
           ['wk1','wk2','m1','m2','m3','m6','y1','y2','y3','y6'].forEach(x=> { set(x,null); setR(x,'---'); });
           setPeriod('—'); return;
         }
-        // 重要：要用 fullPath 取公開 URL（含資料夾）
         const latestText = (await fetchSmart(pubUrl(latest.fullPath))).canon;
 
-        const manifest = await readManifest(key);  // 讀不到就 null，不擋流程
+        const manifest = await readManifest(key);  // 不存在就忽略
         let merged = latestText, start8='', end8='';
         if(manifest?.baseline_path){
           const baseText = (await fetchSmart(pubUrl(manifest.baseline_path))).canon;
@@ -331,17 +329,27 @@
 
         const {days, vals} = dailySeriesFromMerged(merged);
 
-        const r_wk1 = simpleReturnWithRange(days, vals, 7);   set('wk1', r_wk1.ret); setR('wk1', r_wk1.range);
-        const r_wk2 = simpleReturnWithRange(days, vals, 14);  set('wk2', r_wk2.ret); setR('wk2', r_wk2.range);
-        const r_m1  = simpleReturnWithRange(days, vals, 30);  set('m1',  r_m1.ret);  setR('m1',  r_m1.range);
-        const r_m2  = simpleReturnWithRange(days, vals, 60);  set('m2',  r_m2.ret);  setR('m2',  r_m2.range);
-        const r_m3  = simpleReturnWithRange(days, vals, 90);  set('m3',  r_m3.ret);  setR('m3',  r_m3.range);
-        const r_m6  = simpleReturnWithRange(days, vals, 180); set('m6',  r_m6.ret);  setR('m6',  r_m6.range);
+        set('wk1', simpleReturnWithRange(days, vals, 7).ret);
+        setR('wk1', simpleReturnWithRange(days, vals, 7).range);
+        set('wk2', simpleReturnWithRange(days, vals, 14).ret);
+        setR('wk2', simpleReturnWithRange(days, vals, 14).range);
+        set('m1', simpleReturnWithRange(days, vals, 30).ret);
+        setR('m1', simpleReturnWithRange(days, vals, 30).range);
+        set('m2', simpleReturnWithRange(days, vals, 60).ret);
+        setR('m2', simpleReturnWithRange(days, vals, 60).range);
+        set('m3', simpleReturnWithRange(days, vals, 90).ret);
+        setR('m3', simpleReturnWithRange(days, vals, 90).range);
+        set('m6', simpleReturnWithRange(days, vals, 180).ret);
+        setR('m6', simpleReturnWithRange(days, vals, 180).range);
 
-        const r_y1  = simpleReturnYearWindowWithRange(days, vals, 365);  set('y1', r_y1.ret); setR('y1', r_y1.range);
-        const r_y2  = simpleReturnYearWindowWithRange(days, vals, 730);  set('y2', r_y2.ret); setR('y2', r_y2.range);
-        const r_y3  = simpleReturnYearWindowWithRange(days, vals, 1095); set('y3', r_y3.ret); setR('y3', r_y3.range);
-        const r_y6  = simpleReturnYearWindowWithRange(days, vals, 2190); set('y6', r_y6.ret); setR('y6', r_y6.range);
+        set('y1', simpleReturnYearWindowWithRange(days, vals, 365).ret);
+        setR('y1', simpleReturnYearWindowWithRange(days, vals, 365).range);
+        set('y2', simpleReturnYearWindowWithRange(days, vals, 730).ret);
+        setR('y2', simpleReturnYearWindowWithRange(days, vals, 730).range);
+        set('y3', simpleReturnYearWindowWithRange(days, vals, 1095).ret);
+        setR('y3', simpleReturnYearWindowWithRange(days, vals, 1095).range);
+        set('y6', simpleReturnYearWindowWithRange(days, vals, 2190).ret);
+        setR('y6', simpleReturnYearWindowWithRange(days, vals, 2190).range);
 
         setPeriod(`${start8||'—'} - ${end8||'—'}`);
       }catch(e){
