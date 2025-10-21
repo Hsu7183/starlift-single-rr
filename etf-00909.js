@@ -1,5 +1,5 @@
-// etf-00909.js — 最佳化交易明細 + KPI大全（以本金1,000,000起算）
-// 版本：kpi-opt-v2
+// etf-00909.js — 置頂KPI + 自動挑問題指標 + 擴充機構級KPI
+// 版本：kpi-opt-v3
 (function () {
   const $ = s => document.querySelector(s);
   const status = $('#autostatus');
@@ -48,33 +48,13 @@
     return best.txt || new TextDecoder('utf-8').decode(buf);
   }
 
-  // ===== round-trip（保留）=====
-  function renderTradesTable(trades){
-    const thead=$('#tradeTable thead'), tbody=$('#tradeTable tbody');
-    thead.innerHTML=`<tr>
-      <th>方向</th><th>進場時間</th><th>進場價</th>
-      <th>出場時間</th><th>出場價</th><th>股數</th>
-      <th>買方手續費</th><th>賣方手續費</th><th>賣方交易稅</th>
-      <th>損益</th><th>持有天數</th></tr>`;
-    tbody.innerHTML='';
-    for(const t of trades){
-      const tr=document.createElement('tr');
-      tr.innerHTML=`<td>${t.side}</td><td>${t.inTs}</td><td>${t.inPx.toFixed(2)}</td>
-      <td>${t.outTs}</td><td>${t.outPx.toFixed(2)}</td><td>${t.shares.toLocaleString()}</td>
-      <td>${t.buyFee.toLocaleString()}</td><td>${t.sellFee.toLocaleString()}</td>
-      <td>${t.sellTax.toLocaleString()}</td><td>${Math.round(t.pnl).toLocaleString()}</td>
-      <td>${t.holdDays.toFixed(2)}</td>`;
-      tbody.appendChild(tr);
-    }
-  }
-
   // ===== 共用格式化 =====
   const fmtPct=v=> (v==null||!isFinite(v))?'—':(v*100).toFixed(2)+'%';
   const pnlSpan=v=>{ const cls=v>0?'pnl-pos':(v<0?'pnl-neg':''); return `<span class="${cls}">${Math.round(v||0).toLocaleString()}</span>`; };
   const rateHtml=(label)=>`<span class="${label==='Strong'?'rate-strong':(label==='Adequate'?'rate-adequate':'rate-improve')}">${label}</span>`;
   const tsPretty=ts14=>`${ts14.slice(0,4)}/${ts14.slice(4,6)}/${ts14.slice(6,8)} ${ts14.slice(8,10)}:${ts14.slice(10,12)}`;
 
-  // ===== 原交易明細表 =====
+  // ===== 原交易明細表（保留） =====
   function renderExecsTable(execs){
     const thead=$('#execTable thead'), tbody=$('#execTable tbody');
     thead.innerHTML=`<tr>
@@ -106,7 +86,7 @@
   function fees(price, shares, isSell){ const gross=price*shares; const fee=Math.max(CFG.minFee, gross*CFG.feeRate); const tax=isSell? gross*CFG.taxRate : 0; return { gross, fee, tax }; }
   function buyCostLots(price, lots){ const shares=lots*OPT.unitShares; const f=fees(price, shares, false); return { cost:f.gross+f.fee, shares, f }; }
 
-  // ===== 最佳化：先用第一筆價估最大總張數，再 1/1/2 分配，逐筆以當時價檢查剩餘資金 =====
+  // ===== 最佳化（本金 100萬；1/1/2 分配，可受資金限制調整）=====
   function buildOptimizedExecs(execs){
     const segs=splitSegments(execs), out=[]; let cumPnlAll=0;
     for(const seg of segs){
@@ -151,10 +131,10 @@
     return out;
   }
 
-  // ===== KPI 門檻（Strong / Adequate / Improve）=====
+  // ===== KPI 評級門檻 =====
   const BANDS = {
     CAGR:{strong:0.15, adequate:0.05},
-    MaxDD:{strong:-0.10, adequate:-0.25},         // 以比例(-10%, -25%)判斷
+    MaxDD:{strong:-0.10, adequate:-0.25},
     Vol:{strong:0.20, adequate:0.35},
     Sharpe:{strong:1.0, adequate:0.5},
     Sortino:{strong:1.5, adequate:0.75},
@@ -165,38 +145,49 @@
     Rec_days:{strong:45, adequate:90},
     MCL:{strong:5, adequate:10},
     Payoff:{strong:1.5, adequate:1.0},
-    CostRatio:{strong:0.001, adequate:0.003},     // 手續費+稅/總成交額 <0.1% / <0.3%
-    Turnover:{strong:1.0, adequate:2.0},          // 成交額/本金，1~2x屬合理
-    RtVol:{strong:1.0, adequate:0.5},             // Return/Vol
+    CostRatio:{strong:0.001, adequate:0.003},
+    Turnover:{strong:1.0, adequate:2.0},
+    RtVol:{strong:1.0, adequate:0.5},
     MAR:{strong:1.0, adequate:0.3},
     Omega:{strong:1.5, adequate:1.0},
-    VaR95:{strong:-0.02, adequate:-0.04},         // 日VaR（比例）>-2%/-4%為佳
-    CVaR95:{strong:-0.03, adequate:-0.06}
+    VaR95:{strong:-0.02, adequate:-0.04},
+    CVaR95:{strong:-0.03, adequate:-0.06},
+    UI:{strong:0.05, adequate:0.12},          // Ulcer Index（越小越好）
+    Martin:{strong:0.8, adequate:0.3},        // Martin = annRet / UI
+    GPR:{strong:1.5, adequate:1.0},           // Gain-to-Pain
+    Tail:{strong:1.5, adequate:1.0},          // Tail Ratio
   };
   const rateHigher=(v,b)=> v>=b.strong ? 'Strong' : (v>=b.adequate ? 'Adequate' : 'Improve');
   const rateLower=(v,b)=> v<=b.strong ? 'Strong' : (v<=b.adequate ? 'Adequate' : 'Improve');
 
-  // ===== 由最佳化明細計算 KPI =====
+  // ===== KPI 計算（擴充版，不需市場基準）=====
   function computeKPIFromOpt(optExecs){
     if(optExecs.length===0) return null;
 
     // 權益序列（事件→日末）
     let equity=OPT.capital;
-    const timeline=[], tradePnls=[], tradeFees=[], tradeTaxes=[];
+    const timeline=[], tradePnls=[], tradeFees=[], tradeTaxes=[], holdDaysArr=[];
     let grossBuy=0, grossSell=0;
+
+    // 生成持倉段的持有天數（由 BUY 到下一個 SELL）
+    let segStartMs=null;
+
     for(const e of optExecs){
       if(e.side==='BUY'){
         equity -= (e.cost||0);
         grossBuy += (e.buyAmount||0);
+        if(segStartMs==null) segStartMs = e.tsMs;
       }else{
         const settle=(e.sellAmount||0) - (e.fee||0) - (e.tax||0);
         equity += settle;
         if(typeof e.pnlFull==='number') tradePnls.push(e.pnlFull);
         tradeFees.push(e.fee||0); tradeTaxes.push(e.tax||0);
         grossSell += (e.sellAmount||0);
+        if(segStartMs!=null){ holdDaysArr.push((e.tsMs - segStartMs)/(24*60*60*1000)); segStartMs=null; }
       }
       timeline.push({t:e.tsMs, eq:equity});
     }
+
     // 日末合併
     const byDay=new Map();
     for(const p of timeline){ const d=new Date(p.t).toISOString().slice(0,10); byDay.set(d,p.eq); }
@@ -219,12 +210,13 @@
     const sharpe=vol>0? (annRet-CFG.rf)/vol : 0;
     const sortino=downside>0? (annRet-CFG.rf)/downside : 0;
 
-    // MaxDD / TU / Recovery
+    // Drawdown 序列、MaxDD / TU / Recovery、Ulcer Index
     let peak=eqs[0], maxDD=0, curU=0, maxU=0, recDays=0, inDraw=false, troughIdx=0, peakIdx=0, recFound=false;
+    const ddSeries=[];
     for(let i=0;i<eqs.length;i++){
-      const v=eqs[i];
-      if(v>peak){ peak=v; if(inDraw){ inDraw=false; } }
-      const dd=(v-peak)/peak; if(dd<maxDD){ maxDD=dd; inDraw=true; troughIdx=i; peakIdx = eqs.findIndex((x,idx)=> idx<=i && x===peak); }
+      const v=eqs[i]; if(v>peak){ peak=v; if(inDraw){ inDraw=false; } }
+      const dd=(v-peak)/peak; ddSeries.push(dd);
+      if(dd<maxDD){ maxDD=dd; inDraw=true; troughIdx=i; peakIdx = eqs.findIndex((x,idx)=> idx<=i && x===peak); }
       if(inDraw){ curU++; maxU=Math.max(maxU,curU); } else curU=0;
     }
     if(peakIdx<troughIdx){
@@ -232,6 +224,7 @@
       for(let i=troughIdx;i<eqs.length;i++){ if(eqs[i]>=prePeak){ recDays=i-troughIdx; recFound=true; break; } }
       if(!recFound) recDays=eqs.length-1-troughIdx;
     }
+    const UI = Math.sqrt(ddSeries.filter(x=>x<0).reduce((s,x)=>s+Math.pow(x,2),0)/Math.max(1,ddSeries.filter(x=>x<0).length)) * 1; // 比例
 
     // 交易層級
     const wins=tradePnls.filter(x=>x>0), losses=tradePnls.filter(x=>x<0);
@@ -240,8 +233,9 @@
     const expectancy=tradePnls.length? tradePnls.reduce((a,b)=>a+b,0)/tradePnls.length : 0;
     const payoff=(wins.length? wins.reduce((a,b)=>a+b,0)/wins.length : 0) / (Math.abs(losses.length? losses.reduce((a,b)=>a+b,0)/losses.length : 1));
     let mcl=0, cur=0; for(const p of tradePnls){ if(p<0){ cur++; mcl=Math.max(mcl,cur);} else cur=0; }
+    const avgHoldDays = holdDaysArr.length? holdDaysArr.reduce((a,b)=>a+b,0)/holdDaysArr.length : 0;
 
-    // 偏態/峰度
+    // 偏態/峰度、VaR/CVaR、Omega、Tail/Gain-to-Pain、Martin
     const skew = (()=>{
       if(rets.length<3 || sd===0) return 0;
       const n=rets.length; return (n/((n-1)*(n-2))) * rets.reduce((s,x)=>s+Math.pow((x-mean)/sd,3),0);
@@ -251,17 +245,18 @@
       const n=rets.length;
       const m4 = rets.reduce((s,x)=>s+Math.pow((x-mean),4),0)/n;
       const g2 = m4/Math.pow(sd,4) - 3;
-      return g2+3; // 轉為Pearson峰度
+      return g2+3;
     })();
-
-    // VaR/CVaR(95%)、Omega(0%)
     const sorted=[...rets].sort((a,b)=>a-b);
     const idx=Math.max(0, Math.floor(0.05*(sorted.length-1)));
-    const VaR95 = sorted[idx] || 0; // 一日VaR（負值代表風險）
+    const VaR95 = sorted[idx] || 0;
     const tail=sorted.slice(0,idx+1); const CVaR95 = tail.length? tail.reduce((a,b)=>a+b,0)/tail.length : 0;
-    const posProb=rets.filter(x=>x>0).length/(rets.length||1);
-    const negProb=rets.filter(x=>x<0).length/(rets.length||1);
-    const Omega = negProb===0 ? 9.99 : (posProb/negProb);
+    const pos=rets.filter(x=>x>0), neg2=rets.filter(x=>x<0);
+    const TailRatio = (pos.length? pos[Math.floor(0.95*(pos.length-1))] : 0) / Math.abs(neg2.length? neg2[Math.floor(0.05*(neg2.length-1))] : 1);
+    const posSum = pos.reduce((a,b)=>a+b,0), negAbs = Math.abs(neg2.reduce((a,b)=>a+b,0));
+    const GainPain = negAbs>0? posSum/negAbs : 9.99;
+    const Omega = neg2.length===0 ? 9.99 : (pos.length/neg2.length);
+    const Martin = UI>0 ? annRet/UI : 0;
 
     // 成本/成交額
     const totalFees=tradeFees.reduce((a,b)=>a+b,0);
@@ -277,44 +272,53 @@
 
     return {
       period:{start:days[0], end:days.at(-1), years},
-      equity:{start:OPT.capital, end:eqs.at(-1), series:eqs, days},
-      returns:{daily:rets, mean, annRet, vol, downside, skew, kurt, VaR95, CVaR95, Omega},
-      pnl:{trades:tradePnls, wins, losses, total:tradePnls.reduce((a,b)=>a+b,0), maxWin:Math.max(...tradePnls,0), maxLoss:Math.min(...tradePnls,0)},
-      risk:{maxDD, TU_days:maxU, Rec_days:recDays, MCL:mcl},
+      equity:{start:OPT.capital, end:eqs.at(-1), series:eqs, days, ddSeries},
+      returns:{daily:rets, mean, annRet, vol, downside, skew, kurt, VaR95, CVaR95, Omega, TailRatio, GainPain},
+      pnl:{trades:tradePnls, wins, losses, total:tradePnls.reduce((a,b)=>a+b,0), maxWin:Math.max(...tradePnls,0), maxLoss:Math.min(...tradePnls,0), avgHoldDays},
+      risk:{maxDD, TU_days:maxU, Rec_days:recDays, MCL:mcl, UI, Martin},
       ratios:{CAGR, sharpe, sortino, PF, hit, expectancy, payoff, calmar, totalRet, rtVol},
       cost:{totalFees,totalTaxes,totalCost,grossBuy,grossSell,turnover,avgTradeValue,costRatio}
     };
   }
 
-  // ===== 渲染 KPI =====
+  // ===== 渲染工具 =====
   function fillRows(tbodySel, rows){
     const tb=$(tbodySel); tb.innerHTML='';
     for(const r of rows){
       const tr=document.createElement('tr');
-      tr.innerHTML=`<td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td>${rateHtml(r[3])}</td><td class="subtle">${r[4]||'—'}</td>`;
+      tr.innerHTML=`<td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td>${r[3] ? rateHtml(r[3]) : '—'}</td><td class="subtle">${r[4]||'—'}</td>`;
       tb.appendChild(tr);
     }
   }
+  function gatherRatings(rows){ // rows: [name, valueStr, desc, rating, bandText]
+    const all=[]; for(const r of rows){ if(r[3]) all.push({name:r[0], value:r[1], desc:r[2], rating:r[3], band:r[4]}); }
+    return all;
+  }
+  function pickSuggestions(groups){
+    const bag=[]; groups.forEach(g=>bag.push(...gatherRatings(g)));
+    // 非 Strong 才列；Improve 先、Adequate 後
+    const bad=bag.filter(x=>x.rating!=='Strong');
+    bad.sort((a,b)=>{
+      const ord=v=> v==='Improve'?0:(v==='Adequate'?1:2);
+      return ord(a.rating)-ord(b.rating);
+    });
+    // 取前 12 筆避免過長
+    return bad.slice(0,12).map(x=>[x.name,x.value,'—',x.rating,x.band]);
+  }
+
   function renderKPI(K){
     $('#kpiOptCard').style.display='';
 
-    // 建議優化（挑三個最常見：Vol/PF/Max Consecutive Loss）
-    const sug=[
-      ['波動率 (Volatility)', (K.returns.vol*100).toFixed(2)+'%', '—', rateLower(K.returns.vol, BANDS.Vol), '≤20% / ≤35%'],
-      ['PF (獲利因子)', K.ratios.PF.toFixed(2), '—', rateHigher(K.ratios.PF, BANDS.PF), '≥1.5 / ≥1.0'],
-      ['最大連敗 (MCL)', K.risk.MCL, '—', rateLower(K.risk.MCL, BANDS.MCL), `≤${BANDS.MCL.strong} / ≤${BANDS.MCL.adequate}`]
-    ];
-    fillRows('#kpiOptSuggest tbody', sug);
-
     // 一、報酬
     const ret=[
-      ['總報酬 (Total Return)', (K.ratios.totalRet*100).toFixed(2)+'%', '期末/期初 - 1', rateHigher(K.ratios.totalRet,{strong:0.30,adequate:0.10}), '≥30% / ≥10%'],
+      ['總報酬 (Total Return)', (K.ratios.totalRet*100).toFixed(2)+'%', '期末/期初 - 1', (K.ratios.totalRet>0?'Strong':'Improve'), '≥0%'],
       ['CAGR 年化', (K.ratios.CAGR*100).toFixed(2)+'%', '長期年化', rateHigher(K.ratios.CAGR, BANDS.CAGR), '≥15% / ≥5%'],
       ['Arithmetic 年化', (K.returns.annRet*100).toFixed(2)+'%', '日均×252', rateHigher(K.returns.annRet,{strong:0.20,adequate:0.05}), '≥20% / ≥5%'],
       ['平均每筆淨損益', Math.round(K.ratios.expectancy).toLocaleString(), '交易損益均值', rateHigher(K.ratios.expectancy>0?1:0,{strong:1,adequate:0}), '> 0'],
       ['勝率 (Hit Ratio)', (K.ratios.hit*100).toFixed(2)+'%', '獲利筆數/總筆數', rateHigher(K.ratios.hit,BANDS.Hit), '≥55% / ≥45%'],
       ['累積淨利 (NTD)', Math.round(K.pnl.total).toLocaleString(), '所有賣出筆加總', rateHigher(K.pnl.total>0?1:0,{strong:1,adequate:0}), '> 0'],
-      ['單筆最大獲利/虧損', `${Math.round(K.pnl.maxWin).toLocaleString()} / ${Math.round(K.pnl.maxLoss).toLocaleString()}`, '極值', 'Adequate','—']
+      ['單筆最大獲利/虧損', `${Math.round(K.pnl.maxWin).toLocaleString()} / ${Math.round(K.pnl.maxLoss).toLocaleString()}`, '極值', 'Adequate','—'],
+      ['平均持有天數', K.pnl.avgHoldDays.toFixed(2), '每段多單的平均天數', 'Adequate', '—'],
     ];
     fillRows('#kpiOptReturn tbody', ret);
 
@@ -325,6 +329,8 @@
       ['回本時間 (Recovery)', K.risk.Rec_days+' 天', '回到新高所需天數', rateLower(K.risk.Rec_days,BANDS.Rec_days), '≤45 / ≤90'],
       ['波動率 (Volatility)', (K.returns.vol*100).toFixed(2)+'%', '年化標準差', rateLower(K.returns.vol,BANDS.Vol), '≤20% / ≤35%'],
       ['下行波動 (Downside Dev)', (K.returns.downside*100).toFixed(2)+'%', '只計下行波動年化', rateLower(K.returns.downside,{strong:0.15,adequate:0.30}), '≤15% / ≤30%'],
+      ['Ulcer Index (UI)', (K.risk.UI*100).toFixed(2)+'%', '回撤平方均根', rateLower(K.risk.UI,BANDS.UI), '≤5% / ≤12%'],
+      ['Martin Ratio', K.risk.Martin.toFixed(2), '年化報酬/UI', rateHigher(K.risk.Martin,BANDS.Martin), '≥0.8 / ≥0.3'],
       ['VaR 95% (1日)', (K.returns.VaR95*100).toFixed(2)+'%', '95%信賴的一日風險', rateHigher(K.returns.VaR95,BANDS.VaR95), '>-2% / >-4%'],
       ['CVaR 95% (1日)', (K.returns.CVaR95*100).toFixed(2)+'%', '超過VaR的平均虧損', rateHigher(K.returns.CVaR95,BANDS.CVaR95), '>-3% / >-6%']
     ];
@@ -336,8 +342,10 @@
       ['Sortino', K.ratios.sortino.toFixed(2), '下行風險調整報酬', rateHigher(K.ratios.sortino,BANDS.Sortino), '≥1.5 / ≥0.75'],
       ['Calmar', K.ratios.calmar.toFixed(2), 'CAGR / |MaxDD|', rateHigher(K.ratios.calmar,BANDS.Calmar), '≥1.0 / ≥0.3'],
       ['Reward/Vol', K.ratios.rtVol.toFixed(2), '年化報酬/波動', rateHigher(K.ratios.rtVol,BANDS.RtVol), '≥1.0 / ≥0.5'],
-      ['Profit Factor', K.ratios.PF.toFixed(2), '總獲利/總虧損', rateHigher(K.ratios.PF,BANDS.PF), '≥1.5 / ≥1.0'],
+      ['Profit Factor (PF)', K.ratios.PF.toFixed(2), '總獲利/總虧損', rateHigher(K.ratios.PF,BANDS.PF), '≥1.5 / ≥1.0'],
       ['Payoff Ratio', K.ratios.payoff.toFixed(2), '均獲利/均虧損', rateHigher(K.ratios.payoff,BANDS.Payoff), '≥1.5 / ≥1.0'],
+      ['Gain-to-Pain', K.returns.GainPain.toFixed(2), '正報酬總和/負報酬總和絕對值', rateHigher(K.returns.GainPain,BANDS.GPR), '≥1.5 / ≥1.0'],
+      ['Tail Ratio', K.returns.TailRatio.toFixed(2), '右尾(95%)/左尾(5%)', rateHigher(K.returns.TailRatio,BANDS.Tail), '≥1.5 / ≥1.0'],
       ['連續虧損峰值 (MCL)', K.risk.MCL, '最大連虧次數', rateLower(K.risk.MCL,BANDS.MCL), `≤${BANDS.MCL.strong} / ≤${BANDS.MCL.adequate}`]
     ];
     fillRows('#kpiOptEff tbody', eff);
@@ -357,38 +365,14 @@
       ['成交額週轉率 (Turnover)', K.cost.turnover.toFixed(2)+'x', '成交額/本金', rateLower(K.cost.turnover,BANDS.Turnover), '1~2x'],
       ['筆均成交額 (Avg Trade Value)', Math.round(K.cost.avgTradeValue).toLocaleString(), '成交額/筆數', (K.cost.avgTradeValue>=100000?'Strong':(K.cost.avgTradeValue>=30000?'Adequate':'Improve')), '≥100k / ≥30k'],
       ['買入總額 / 賣出總額', `${Math.round(K.cost.grossBuy).toLocaleString()} / ${Math.round(K.cost.grossSell).toLocaleString()}`, '流動性利用', 'Adequate','—'],
-      ['Alpha / Beta / IR / R²', '— / — / — / —', '需市場基準資料(可後續串接)', 'Adequate','—'],
       ['Omega(0%)', K.returns.Omega.toFixed(2), 'P(R>0)/P(R<0)', rateHigher(K.returns.Omega,BANDS.Omega), '≥1.5 / ≥1.0'],
       ['MAR (CAGR/MaxDD)', (K.ratios.calmar).toFixed(2), '等同 Calmar（無年內重置）', rateHigher(K.ratios.calmar,BANDS.MAR), '≥1.0 / ≥0.3']
     ];
     fillRows('#kpiOptCost tbody', cost);
-  }
 
-  // ===== 最佳化表渲染 =====
-  function renderOptTable(rows){
-    const thead=$('#optTable thead'), tbody=$('#optTable tbody');
-    thead.innerHTML=`<tr>
-      <th>種類</th><th>日期</th><th>成交價格</th><th>成本均價</th><th>成交數量</th>
-      <th>買進金額</th><th>賣出金額</th><th>手續費</th><th>交易稅</th>
-      <th>成本</th><th>累計成本</th><th>損益</th><th>報酬率</th><th>累計損益</th>
-    </tr>`;
-    tbody.innerHTML='';
-    for(const e of rows){
-      const tr=document.createElement('tr'); tr.className=(e.side==='BUY'?'buy-row':'sell-row');
-      tr.innerHTML=`<td>${e.side==='BUY'?'買進':'賣出'}</td>
-      <td>${tsPretty(e.ts)}</td><td>${e.price.toFixed(2)}</td>
-      <td>${e.avgCost!=null? e.avgCost.toFixed(2):'—'}</td><td>${e.shares.toLocaleString()}</td>
-      <td>${Math.round(e.buyAmount||0).toLocaleString()}</td>
-      <td>${Math.round(e.sellAmount||0).toLocaleString()}</td>
-      <td>${Math.round(e.fee||0).toLocaleString()}</td>
-      <td>${Math.round(e.tax||0).toLocaleString()}</td>
-      <td>${Math.round(e.cost||0).toLocaleString()}</td>
-      <td>${Math.round(e.cumCost||0).toLocaleString()}</td>
-      <td>${e.pnlFull==null?'—':pnlSpan(e.pnlFull)}</td>
-      <td>${(e.retPctUnit==null)?'—':fmtPct(e.retPctUnit)}</td>
-      <td>${e.cumPnlFull==null?'—':pnlSpan(e.cumPnlFull)}</td>`;
-      tbody.appendChild(tr);
-    }
+    // 建議優化指標（自動彙總）
+    const sugg = pickSuggestions([ret,risk,eff,stab,cost]);
+    fillRows('#kpiOptSuggest tbody', sugg);
   }
 
   // ===== 主流程 =====
@@ -429,9 +413,10 @@
       }else{ start8=rowsNew[0].day; end8=rowsNew.at(-1).day; }
       $('#periodText').textContent=`期間：${start8||'—'} 開始到 ${end8||'—'} 結束`;
 
-      // round-trip/明細
+      // 回測主流程
       const bt = window.ETF_ENGINE.backtest(rowsMerged, CFG);
-      renderTradesTable(bt.trades);
+
+      // 原始逐筆明細
       renderExecsTable(bt.execs);
 
       // 最佳化
@@ -451,6 +436,44 @@
       set('初始化失敗：'+(err && err.message ? err.message : String(err)), true);
       console.error('[00909 ERROR]', err);
     }
+  }
+
+  // ===== 表格：最佳化交易明細 =====
+  function renderOptTable(rows){
+    const thead=$('#optTable thead'), tbody=$('#optTable tbody');
+    thead.innerHTML=`<tr>
+      <th>種類</th><th>日期</th><th>成交價格</th><th>成本均價</th><th>成交數量</th>
+      <th>買進金額</th><th>賣出金額</th><th>手續費</th><th>交易稅</th>
+      <th>成本</th><th>累計成本</th><th>損益</th><th>報酬率</th><th>累計損益</th>
+    </tr>`;
+    tbody.innerHTML='';
+    for(const e of rows){
+      const tr=document.createElement('tr'); tr.className=(e.side==='BUY'?'buy-row':'sell-row');
+      tr.innerHTML=`<td>${e.side==='BUY'?'買進':'賣出'}</td>
+      <td>${tsPretty(e.ts)}</td><td>${e.price.toFixed(2)}</td>
+      <td>${e.avgCost!=null? e.avgCost.toFixed(2):'—'}</td><td>${e.shares.toLocaleString()}</td>
+      <td>${Math.round(e.buyAmount||0).toLocaleString()}</td>
+      <td>${Math.round(e.sellAmount||0).toLocaleString()}</td>
+      <td>${Math.round(e.fee||0).toLocaleString()}</td>
+      <td>${Math.round(e.tax||0).toLocaleString()}</td>
+      <td>${Math.round(e.cost||0).toLocaleString()}</td>
+      <td>${Math.round(e.cumCost||0).toLocaleString()}</td>
+      <td>${e.pnlFull==null?'—':pnlSpan(e.pnlFull)}</td>
+      <td>${(e.retPctUnit==null)?'—':fmtPct(e.retPctUnit)}</td>
+      <td>${e.cumPnlFull==null?'—':pnlSpan(e.cumPnlFull)}</td>`;
+      tbody.appendChild(tr);
+    }
+  }
+
+  // ===== 基準合併（延用原邏輯）=====
+  function mergeRowsByBaseline(baseRows, newRows){
+    const endBase = baseRows.length ? baseRows[baseRows.length-1].ts : null;
+    const merged = [...baseRows];
+    let start8='', end8='';
+    for(const r of newRows){
+      if(!endBase || r.ts > endBase){ merged.push(r); if(!start8) start8=r.day; end8=r.day; }
+    }
+    return { merged, start8, end8 };
   }
 
   document.addEventListener('DOMContentLoaded', boot);
