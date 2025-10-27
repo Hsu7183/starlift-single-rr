@@ -7,52 +7,37 @@
   <meta name="robots" content="noindex,nofollow" />
   <style>
     :root { --card-r:12px; }
-    body{ font-family: Arial, "微軟正黑體", sans-serif; margin: 20px; background:#f8f9fa; color:#333; -webkit-font-smoothing:antialiased}
-    h1{ text-align:center; margin:0 0 6px 0; font-weight: 800; letter-spacing:.5px; }
-    .subtitle{ text-align:center; color:#666; margin:0 0 18px 0; font-size:14px; }
-    hr{ border:none; border-top:1px solid #ddd; margin:20px auto; max-width:1100px; }
+    body{ font-family: Arial,"微軟正黑體",sans-serif; margin:20px; background:#f8f9fa; color:#333; -webkit-font-smoothing:antialiased }
+    h1{ text-align:center; margin:0 0 6px 0; font-weight:800; letter-spacing:.5px }
+    .subtitle{ text-align:center; color:#666; margin:0 0 18px 0; font-size:14px }
+    hr{ border:none; border-top:1px solid #ddd; margin:20px auto; max-width:1100px }
 
-    .section-title-red{ max-width:1100px; margin: 10px auto 12px; font-size:20px; font-weight:800; color:#d32f2f; letter-spacing:.5px; }
-    .section-title-blue{ max-width:1100px; margin: 10px auto 12px; font-size:20px; font-weight:800; color:#0d6efd; letter-spacing:.5px; }
-    .section-title-black{ max-width:1100px; margin: 10px auto 12px; font-size:20px; font-weight:800; color:#111; letter-spacing:.5px; }
+    .section-title-red{ max-width:1100px; margin:10px auto 12px; font-size:20px; font-weight:800; color:#d32f2f; letter-spacing:.5px }
+    .section-title-blue{ max-width:1100px; margin:10px auto 12px; font-size:20px; font-weight:800; color:#0d6efd; letter-spacing:.5px }
+    .section-title-black{ max-width:1100px; margin:10px auto 12px; font-size:20px; font-weight:800; color:#111; letter-spacing:.5px }
 
-    .strategy-grid{ display:grid; grid-template-columns: repeat(3, 1fr); gap:20px; max-width:1100px; margin: 0 auto 28px; }
-    .strategy-col{ display:flex; flex-direction:column; gap:12px; }
-    .subcat{ font-weight:700; font-size:16px; color:#c62828; margin:0 0 4px 0; text-align:center; }
+    .strategy-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:20px; max-width:1100px; margin:0 auto 28px }
+    .strategy-col{ display:flex; flex-direction:column; gap:12px }
+    .subcat{ font-weight:700; font-size:16px; color:#c62828; margin:0 0 4px 0; text-align:center }
+    .nav{ display:grid; grid-template-columns:repeat(3,1fr); gap:20px; max-width:1100px; margin:0 auto 28px }
 
-    .nav{ display:grid; grid-template-columns: repeat(3, 1fr); gap:20px; max-width: 1100px; margin: 0 auto 28px; }
+    a.card{ display:block; background:#fff; padding:18px 16px; border-radius:12px; box-shadow:0 2px 8px rgba(0,0,0,.08); text-decoration:none; color:inherit; transition:transform .15s, box-shadow .15s; border:1px solid #e5e7eb }
+    a.card:hover{ transform:translateY(-4px); box-shadow:0 10px 22px rgba(0,0,0,.12) }
+    .card-title{ font-weight:700; font-size:18px; margin:0 0 8px 0; text-align:center }
+    .card-title.red{ color:#d32f2f } .card-title.blue{ color:#0d6efd } .card-title.gray{ color:#6c757d } .card-title.black{ color:#111 }
+    .card-desc{ margin:0; color:#666; font-size:14px; line-height:1.5; text-align:left }
+    .lines{ margin-top:2px }
+    .line{ display:grid; grid-template-columns:1fr 1.8fr 1fr; align-items:center; margin:2px 0; font-size:12px; column-gap:6px }
+    .label{ text-align:center; color:#111 }
+    .range{ text-align:center; color:#999; font-size:10px; white-space:nowrap }
+    .val{ text-align:center; font-weight:700 }
+    .val.pos{ color:#d32f2f } .val.neg{ color:#10b981 } .val.neu{ color:#666 }
+    .period{ margin-top:6px; color:#666; font-size:12px; text-align:center }
+    .strategy-col .card-desc{ display:none }
+    .tag{ display:inline-block; font-size:12px; background:#eef4ff; color:#0d6efd; border-radius:999px; padding:3px 8px; margin-left:8px; vertical-align:middle }
 
-    a.card{
-      display:block; background:#fff; padding:18px 16px; border-radius: var(--card-r);
-      box-shadow:0 2px 8px rgba(0,0,0,.08); text-decoration:none; color:inherit;
-      transition: transform .15s ease, box-shadow .15s ease; position: relative; border:1px solid #e5e7eb;
-    }
-    a.card:hover{ transform: translateY(-4px); box-shadow:0 10px 22px rgba(0,0,0,.12); }
-    .card-title{ font-weight:700; font-size:18px; margin:0 0 8px 0; text-align:center; }
-    .card-title.red{ color:#d32f2f; } .card-title.blue{ color:#0d6efd; } .card-title.gray{ color:#6c757d; } .card-title.black{ color:#111; }
-    .card-desc{ margin:0; color:#666; font-size:14px; line-height:1.5; text-align:left; }
-
-    .lines{ margin-top:2px; }
-    .line{
-      display:grid;
-      grid-template-columns: 1fr 1.8fr 1fr;
-      align-items:center;
-      margin:2px 0;
-      font-size:12px;
-      column-gap:6px;
-    }
-    .label{ text-align:center; color:#111; }
-    .range{ text-align:center; color:#999; font-size:10px; white-space: nowrap; }
-    .val{ text-align:center; font-weight:700; }
-    .val.pos{ color:#d32f2f; } .val.neg{ color:#10b981; } .val.neu{ color:#666; }
-
-    .period{ margin-top:6px; color:#666; font-size:12px; text-align:center; }
-
-    .strategy-col .card-desc{ display:none; }
-    .tag{ display:inline-block; font-size:12px; background:#eef4ff; color:#0d6efd; border-radius:999px; padding:3px 8px; margin-left:8px; vertical-align:middle; }
-
-    /* 門檻卡片 */
-    .gate{ max-width:960px; margin:20px auto; background:#fff; border:1px solid #e5e7eb; border-radius:12px; box-shadow:0 2px 10px rgba(0,0,0,.05); padding:16px; }
+    /* Gate */
+    .gate{ max-width:960px; margin:20px auto; background:#fff; border:1px solid #e5e7eb; border-radius:12px; box-shadow:0 2px 10px rgba(0,0,0,.05); padding:16px }
     .muted{ color:#666; font-size:13px }
     .row{ display:flex; gap:12px; align-items:center; flex-wrap:wrap }
     .btn{ background:#0d6efd; color:#fff; border:0; border-radius:10px; padding:10px 14px; cursor:pointer }
@@ -62,15 +47,18 @@
     .hidden{ display:none }
 
     /* 頂端限制 Banner */
-    .restrict{
-      position:sticky; top:-20px; margin:-20px -20px 12px -20px; padding:6px 10px;
-      background:#111; color:#fff; text-align:center; font-size:12px; letter-spacing:.5px; z-index:9999;
-    }
+    .restrict{ position:sticky; top:-20px; margin:-20px -20px 12px -20px; padding:6px 10px; background:#111; color:#fff; text-align:center; font-size:12px; letter-spacing:.5px; z-index:9999 }
 
     /* “擋新手” */
     html,body{ -webkit-user-select:none; -moz-user-select:none; user-select:none; -webkit-touch-callout:none }
     a,button,input{ -webkit-user-select:auto; user-select:auto }
-    #shield{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(3,7,18,.96);color:#fff;z-index:2147483647;text-align:center;padding:24px}
+    #shield{ position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(3,7,18,.96); color:#fff; z-index:2147483647; text-align:center; padding:24px }
+
+    /* 免責樣式 */
+    .disclaimer{ line-height:1.75; font-size:14px }
+    .disclaimer h4{ margin:12px 0 6px; font-size:14px; font-weight:800; color:#111 }
+    .disclaimer ul{ margin:6px 0 10px 18px; padding:0 }
+    .disclaimer li{ margin:4px 0 }
   </style>
 </head>
 <body translate="no">
@@ -80,20 +68,61 @@
   <!-- 遮罩：偵測檢視原始碼/DevTools 時顯示（僅嚇阻） -->
   <div id="shield"><div><h3>頁面受保護</h3>偵測到嘗試檢視原始碼或開發者工具，請關閉後重新整理。</div></div>
 
-  <!-- (A) 免責＋密碼門檻 -->
+  <!-- (A) 免責＋密碼門檻（無需勾選，同頁顯示） -->
   <div id="gate" class="gate">
-    <h2 style="margin:0 0 6px 0;">法律免責與使用限制</h2>
-    <div class="muted" style="line-height:1.7;font-size:14px">
-      <b>法律免責</b>：本頁面與所載資料僅供<b>內部研究/教育交流</b>使用，<b>不構成投資建議、招攬、推介或保證</b>。資料可能包含回測或模擬結果，與未來績效無關。本頁作者不對資料之正確性、完整性負任何法律責任。<br><br>
-      <b>非投顧聲明</b>：本頁未提供具體買賣時點/標的/價格之建議，亦不收取任何對價或報酬；不承作任何形式之代操或募集。<br><br>
-      <b>風險揭露</b>：金融交易涉及高風險與本金損失可能；<b>過去績效不代表未來報酬</b>。
+    <h2 style="margin:0 0 6px 0;">法律免責與使用限制 / Legal Notice & Usage Restrictions</h2>
+
+    <div class="disclaimer">
+      <h4>一、性質與目的 Nature & Purpose</h4>
+      <ul>
+        <li>本頁與其內容僅供<b>內部研究／教育</b>使用，屬<b>非公開資訊</b>。For <b>internal research/educational</b> use only; <b>not public</b>.</li>
+        <li>策略、績效、圖表與數據為研究展示，非投資建議或推介。Research demo only; not investment advice or solicitation.</li>
+      </ul>
+
+      <h4>二、非投顧與不招攬 Non-Advisory & No Solicitation</h4>
+      <ul>
+        <li>不提供具體<b>時點／價格／標的</b>建議；不收任何費用或利益。No specific trade timing/price/instrument advice; no fees or consideration.</li>
+        <li>不招攬、不保證收益、不從事投顧／期顧或經紀／自營業務。No solicitation, no guarantees, not acting as adviser/broker-dealer.</li>
+      </ul>
+
+      <h4>三、僅以自有資金運作 Own-Capital Only</h4>
+      <ul>
+        <li>研究成員各自以<b>自有資金</b>操作；<b>不募集、不代操</b>第三方資金。Members trade their <b>own capital</b>; <b>no fundraising/discretionary</b> for others.</li>
+      </ul>
+
+      <h4>四、風險揭露 Risk Disclosure</h4>
+      <ul>
+        <li>交易具高風險，可能發生本金損失、流動性、技術與操作風險。High risk: principal loss, liquidity, technical, operational risks.</li>
+        <li>過去績效／回測／模擬<b>不代表</b>未來結果。Past performance/backtests <b>do not guarantee</b> future results.</li>
+      </ul>
+
+      <h4>五、資料來源與保證 Data Sources & Warranty</h4>
+      <ul>
+        <li>資料依賴第三方或系統輸出，<b>不保證</b>即時、正確或完整。No warranty for timeliness, accuracy, completeness.</li>
+      </ul>
+
+      <h4>六、保密與限制傳播 Confidentiality</h4>
+      <ul>
+        <li>屬限制性資訊，<b>嚴禁對外散布、轉載、轉寄、公開張貼</b>。Restricted; <b>no external distribution</b>.</li>
+      </ul>
+
+      <h4>七、合規邊界 Compliance Boundary</h4>
+      <ul>
+        <li>不得用於<b>招攬／推介／保證報酬／代操／募資</b>。No use for solicitation, promotion, guarantees, discretionary, fundraising.</li>
+        <li>所有實際交易須透過<b>持牌券商／期貨商</b>帳戶。Execute via <b>licensed brokers/futures firms</b> only.</li>
+      </ul>
+
+      <h4>八、準據法 Jurisdiction</h4>
+      <ul>
+        <li>本頁使用受<b>中華民國（台灣）</b>法令管轄。Governed by laws of <b>Taiwan (R.O.C.)</b>.</li>
+      </ul>
     </div>
-    <label style="display:block;margin-top:10px"><input type="checkbox" id="agree"> 我已閱讀並同意以上條款，且為內部或受邀研究人員。</label>
-    <div class="row" style="margin-top:10px;max-width:420px">
-      <input id="pwd" type="password" placeholder="密碼" autocomplete="current-password" disabled />
-      <button class="btn" id="btnLogin" disabled>進入</button>
-      <button class="btn gray" id="btnClear" disabled>清除</button>
-      <div id="err" class="error">密碼錯誤，請再試一次。</div>
+
+    <div class="row" style="margin-top:12px;max-width:420px">
+      <input id="pwd" type="password" placeholder="密碼 / Password" autocomplete="current-password" />
+      <button class="btn" id="btnLogin">進入 / Enter</button>
+      <button class="btn gray" id="btnClear">清除 / Clear</button>
+      <div id="err" class="error">密碼錯誤，請再試一次。/ Incorrect password.</div>
     </div>
   </div>
 
@@ -145,7 +174,6 @@
 
       <div class="strategy-col">
         <p class="subcat">逆勢型</p>
-
         <a class="card" href="etf-00909.html">
           <p class="card-title red">00909-ETF版本</p>
           <div class="lines">
@@ -198,18 +226,11 @@
     'use strict';
     // ===== 設定（密碼 SHA-256 雜湊；不含明碼） =====
     const PASS_HASH = "0f2b9305e317408510dc9878381e953630ed9fa3d2aadf95f1b8eb47941b18b9";
-    const KEY_OK='__auth_ok__', KEY_AGREE='__agree__';
+    const KEY_OK='__auth_ok__';
 
     const $ = s => document.querySelector(s);
     const shield = $('#shield'), gate = $('#gate'), app = $('#app');
-    const agree = $('#agree'), pwd = $('#pwd'), btnLogin = $('#btnLogin'), btnClear = $('#btnClear'), err = $('#err');
-
-    // 同意勾選後才可輸入密碼
-    agree.addEventListener('change', ()=>{
-      const on = !!agree.checked;
-      [pwd, btnLogin, btnClear].forEach(el=> el.disabled = !on);
-      if(on) try{ pwd.focus(); }catch(e){}
-    });
+    const pwd = $('#pwd'), btnLogin = $('#btnLogin'), btnClear = $('#btnClear'), err = $('#err');
 
     async function sha256Hex(t){
       const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(t));
@@ -218,45 +239,38 @@
 
     async function enter(){
       err.style.display='none';
-      if(!agree.checked){ err.textContent='請先勾選同意條款'; err.style.display=''; return; }
-      const v=(pwd.value||'').trim(); if(!v){ err.textContent='請輸入密碼'; err.style.display=''; return; }
+      const v=(pwd.value||'').trim();
+      if(!v){ err.textContent='請輸入密碼 / Please enter password.'; err.style.display=''; return; }
       const h=await sha256Hex(v);
       if(h===PASS_HASH){
-        sessionStorage.setItem(KEY_AGREE,'1'); sessionStorage.setItem(KEY_OK,'1');
+        sessionStorage.setItem(KEY_OK,'1');
         gate.classList.add('hidden'); app.classList.remove('hidden');
-        loadDepsAndRun();         // 通過後才載入原本腳本
+        loadDepsAndRun();  // 通過後才載入原本腳本
       }else{
-        err.textContent='密碼錯誤，請再試一次。'; err.style.display='';
+        err.textContent='密碼錯誤，請再試一次。/ Incorrect password.'; err.style.display='';
       }
     }
     btnLogin.addEventListener('click', enter);
     btnClear.addEventListener('click', ()=>{ pwd.value=''; err.style.display='none'; pwd.focus(); });
     pwd.addEventListener('keydown', e=>{ if(e.key==='Enter') enter(); });
 
-    // 若先前已同意且登入，直接顯示內容並載入腳本
+    // 若先前已登入，直接顯示內容並載入腳本
     (function boot(){
-      const ok = sessionStorage.getItem(KEY_OK)==='1' && sessionStorage.getItem(KEY_AGREE)==='1';
-      if(ok){ gate.classList.add('hidden'); app.classList.remove('hidden'); loadDepsAndRun(); }
+      if(sessionStorage.getItem(KEY_OK)==='1'){ gate.classList.add('hidden'); app.classList.remove('hidden'); loadDepsAndRun(); }
     })();
 
     // ===== 通過後才載入外部依賴與你的原始邏輯 =====
     function loadScript(src){ return new Promise((res,rej)=>{ const s=document.createElement('script'); s.src=src; s.onload=res; s.onerror=()=>rej(new Error('load fail: '+src)); document.body.appendChild(s); }); }
     async function loadDepsAndRun(){
-      // 依賴：Supabase + shared.js（你的原檔）
       await loadScript('https://unpkg.com/@supabase/supabase-js@2');
       await loadScript('shared.js?v=txfee45tax2');
 
-      // ======= 以下為原本數據載入程式（未改動） =======
       (async function(){
         const SUPABASE_URL = "https://byhbmmnacezzgkwfkozs.supabase.co";
         const SUPABASE_ANON_KEY = "sb_publishable_xVe8fGbqQ0XGwi4DsmjPMg_Y2RBOD3t";
         const BUCKET = "reports";
-        const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-          global: { fetch: (u,o={}) => fetch(u,{...o, cache:'no-store'}) }
-        });
-
+        const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { global:{ fetch:(u,o={})=>fetch(u,{...o,cache:'no-store'}) } });
         const WANT = { "0807": /0807/i, "1001": /1001/i, "00909": /00909/i };
-
         const pubUrl = (path) => sb.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
 
         async function listDir(prefix){
@@ -269,11 +283,8 @@
           if(depth>maxDepth) return;
           const entries = await listDir(prefix);
           for(const it of entries){
-            if(it.id === null){
-              await listDeepN(it.fullPath, depth+1, maxDepth, out);
-            }else{
-              out.push(it);
-            }
+            if(it.id === null){ await listDeepN(it.fullPath, depth+1, maxDepth, out); }
+            else{ out.push(it); }
           }
         }
         async function latestFileDeep(regex){
@@ -290,148 +301,86 @@
           });
           return files[0];
         }
-
         async function readManifest(name){
-          try{
-            const { data } = await sb.storage.from(BUCKET).download(`manifests/${name}.json`);
-            if (!data) return null;
-            return JSON.parse(await data.text());
-          }catch{ return null; }
+          try{ const { data } = await sb.storage.from(BUCKET).download(`manifests/${name}.json`); if(!data) return null; return JSON.parse(await data.text()); }
+          catch{ return null; }
         }
 
-        const CANON_RE   = /^(\d{14})\.0{6}\s+(\d+\.\d{6})\s+(新買|平賣|新賣|平買|強制平倉|強平)\s*$/;
-        const EXTRACT_RE = /.*?(\d{14})(?:\.0{1,6})?\s+(\d+(?:\.\d{1,6})?)\s*(新買|平賣|新賣|平買|強制平倉|強平)\s*$/;
+        const CANON_RE=/^(\d{14})\.0{6}\s+(\d+\.\d{6})\s+(新買|平賣|新賣|平買|強制平倉|強平)\s*$/;
+        const EXTRACT_RE=/.*?(\d{14})(?:\.0{1,6})?\s+(\d+(?:\.\d{1,6})?)\s*(新買|平賣|新賣|平買|強制平倉|強平)\s*$/;
 
         function normalizeText(raw){
-          let s = raw.replace(/\ufeff/gi,'').replace(/\u200b|\u200c|\u200d/gi,'');
-          s = s.replace(/[\x00-\x09\x0B-\x1F\x7F]/g,'').replace(/\r\n?/g,'\n').replace(/\u3000/g,' ');
+          let s=raw.replace(/\ufeff/gi,'').replace(/\u200b|\u200c|\u200d/gi,''); s=s.replace(/[\x00-\x09\x0B-\x1F\x7F]/g,'').replace(/\r\n?/g,'\n').replace(/\u3000/g,' ');
           return s.split('\n').map(l=>l.replace(/\s+/g,' ').trim()).filter(Boolean).join('\n');
         }
         function canonicalize(txt){
-          const out=[], lines = txt.split('\n'); let ok=0;
-          for(const l of lines){
-            const m = l.match(EXTRACT_RE);
-            if(m){
-              const ts = m[1], px = Number(m[2]); const p6 = Number.isFinite(px) ? px.toFixed(6) : m[2];
-              let act= m[3]; if (act==='強平') act='強制平倉';
-              out.push(`${ts}.000000 ${p6} ${act}`); ok++;
-            }
-          }
+          const out=[], lines=txt.split('\n'); let ok=0;
+          for(const l of lines){ const m=l.match(EXTRACT_RE); if(m){ const ts=m[1], px=Number(m[2]); const p6=Number.isFinite(px)?px.toFixed(6):m[2]; let act=m[3]; if(act==='強平') act='強制平倉'; out.push(`${ts}.000000 ${p6} ${act}`); ok++; } }
           return { canon: out.join('\n'), ok };
         }
         async function fetchSmart(url){
-          const res = await fetch(url,{cache:'no-store'}); if(!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-          const buf = await res.arrayBuffer();
-          for (const enc of ['utf-8','big5','utf-16le','utf-16be']){
-            try{
-              const td=new TextDecoder(enc,{fatal:false});
-              const norm = normalizeText(td.decode(buf));
-              const { canon, ok } = canonicalize(norm);
-              if (ok>0) return { canon, ok };
-            }catch(e){}
-          }
-          const td=new TextDecoder('utf-8'); const norm=normalizeText(td.decode(buf));
-          const { canon, ok } = canonicalize(norm);
-          return { canon, ok };
+          const res=await fetch(url,{cache:'no-store'}); if(!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+          const buf=await res.arrayBuffer();
+          for(const enc of ['utf-8','big5','utf-16le','utf-16be']){ try{ const td=new TextDecoder(enc); const norm=normalizeText(td.decode(buf)); const {canon,ok}=canonicalize(norm); if(ok>0) return {canon,ok}; }catch{} }
+          const td=new TextDecoder('utf-8'); const norm=normalizeText(td.decode(buf)); const {canon,ok}=canonicalize(norm); return {canon,ok};
         }
         function parseCanon(text){
-          const rows=[]; if(!text) return rows;
-          for(const line of text.split('\n')){ const m = line.match(CANON_RE); if (m) rows.push({ ts:m[1], line }); }
-          rows.sort((a,b)=> a.ts.localeCompare(b.ts)); return rows;
+          const rows=[]; if(!text) return rows; for(const line of text.split('\n')){ const m=line.match(CANON_RE); if(m) rows.push({ts:m[1], line}); }
+          rows.sort((a,b)=>a.ts.localeCompare(b.ts)); return rows;
         }
         function mergeByBaseline(baseText, latestText){
-          const A = parseCanon(baseText), B = parseCanon(latestText);
-          const baseMin = A.length ? A[0].ts.slice(0,8) : (B.length? B[0].ts.slice(0,8) : '');
-          const baseMax = A.length ? A[A.length-1].ts : '';
-          const added = baseMax ? B.filter(x => x.ts > baseMax).map(x => x.line) : B.map(x => x.line);
-          const mergedLines = [...A.map(x => x.line), ...added];
-          const endDay = mergedLines.length ? mergedLines[mergedLines.length-1].match(CANON_RE)[1].slice(0,8) : baseMin;
-          return { combined: mergedLines.join('\n'), start8: baseMin, end8: endDay };
+          const A=parseCanon(baseText), B=parseCanon(latestText);
+          const baseMin=A.length?A[0].ts.slice(0,8):(B.length?B[0].ts.slice(0,8):'');
+          const baseMax=A.length?A[A.length-1].ts:'';
+          const added=baseMax?B.filter(x=>x.ts>baseMax).map(x=>x.line):B.map(x=>x.line);
+          const mergedLines=[...A.map(x=>x.line), ...added];
+          const endDay=mergedLines.length?mergedLines[mergedLines.length-1].match(CANON_RE)[1].slice(0,8):baseMin;
+          return { combined:mergedLines.join('\n'), start8:baseMin, end8:endDay };
         }
-
         function dailySeriesFromMerged(mergedTxt){
-          const parsed  = window.SHARED.parseTXT(mergedTxt);
-          const report  = window.SHARED.buildReport(parsed.rows);
-          const m=new Map();
-          for(const t of report.trades){ const d=String(t.tsOut).slice(0,8); m.set(d,(m.get(d)||0)+t.gainSlip); }
-          const days=[...m.keys()].sort();
-          const vals=days.map(d=>m.get(d));
-          return {days, vals};
+          const parsed=window.SHARED.parseTXT(mergedTxt);
+          const report=window.SHARED.buildReport(parsed.rows);
+          const m=new Map(); for(const t of report.trades){ const d=String(t.tsOut).slice(0,8); m.set(d,(m.get(d)||0)+t.gainSlip); }
+          const days=[...m.keys()].sort(); const vals=days.map(d=>m.get(d)); return {days, vals};
         }
-
         const d8=s=> new Date(`${s.slice(0,4)}-${s.slice(4,6)}-${s.slice(6,8)}T00:00:00`);
         const fmtD8=s=> `${s.slice(0,4)}/${s.slice(4,6)}/${s.slice(6,8)}`;
-
         function simpleReturnWithRange(days, vals, winDays){
-          if(!days.length) return {ret:null, range:'---'};
-          const end = days[days.length-1];
-          const thr = new Date(d8(end).getTime() - (winDays-1)*86400000);
-          let i=0; while(i<days.length && d8(days[i]) < thr) i++;
-          if (i>=days.length) return {ret:null, range:'---'};
-          const startDay = days[i];
+          if(!days.length) return {ret:null, range:'---'}; const end=days[days.length-1];
+          const thr=new Date(d8(end).getTime()-(winDays-1)*86400000); let i=0; while(i<days.length && d8(days[i])<thr) i++;
+          if(i>=days.length) return {ret:null, range:'---'}; const startDay=days[i];
           const pref=[0]; for(const v of vals) pref.push(pref[pref.length-1]+v);
-          const sum = pref[vals.length] - pref[i];
-          return { ret: sum/1_000_000, range: `${fmtD8(startDay)} - ${fmtD8(end)}` };
+          const sum=pref[vals.length]-pref[i]; return { ret:sum/1_000_000, range:`${fmtD8(startDay)} - ${fmtD8(end)}` };
         }
         function simpleReturnYearWindowWithRange(days, vals, winDays){
           if(!days.length) return {ret:null, range:'---'};
-          const first = days[0], last = days[days.length-1];
-          const cover = Math.max(1, Math.round((d8(last)-d8(first))/86400000)+1);
-          if (cover < winDays - 60) return {ret:null, range:'---'};
-          const end = last;
-          const thr = new Date(d8(end).getTime() - (winDays-1)*86400000);
-          let i=0; while(i<days.length && d8(days[i]) < thr) i++;
-          if (i>=days.length) i=0;
-          const startDay = days[i];
-          const pref=[0]; for(const v of vals) pref.push(pref[pref.length-1]+v);
-          const sum = pref[vals.length] - pref[i];
-          return { ret: sum/1_000_000, range: `${fmtD8(startDay)} - ${fmtD8(end)}` };
+          const first=days[0], last=days[days.length-1];
+          const cover=Math.max(1, Math.round((d8(last)-d8(first))/86400000)+1);
+          if(cover < winDays-60) return {ret:null, range:'---'};
+          const end=last; const thr=new Date(d8(end).getTime()-(winDays-1)*86400000); let i=0; while(i<days.length && d8(days[i])<thr) i++; if(i>=days.length) i=0;
+          const startDay=days[i]; const pref=[0]; for(const v of vals) pref.push(pref[pref.length-1]+v);
+          const sum=pref[vals.length]-pref[i]; return { ret:sum/1_000_000, range:`${fmtD8(startDay)} - ${fmtD8(end)}` };
         }
-
-        const setVal=(id,v)=>{
-          const el=document.getElementById(id); if(!el) return;
-          el.classList.remove('pos','neg','neu');
-          if (v==null){ el.textContent='---'; el.classList.add('neu'); return; }
-          el.textContent=(v*100).toFixed(2)+'%';
-          el.classList.add(v>0?'pos':(v<0?'neg':'neu'));
-        };
+        const setVal=(id,v)=>{ const el=document.getElementById(id); if(!el) return; el.classList.remove('pos','neg','neu'); if(v==null){ el.textContent='---'; el.classList.add('neu'); return; } el.textContent=(v*100).toFixed(2)+'%'; el.classList.add(v>0?'pos':(v<0?'neg':'neu')); };
         const setText=(id,text)=>{ const el=document.getElementById(id); if(el) el.textContent=text||'---'; };
 
         async function fillCard(key){
-          const set = (suf, v)=>setVal(`${suf}-${key}`, v);
-          const setR = (suf, r)=>setText(`${suf}-range-${key}`, r);
-          const setPeriod = text => { const el=document.getElementById(`period-${key}`); if(el) el.textContent=text; };
-
+          const set=(suf,v)=>setVal(`${suf}-${key}`,v);
+          const setR=(suf,r)=>setText(`${suf}-range-${key}`,r);
+          const setPeriod=text=>{ const el=document.getElementById(`period-${key}`); if(el) el.textContent=text; };
           try{
-            const latest = await latestFileDeep(WANT[key]);
-            if(!latest){
-              ['wk1','wk2','m1','m2','m3','m6','y1','y2','y3','y6'].forEach(x=> { set(x,null); setR(x,'---'); });
-              setPeriod('—'); return;
-            }
-            const latestText = (await fetchSmart(pubUrl(latest.fullPath))).canon;
-
-            const manifest = await readManifest(key);  // 不存在就忽略
-            let merged = latestText, start8='', end8='';
-            if(manifest?.baseline_path){
-              const baseText = (await fetchSmart(pubUrl(manifest.baseline_path))).canon;
-              const m = mergeByBaseline(baseText, latestText);
-              merged = m.combined; start8 = m.start8; end8 = m.end8;
-            }else{
-              const rows = parseCanon(latestText);
-              start8 = rows.length ? rows[0].ts.slice(0,8) : '';
-              end8   = rows.length ? rows[rows.length-1].ts.slice(0,8) : '';
-            }
-
-            const {days, vals} = dailySeriesFromMerged(merged);
-
+            const latest=await latestFileDeep(WANT[key]);
+            if(!latest){ ['wk1','wk2','m1','m2','m3','m6','y1','y2','y3','y6'].forEach(x=>{ set(x,null); setR(x,'---'); }); setPeriod('—'); return; }
+            const latestText=(await fetchSmart(pubUrl(latest.fullPath))).canon;
+            const manifest=await readManifest(key);
+            let merged=latestText, start8='', end8='';
+            if(manifest?.baseline_path){ const baseText=(await fetchSmart(pubUrl(manifest.baseline_path))).canon; const m=mergeByBaseline(baseText, latestText); merged=m.combined; start8=m.start8; end8=m.end8; }
+            else{ const rows=parseCanon(latestText); start8=rows.length?rows[0].ts.slice(0,8):''; end8=rows.length?rows[rows.length-1].ts.slice(0,8):''; }
+            const {days, vals}=dailySeriesFromMerged(merged);
             const W1=simpleReturnWithRange(days, vals, 7),  W2=simpleReturnWithRange(days, vals, 14);
             const M1=simpleReturnWithRange(days, vals, 30), M2=simpleReturnWithRange(days, vals, 60);
             const M3=simpleReturnWithRange(days, vals, 90), M6=simpleReturnWithRange(days, vals, 180);
-            const Y1=simpleReturnYearWindowWithRange(days, vals, 365),
-                  Y2=simpleReturnYearWindowWithRange(days, vals, 730),
-                  Y3=simpleReturnYearWindowWithRange(days, vals, 1095),
-                  Y6=simpleReturnYearWindowWithRange(days, vals, 2190);
-
+            const Y1=simpleReturnYearWindowWithRange(days, vals, 365), Y2=simpleReturnYearWindowWithRange(days, vals, 730), Y3=simpleReturnYearWindowWithRange(days, vals, 1095), Y6=simpleReturnYearWindowWithRange(days, vals, 2190);
             set('wk1',W1.ret); setR('wk1',W1.range);
             set('wk2',W2.ret); setR('wk2',W2.range);
             set('m1',M1.ret);  setR('m1',M1.range);
@@ -442,14 +391,9 @@
             set('y2',Y2.ret);  setR('y2',Y2.range);
             set('y3',Y3.ret);  setR('y3',Y3.range);
             set('y6',Y6.ret);  setR('y6',Y6.range);
-
             setPeriod(`${start8||'—'} - ${end8||'—'}`);
-          }catch(e){
-            ['wk1','wk2','m1','m2','m3','m6','y1','y2','y3','y6'].forEach(x=> { set(x,null); setR(x,'---'); });
-            setPeriod('—');
-          }
+          }catch(e){ ['wk1','wk2','m1','m2','m3','m6','y1','y2','y3','y6'].forEach(x=>{ set(x,null); setR(x,'---'); }); setPeriod('—'); }
         }
-
         await Promise.all([fillCard("0807"), fillCard("1001"), fillCard("00909")]);
       })();
     }
