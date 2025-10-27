@@ -3,10 +3,11 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>三劍客量化科技（籌備中）｜策略分析系統</title>
+  <title>內部研究環境｜策略分析系統（僅供研究）</title>
+  <meta name="robots" content="noindex,nofollow" />
   <style>
     :root { --card-r:12px; }
-    body{ font-family: Arial, "微軟正黑體", sans-serif; margin: 20px; background:#f8f9fa; color:#333; }
+    body{ font-family: Arial, "微軟正黑體", sans-serif; margin: 20px; background:#f8f9fa; color:#333; -webkit-font-smoothing:antialiased}
     h1{ text-align:center; margin:0 0 6px 0; font-weight: 800; letter-spacing:.5px; }
     .subtitle{ text-align:center; color:#666; margin:0 0 18px 0; font-size:14px; }
     hr{ border:none; border-top:1px solid #ddd; margin:20px auto; max-width:1100px; }
@@ -49,316 +50,424 @@
 
     .strategy-col .card-desc{ display:none; }
     .tag{ display:inline-block; font-size:12px; background:#eef4ff; color:#0d6efd; border-radius:999px; padding:3px 8px; margin-left:8px; vertical-align:middle; }
+
+    /* 門檻卡片 */
+    .gate{ max-width:960px; margin:20px auto; background:#fff; border:1px solid #e5e7eb; border-radius:12px; box-shadow:0 2px 10px rgba(0,0,0,.05); padding:16px; }
+    .muted{ color:#666; font-size:13px }
+    .row{ display:flex; gap:12px; align-items:center; flex-wrap:wrap }
+    .btn{ background:#0d6efd; color:#fff; border:0; border-radius:10px; padding:10px 14px; cursor:pointer }
+    .btn.gray{ background:#6c757d }
+    input[type="password"]{ width:100%; padding:10px; border:1px solid #e5e7eb; border-radius:8px }
+    .error{ color:#c62828; font-size:12px; margin-top:6px; display:none }
+    .hidden{ display:none }
+
+    /* 頂端限制 Banner */
+    .restrict{
+      position:sticky; top:-20px; margin:-20px -20px 12px -20px; padding:6px 10px;
+      background:#111; color:#fff; text-align:center; font-size:12px; letter-spacing:.5px; z-index:9999;
+    }
+
+    /* “擋新手” */
+    html,body{ -webkit-user-select:none; -moz-user-select:none; user-select:none; -webkit-touch-callout:none }
+    a,button,input{ -webkit-user-select:auto; user-select:auto }
+    #shield{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(3,7,18,.96);color:#fff;z-index:2147483647;text-align:center;padding:24px}
   </style>
 </head>
-<body>
-  <h1>三劍客量化科技（籌備中）</h1>
-  <p class="subtitle">共同創辦人：許夏睿、何冠緯、張宸</p>
-  <hr>
+<body translate="no">
+  <!-- 限制 Banner -->
+  <div class="restrict">RESTRICTED • INTERNAL RESEARCH ONLY • NOT FOR PUBLIC DISTRIBUTION • NON-ADVISORY</div>
 
-  <h3 class="section-title-red">交易策略</h3>
-  <div class="strategy-grid">
-    <div class="strategy-col">
-      <p class="subcat">順勢型</p>
+  <!-- 遮罩：偵測檢視原始碼/DevTools 時顯示（僅嚇阻） -->
+  <div id="shield"><div><h3>頁面受保護</h3>偵測到嘗試檢視原始碼或開發者工具，請關閉後重新整理。</div></div>
 
-      <a class="card" href="0807.html">
-        <p class="card-title red">台指近-0807版本</p>
-        <div class="lines">
-          <p class="line"><span class="label">近1週報酬率</span><span id="wk1-range-0807" class="range">—</span><span id="wk1-0807" class="val neu">—</span></p>
-          <p class="line"><span class="label">近2週報酬率</span><span id="wk2-range-0807" class="range">—</span><span id="wk2-0807" class="val neu">—</span></p>
-          <p class="line"><span class="label">近1月報酬率</span><span id="m1-range-0807"  class="range">—</span><span id="m1-0807"  class="val neu">—</span></p>
-          <p class="line"><span class="label">近2月報酬率</span><span id="m2-range-0807"  class="range">—</span><span id="m2-0807"  class="val neu">—</span></p>
-          <p class="line"><span class="label">近3月報酬率</span><span id="m3-range-0807"  class="range">—</span><span id="m3-0807"  class="val neu">—</span></p>
-          <p class="line"><span class="label">近6月報酬率</span><span id="m6-range-0807"  class="range">—</span><span id="m6-0807"  class="val neu">—</span></p>
-          <p class="line"><span class="label">近1年報酬率</span><span id="y1-range-0807"  class="range">—</span><span id="y1-0807"  class="val neu">—</span></p>
-          <p class="line"><span class="label">近2年報酬率</span><span id="y2-range-0807"  class="range">—</span><span id="y2-0807"  class="val neu">—</span></p>
-          <p class="line"><span class="label">近3年報酬率</span><span id="y3-range-0807"  class="range">—</span><span id="y3-0807"  class="val neu">—</span></p>
-          <p class="line"><span class="label">近6年報酬率</span><span id="y6-range-0807"  class="range">—</span><span id="y6-0807"  class="val neu">—</span></p>
-          <p class="period">期間：<span id="period-0807">—</span></p>
-        </div>
-      </a>
-
-      <a class="card" href="1001.html">
-        <p class="card-title red">台指近-1001版本</p>
-        <div class="lines">
-          <p class="line"><span class="label">近1週報酬率</span><span id="wk1-range-1001" class="range">—</span><span id="wk1-1001" class="val neu">—</span></p>
-          <p class="line"><span class="label">近2週報酬率</span><span id="wk2-range-1001" class="range">—</span><span id="wk2-1001" class="val neu">—</span></p>
-          <p class="line"><span class="label">近1月報酬率</span><span id="m1-range-1001"  class="range">—</span><span id="m1-1001"  class="val neu">—</span></p>
-          <p class="line"><span class="label">近2月報酬率</span><span id="m2-range-1001"  class="range">—</span><span id="m2-1001"  class="val neu">—</span></p>
-          <p class="line"><span class="label">近3月報酬率</span><span id="m3-range-1001"  class="range">—</span><span id="m3-1001"  class="val neu">—</span></p>
-          <p class="line"><span class="label">近6月報酬率</span><span id="m6-range-1001"  class="range">—</span><span id="m6-1001"  class="val neu">—</span></p>
-          <p class="line"><span class="label">近1年報酬率</span><span id="y1-range-1001"  class="range">—</span><span id="y1-1001"  class="val neu">—</span></p>
-          <p class="line"><span class="label">近2年報酬率</span><span id="y2-range-1001"  class="range">—</span><span id="y2-1001"  class="val neu">—</span></p>
-          <p class="line"><span class="label">近3年報酬率</span><span id="y3-range-1001"  class="range">—</span><span id="y3-1001"  class="val neu">—</span></p>
-          <p class="line"><span class="label">近6年報酬率</span><span id="y6-range-1001"  class="range">—</span><span id="y6-1001"  class="val neu">—</span></p>
-          <p class="period">期間：<span id="period-1001">—</span></p>
-        </div>
-      </a>
+  <!-- (A) 免責＋密碼門檻 -->
+  <div id="gate" class="gate">
+    <h2 style="margin:0 0 6px 0;">法律免責與使用限制</h2>
+    <div class="muted" style="line-height:1.7;font-size:14px">
+      <b>法律免責</b>：本頁面與所載資料僅供<b>內部研究/教育交流</b>使用，<b>不構成投資建議、招攬、推介或保證</b>。資料可能包含回測或模擬結果，與未來績效無關。本頁作者不對資料之正確性、完整性負任何法律責任。<br><br>
+      <b>非投顧聲明</b>：本頁未提供具體買賣時點/標的/價格之建議，亦不收取任何對價或報酬；不承作任何形式之代操或募集。<br><br>
+      <b>風險揭露</b>：金融交易涉及高風險與本金損失可能；<b>過去績效不代表未來報酬</b>。
     </div>
-
-    <div class="strategy-col">
-      <p class="subcat">逆勢型</p>
-
-      <a class="card" href="etf-00909.html">
-        <p class="card-title red">00909-ETF版本</p>
-        <div class="lines">
-          <p class="line"><span class="label">近1週報酬率</span><span id="wk1-range-00909" class="range">—</span><span id="wk1-00909" class="val neu">—</span></p>
-          <p class="line"><span class="label">近2週報酬率</span><span id="wk2-range-00909" class="range">—</span><span id="wk2-00909" class="val neu">—</span></p>
-          <p class="line"><span class="label">近1月報酬率</span><span id="m1-range-00909"  class="range">—</span><span id="m1-00909"  class="val neu">—</span></p>
-          <p class="line"><span class="label">近2月報酬率</span><span id="m2-range-00909"  class="range">—</span><span id="m2-00909"  class="val neu">—</span></p>
-          <p class="line"><span class="label">近3月報酬率</span><span id="m3-range-00909"  class="range">—</span><span id="m3-00909"  class="val neu">—</span></p>
-          <p class="line"><span class="label">近6月報酬率</span><span id="m6-range-00909"  class="range">—</span><span id="m6-00909"  class="val neu">—</span></p>
-          <p class="line"><span class="label">近1年報酬率</span><span id="y1-range-00909"  class="range">—</span><span id="y1-00909"  class="val neu">—</span></p>
-          <p class="line"><span class="label">近2年報酬率</span><span id="y2-range-00909"  class="range">—</span><span id="y2-00909"  class="val neu">—</span></p>
-          <p class="line"><span class="label">近3年報酬率</span><span id="y3-range-00909"  class="range">—</span><span id="y3-00909"  class="val neu">—</span></p>
-          <p class="line"><span class="label">近6年報酬率</span><span id="y6-range-00909"  class="range">—</span><span id="y6-00909"  class="val neu">—</span></p>
-          <p class="period">期間：<span id="period-00909">—</span></p>
-        </div>
-      </a>
-    </div>
-
-    <div class="strategy-col">
-      <p class="subcat">盤整型</p>
-      <a class="card" href="#"><p class="card-title gray">研發中</p></a>
+    <label style="display:block;margin-top:10px"><input type="checkbox" id="agree"> 我已閱讀並同意以上條款，且為內部或受邀研究人員。</label>
+    <div class="row" style="margin-top:10px;max-width:420px">
+      <input id="pwd" type="password" placeholder="密碼" autocomplete="current-password" disabled />
+      <button class="btn" id="btnLogin" disabled>進入</button>
+      <button class="btn gray" id="btnClear" disabled>清除</button>
+      <div id="err" class="error">密碼錯誤，請再試一次。</div>
     </div>
   </div>
 
-  <hr>
+  <!-- (B) 匿名抬頭 + 原內容（預設隱藏；通過後顯示並載入腳本） -->
+  <div id="app" class="hidden">
+    <h1>內部研究環境｜策略分析系統（僅供研究）</h1>
+    <p class="subtitle">僅供研究與教育用途　｜　非投資建議　｜　嚴禁對外散布</p>
+    <hr>
 
-  <h3 class="section-title-blue">分析</h3>
-  <div class="nav">
-    <a class="card" href="single.html"><p class="card-title blue">單檔分析</p><p class="card-desc">分析單一檔案，輸出收益曲線、KPI、交易統計與關鍵指標。</p></a>
-    <a class="card" href="multi.html"><p class="card-title blue">多檔分析</p><p class="card-desc">同時上傳多個檔案，輸出彙總表、分策略／分年度統計與比較。</p></a>
-    <a class="card" href="monthly.html"><p class="card-title blue">分月報告</p><p class="card-desc">自動按月份拆分績效，提供月度盈虧、勝率、PF、MDD 等報告。</p></a>
-    <a class="card" href="single-cloud.html"><p class="card-title blue">雲端單檔分析 <span class="tag">第5分頁</span></p><p class="card-desc">直接從「資料上傳區」挑選檔案進行單檔分析，免重複上傳。</p></a>
-    <a class="card" href="multi-adv.html"><p class="card-title blue">多檔分析進階版 <span class="tag">第6分頁</span></p><p class="card-desc">進階彙總＋參數欄；支援一鍵開啟單檔分析（機構級）與指標對照。</p></a>
+    <h3 class="section-title-red">交易策略</h3>
+    <div class="strategy-grid">
+      <div class="strategy-col">
+        <p class="subcat">順勢型</p>
+
+        <a class="card" href="0807.html">
+          <p class="card-title red">台指近-0807版本</p>
+          <div class="lines">
+            <p class="line"><span class="label">近1週報酬率</span><span id="wk1-range-0807" class="range">—</span><span id="wk1-0807" class="val neu">—</span></p>
+            <p class="line"><span class="label">近2週報酬率</span><span id="wk2-range-0807" class="range">—</span><span id="wk2-0807" class="val neu">—</span></p>
+            <p class="line"><span class="label">近1月報酬率</span><span id="m1-range-0807"  class="range">—</span><span id="m1-0807"  class="val neu">—</span></p>
+            <p class="line"><span class="label">近2月報酬率</span><span id="m2-range-0807"  class="range">—</span><span id="m2-0807"  class="val neu">—</span></p>
+            <p class="line"><span class="label">近3月報酬率</span><span id="m3-range-0807"  class="range">—</span><span id="m3-0807"  class="val neu">—</span></p>
+            <p class="line"><span class="label">近6月報酬率</span><span id="m6-range-0807"  class="range">—</span><span id="m6-0807"  class="val neu">—</span></p>
+            <p class="line"><span class="label">近1年報酬率</span><span id="y1-range-0807"  class="range">—</span><span id="y1-0807"  class="val neu">—</span></p>
+            <p class="line"><span class="label">近2年報酬率</span><span id="y2-range-0807"  class="range">—</span><span id="y2-0807"  class="val neu">—</span></p>
+            <p class="line"><span class="label">近3年報酬率</span><span id="y3-range-0807"  class="range">—</span><span id="y3-0807"  class="val neu">—</span></p>
+            <p class="line"><span class="label">近6年報酬率</span><span id="y6-range-0807"  class="range">—</span><span id="y6-0807"  class="val neu">—</span></p>
+            <p class="period">期間：<span id="period-0807">—</span></p>
+          </div>
+        </a>
+
+        <a class="card" href="1001.html">
+          <p class="card-title red">台指近-1001版本</p>
+          <div class="lines">
+            <p class="line"><span class="label">近1週報酬率</span><span id="wk1-range-1001" class="range">—</span><span id="wk1-1001" class="val neu">—</span></p>
+            <p class="line"><span class="label">近2週報酬率</span><span id="wk2-range-1001" class="range">—</span><span id="wk2-1001" class="val neu">—</span></p>
+            <p class="line"><span class="label">近1月報酬率</span><span id="m1-range-1001"  class="range">—</span><span id="m1-1001"  class="val neu">—</span></p>
+            <p class="line"><span class="label">近2月報酬率</span><span id="m2-range-1001"  class="range">—</span><span id="m2-1001"  class="val neu">—</span></p>
+            <p class="line"><span class="label">近3月報酬率</span><span id="m3-range-1001"  class="range">—</span><span id="m3-1001"  class="val neu">—</span></p>
+            <p class="line"><span class="label">近6月報酬率</span><span id="m6-range-1001"  class="range">—</span><span id="m6-1001"  class="val neu">—</span></p>
+            <p class="line"><span class="label">近1年報酬率</span><span id="y1-range-1001"  class="range">—</span><span id="y1-1001"  class="val neu">—</span></p>
+            <p class="line"><span class="label">近2年報酬率</span><span id="y2-range-1001"  class="range">—</span><span id="y2-1001"  class="val neu">—</span></p>
+            <p class="line"><span class="label">近3年報酬率</span><span id="y3-range-1001"  class="range">—</span><span id="y3-1001"  class="val neu">—</span></p>
+            <p class="line"><span class="label">近6年報酬率</span><span id="y6-range-1001"  class="range">—</span><span id="y6-1001"  class="val neu">—</span></p>
+            <p class="period">期間：<span id="period-1001">—</span></p>
+          </div>
+        </a>
+      </div>
+
+      <div class="strategy-col">
+        <p class="subcat">逆勢型</p>
+
+        <a class="card" href="etf-00909.html">
+          <p class="card-title red">00909-ETF版本</p>
+          <div class="lines">
+            <p class="line"><span class="label">近1週報酬率</span><span id="wk1-range-00909" class="range">—</span><span id="wk1-00909" class="val neu">—</span></p>
+            <p class="line"><span class="label">近2週報酬率</span><span id="wk2-range-00909" class="range">—</span><span id="wk2-00909" class="val neu">—</span></p>
+            <p class="line"><span class="label">近1月報酬率</span><span id="m1-range-00909"  class="range">—</span><span id="m1-00909"  class="val neu">—</span></p>
+            <p class="line"><span class="label">近2月報酬率</span><span id="m2-range-00909"  class="range">—</span><span id="m2-00909"  class="val neu">—</span></p>
+            <p class="line"><span class="label">近3月報酬率</span><span id="m3-range-00909"  class="range">—</span><span id="m3-00909"  class="val neu">—</span></p>
+            <p class="line"><span class="label">近6月報酬率</span><span id="m6-range-00909"  class="range">—</span><span id="m6-00909"  class="val neu">—</span></p>
+            <p class="line"><span class="label">近1年報酬率</span><span id="y1-range-00909"  class="range">—</span><span id="y1-00909"  class="val neu">—</span></p>
+            <p class="line"><span class="label">近2年報酬率</span><span id="y2-range-00909"  class="range">—</span><span id="y2-00909"  class="val neu">—</span></p>
+            <p class="line"><span class="label">近3年報酬率</span><span id="y3-range-00909"  class="range">—</span><span id="y3-00909"  class="val neu">—</span></p>
+            <p class="line"><span class="label">近6年報酬率</span><span id="y6-range-00909"  class="range">—</span><span id="y6-00909"  class="val neu">—</span></p>
+            <p class="period">期間：<span id="period-00909">—</span></p>
+          </div>
+        </a>
+      </div>
+
+      <div class="strategy-col">
+        <p class="subcat">盤整型</p>
+        <a class="card" href="#"><p class="card-title gray">研發中</p></a>
+      </div>
+    </div>
+
+    <hr>
+
+    <h3 class="section-title-blue">分析</h3>
+    <div class="nav">
+      <a class="card" href="single.html"><p class="card-title blue">單檔分析</p><p class="card-desc">分析單一檔案，輸出收益曲線、KPI、交易統計與關鍵指標。</p></a>
+      <a class="card" href="multi.html"><p class="card-title blue">多檔分析</p><p class="card-desc">同時上傳多個檔案，輸出彙總表、分策略／分年度統計與比較。</p></a>
+      <a class="card" href="monthly.html"><p class="card-title blue">分月報告</p><p class="card-desc">自動按月份拆分績效，提供月度盈虧、勝率、PF、MDD 等報告。</p></a>
+      <a class="card" href="single-cloud.html"><p class="card-title blue">雲端單檔分析 <span class="tag">第5分頁</span></p><p class="card-desc">直接從「資料上傳區」挑選檔案進行單檔分析，免重複上傳。</p></a>
+      <a class="card" href="multi-adv.html"><p class="card-title blue">多檔分析進階版 <span class="tag">第6分頁</span></p><p class="card-desc">進階彙總＋參數欄；支援一鍵開啟單檔分析（機構級）與指標對照。</p></a>
+    </div>
+
+    <hr>
+
+    <h3 class="section-title-black">資料</h3>
+    <div class="nav">
+      <a class="card" href="upload.html">
+        <p class="card-title black">上傳檔案</p>
+        <p class="card-desc">上傳／檢視／下載／刪除回測與實倉報表，支援多檔批次處理。</p>
+      </a>
+    </div>
   </div>
 
-  <hr>
-
-  <h3 class="section-title-black">資料</h3>
-  <div class="nav">
-    <a class="card" href="upload.html">
-      <p class="card-title black">上傳檔案</p>
-      <p class="card-desc">上傳／檢視／下載／刪除回測與實倉報表，支援多檔批次處理。</p>
-    </a>
-  </div>
-
-  <!-- 依賴 -->
-  <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
-  <script src="shared.js?v=txfee45tax2"></script>
-
+  <!-- 僅在通過門檻後才載入的依賴（稍後動態注入） -->
   <script>
-  (async function(){
-    const SUPABASE_URL = "https://byhbmmnacezzgkwfkozs.supabase.co";
-    const SUPABASE_ANON_KEY = "sb_publishable_xVe8fGbqQ0XGwi4DsmjPMg_Y2RBOD3t";
-    const BUCKET = "reports";
-    const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      global: { fetch: (u,o={}) => fetch(u,{...o, cache:'no-store'}) }
+  (function(){
+    'use strict';
+    // ===== 設定（密碼 SHA-256 雜湊；不含明碼） =====
+    const PASS_HASH = "0f2b9305e317408510dc9878381e953630ed9fa3d2aadf95f1b8eb47941b18b9";
+    const KEY_OK='__auth_ok__', KEY_AGREE='__agree__';
+
+    const $ = s => document.querySelector(s);
+    const shield = $('#shield'), gate = $('#gate'), app = $('#app');
+    const agree = $('#agree'), pwd = $('#pwd'), btnLogin = $('#btnLogin'), btnClear = $('#btnClear'), err = $('#err');
+
+    // 同意勾選後才可輸入密碼
+    agree.addEventListener('change', ()=>{
+      const on = !!agree.checked;
+      [pwd, btnLogin, btnClear].forEach(el=> el.disabled = !on);
+      if(on) try{ pwd.focus(); }catch(e){}
     });
 
-    const WANT = { "0807": /0807/i, "1001": /1001/i, "00909": /00909/i };
-
-    const pubUrl = (path) => sb.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
-
-    // ===== 遞迴列最多 3 層（根 / 第一層 / 第二層）=====
-    async function listDir(prefix){
-      const p = (prefix && !prefix.endsWith('/')) ? prefix + '/' : (prefix || '');
-      const { data, error } = await sb.storage.from(BUCKET).list(p, { limit:1000, sortBy:{ column:'name', order:'asc' }});
-      if (error) return [];
-      return (data || []).map(it => ({ ...it, fullPath: p + it.name }));
+    async function sha256Hex(t){
+      const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(t));
+      return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
     }
-    async function listDeepN(prefix, depth, maxDepth, out){
-      if(depth>maxDepth) return;
-      const entries = await listDir(prefix);
-      for(const it of entries){
-        if(it.id === null){
-          await listDeepN(it.fullPath, depth+1, maxDepth, out);
-        }else{
-          out.push(it);
-        }
+
+    async function enter(){
+      err.style.display='none';
+      if(!agree.checked){ err.textContent='請先勾選同意條款'; err.style.display=''; return; }
+      const v=(pwd.value||'').trim(); if(!v){ err.textContent='請輸入密碼'; err.style.display=''; return; }
+      const h=await sha256Hex(v);
+      if(h===PASS_HASH){
+        sessionStorage.setItem(KEY_AGREE,'1'); sessionStorage.setItem(KEY_OK,'1');
+        gate.classList.add('hidden'); app.classList.remove('hidden');
+        loadDepsAndRun();         // 通過後才載入原本腳本
+      }else{
+        err.textContent='密碼錯誤，請再試一次。'; err.style.display='';
       }
     }
-    async function latestFileDeep(regex){
-      const all=[]; await listDeepN('', 0, 2, all);   // 0=root, 1=第一層, 2=第二層
-      const files = all.filter(it => it.id !== null && regex.test(it.name));
-      if (!files.length) return null;
-      const scoreInName = n => { const m = (n||'').match(/\b(20\d{6})\b/g); return m ? Math.max(...m.map(s=>+s)) : 0; };
-      files.sort((a,b)=>{
-        const sa=scoreInName(a.name), sb=scoreInName(b.name);
-        if(sa!==sb) return sb-sa;
-        const ta=a.updated_at? Date.parse(a.updated_at):0, tb=b.updated_at? Date.parse(b.updated_at):0;
-        if(ta!==tb) return tb-ta;
-        return (b.metadata?.size||0)-(a.metadata?.size||0);
-      });
-      return files[0];
-    }
+    btnLogin.addEventListener('click', enter);
+    btnClear.addEventListener('click', ()=>{ pwd.value=''; err.style.display='none'; pwd.focus(); });
+    pwd.addEventListener('keydown', e=>{ if(e.key==='Enter') enter(); });
 
-    // 讀 manifest（404/400 靜默忽略）
-    async function readManifest(name){
-      try{
-        const { data } = await sb.storage.from(BUCKET).download(`manifests/${name}.json`);
-        if (!data) return null;
-        return JSON.parse(await data.text());
-      }catch{ return null; }
-    }
+    // 若先前已同意且登入，直接顯示內容並載入腳本
+    (function boot(){
+      const ok = sessionStorage.getItem(KEY_OK)==='1' && sessionStorage.getItem(KEY_AGREE)==='1';
+      if(ok){ gate.classList.add('hidden'); app.classList.remove('hidden'); loadDepsAndRun(); }
+    })();
 
-    // 解析（注意單反斜線）
-    const CANON_RE   = /^(\d{14})\.0{6}\s+(\d+\.\d{6})\s+(新買|平賣|新賣|平買|強制平倉|強平)\s*$/;
-    const EXTRACT_RE = /.*?(\d{14})(?:\.0{1,6})?\s+(\d+(?:\.\d{1,6})?)\s*(新買|平賣|新賣|平買|強制平倉|強平)\s*$/;
+    // ===== 通過後才載入外部依賴與你的原始邏輯 =====
+    function loadScript(src){ return new Promise((res,rej)=>{ const s=document.createElement('script'); s.src=src; s.onload=res; s.onerror=()=>rej(new Error('load fail: '+src)); document.body.appendChild(s); }); }
+    async function loadDepsAndRun(){
+      // 依賴：Supabase + shared.js（你的原檔）
+      await loadScript('https://unpkg.com/@supabase/supabase-js@2');
+      await loadScript('shared.js?v=txfee45tax2');
 
-    function normalizeText(raw){
-      let s = raw.replace(/\ufeff/gi,'').replace(/\u200b|\u200c|\u200d/gi,'');
-      s = s.replace(/[\x00-\x09\x0B-\x1F\x7F]/g,'').replace(/\r\n?/g,'\n').replace(/\u3000/g,' ');
-      return s.split('\n').map(l=>l.replace(/\s+/g,' ').trim()).filter(Boolean).join('\n');
-    }
-    function canonicalize(txt){
-      const out=[], lines = txt.split('\n'); let ok=0;
-      for(const l of lines){
-        const m = l.match(EXTRACT_RE);
-        if(m){
-          const ts = m[1], px = Number(m[2]); const p6 = Number.isFinite(px) ? px.toFixed(6) : m[2];
-          let act= m[3]; if (act==='強平') act='強制平倉';
-          out.push(`${ts}.000000 ${p6} ${act}`); ok++;
+      // ======= 以下為原本數據載入程式（未改動） =======
+      (async function(){
+        const SUPABASE_URL = "https://byhbmmnacezzgkwfkozs.supabase.co";
+        const SUPABASE_ANON_KEY = "sb_publishable_xVe8fGbqQ0XGwi4DsmjPMg_Y2RBOD3t";
+        const BUCKET = "reports";
+        const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+          global: { fetch: (u,o={}) => fetch(u,{...o, cache:'no-store'}) }
+        });
+
+        const WANT = { "0807": /0807/i, "1001": /1001/i, "00909": /00909/i };
+
+        const pubUrl = (path) => sb.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
+
+        async function listDir(prefix){
+          const p = (prefix && !prefix.endsWith('/')) ? prefix + '/' : (prefix || '');
+          const { data, error } = await sb.storage.from(BUCKET).list(p, { limit:1000, sortBy:{ column:'name', order:'asc' }});
+          if (error) return [];
+          return (data || []).map(it => ({ ...it, fullPath: p + it.name }));
         }
-      }
-      return { canon: out.join('\n'), ok };
-    }
-    async function fetchSmart(url){
-      const res = await fetch(url,{cache:'no-store'}); if(!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-      const buf = await res.arrayBuffer();
-      for (const enc of ['utf-8','big5','utf-16le','utf-16be']){
-        try{
-          const td=new TextDecoder(enc,{fatal:false});
-          const norm = normalizeText(td.decode(buf));
+        async function listDeepN(prefix, depth, maxDepth, out){
+          if(depth>maxDepth) return;
+          const entries = await listDir(prefix);
+          for(const it of entries){
+            if(it.id === null){
+              await listDeepN(it.fullPath, depth+1, maxDepth, out);
+            }else{
+              out.push(it);
+            }
+          }
+        }
+        async function latestFileDeep(regex){
+          const all=[]; await listDeepN('', 0, 2, all);
+          const files = all.filter(it => it.id !== null && regex.test(it.name));
+          if (!files.length) return null;
+          const scoreInName = n => { const m = (n||'').match(/\b(20\d{6})\b/g); return m ? Math.max(...m.map(s=>+s)) : 0; };
+          files.sort((a,b)=>{
+            const sa=scoreInName(a.name), sb=scoreInName(b.name);
+            if(sa!==sb) return sb-sa;
+            const ta=a.updated_at? Date.parse(a.updated_at):0, tb=b.updated_at? Date.parse(b.updated_at):0;
+            if(ta!==tb) return tb-ta;
+            return (b.metadata?.size||0)-(a.metadata?.size||0);
+          });
+          return files[0];
+        }
+
+        async function readManifest(name){
+          try{
+            const { data } = await sb.storage.from(BUCKET).download(`manifests/${name}.json`);
+            if (!data) return null;
+            return JSON.parse(await data.text());
+          }catch{ return null; }
+        }
+
+        const CANON_RE   = /^(\d{14})\.0{6}\s+(\d+\.\d{6})\s+(新買|平賣|新賣|平買|強制平倉|強平)\s*$/;
+        const EXTRACT_RE = /.*?(\d{14})(?:\.0{1,6})?\s+(\d+(?:\.\d{1,6})?)\s*(新買|平賣|新賣|平買|強制平倉|強平)\s*$/;
+
+        function normalizeText(raw){
+          let s = raw.replace(/\ufeff/gi,'').replace(/\u200b|\u200c|\u200d/gi,'');
+          s = s.replace(/[\x00-\x09\x0B-\x1F\x7F]/g,'').replace(/\r\n?/g,'\n').replace(/\u3000/g,' ');
+          return s.split('\n').map(l=>l.replace(/\s+/g,' ').trim()).filter(Boolean).join('\n');
+        }
+        function canonicalize(txt){
+          const out=[], lines = txt.split('\n'); let ok=0;
+          for(const l of lines){
+            const m = l.match(EXTRACT_RE);
+            if(m){
+              const ts = m[1], px = Number(m[2]); const p6 = Number.isFinite(px) ? px.toFixed(6) : m[2];
+              let act= m[3]; if (act==='強平') act='強制平倉';
+              out.push(`${ts}.000000 ${p6} ${act}`); ok++;
+            }
+          }
+          return { canon: out.join('\n'), ok };
+        }
+        async function fetchSmart(url){
+          const res = await fetch(url,{cache:'no-store'}); if(!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+          const buf = await res.arrayBuffer();
+          for (const enc of ['utf-8','big5','utf-16le','utf-16be']){
+            try{
+              const td=new TextDecoder(enc,{fatal:false});
+              const norm = normalizeText(td.decode(buf));
+              const { canon, ok } = canonicalize(norm);
+              if (ok>0) return { canon, ok };
+            }catch(e){}
+          }
+          const td=new TextDecoder('utf-8'); const norm=normalizeText(td.decode(buf));
           const { canon, ok } = canonicalize(norm);
-          if (ok>0) return { canon, ok };
-        }catch(e){}
-      }
-      const td=new TextDecoder('utf-8'); const norm=normalizeText(td.decode(buf));
-      const { canon, ok } = canonicalize(norm);
-      return { canon, ok };
-    }
-    function parseCanon(text){
-      const rows=[]; if(!text) return rows;
-      for(const line of text.split('\n')){ const m = line.match(CANON_RE); if (m) rows.push({ ts:m[1], line }); }
-      rows.sort((a,b)=> a.ts.localeCompare(b.ts)); return rows;
-    }
-    function mergeByBaseline(baseText, latestText){
-      const A = parseCanon(baseText), B = parseCanon(latestText);
-      const baseMin = A.length ? A[0].ts.slice(0,8) : (B.length? B[0].ts.slice(0,8) : '');
-      const baseMax = A.length ? A[A.length-1].ts : '';
-      const added = baseMax ? B.filter(x => x.ts > baseMax).map(x => x.line) : B.map(x => x.line);
-      const mergedLines = [...A.map(x => x.line), ...added];
-      const endDay = mergedLines.length ? mergedLines[mergedLines.length-1].match(CANON_RE)[1].slice(0,8) : baseMin;
-      return { combined: mergedLines.join('\n'), start8: baseMin, end8: endDay };
-    }
-
-    function dailySeriesFromMerged(mergedTxt){
-      const parsed  = window.SHARED.parseTXT(mergedTxt);
-      const report  = window.SHARED.buildReport(parsed.rows);
-      const m=new Map();
-      for(const t of report.trades){ const d=String(t.tsOut).slice(0,8); m.set(d,(m.get(d)||0)+t.gainSlip); }
-      const days=[...m.keys()].sort();
-      const vals=days.map(d=>m.get(d));
-      return {days, vals};
-    }
-
-    const d8=s=> new Date(`${s.slice(0,4)}-${s.slice(4,6)}-${s.slice(6,8)}T00:00:00`);
-    const fmtD8=s=> `${s.slice(0,4)}/${s.slice(4,6)}/${s.slice(6,8)}`;
-
-    function simpleReturnWithRange(days, vals, winDays){
-      if(!days.length) return {ret:null, range:'---'};
-      const end = days[days.length-1];
-      const thr = new Date(d8(end).getTime() - (winDays-1)*86400000);
-      let i=0; while(i<days.length && d8(days[i]) < thr) i++;
-      if (i>=days.length) return {ret:null, range:'---'};
-      const startDay = days[i];
-      const pref=[0]; for(const v of vals) pref.push(pref[pref.length-1]+v);
-      const sum = pref[vals.length] - pref[i];
-      return { ret: sum/1_000_000, range: `${fmtD8(startDay)} - ${fmtD8(end)}` };
-    }
-    function simpleReturnYearWindowWithRange(days, vals, winDays){
-      if(!days.length) return {ret:null, range:'---'};
-      const first = days[0], last = days[days.length-1];
-      const cover = Math.max(1, Math.round((d8(last)-d8(first))/86400000)+1);
-      if (cover < winDays - 60) return {ret:null, range:'---'};
-      const end = last;
-      const thr = new Date(d8(end).getTime() - (winDays-1)*86400000);
-      let i=0; while(i<days.length && d8(days[i]) < thr) i++;
-      if (i>=days.length) i=0;
-      const startDay = days[i];
-      const pref=[0]; for(const v of vals) pref.push(pref[pref.length-1]+v);
-      const sum = pref[vals.length] - pref[i];
-      return { ret: sum/1_000_000, range: `${fmtD8(startDay)} - ${fmtD8(end)}` };
-    }
-
-    const setVal=(id,v)=>{
-      const el=document.getElementById(id); if(!el) return;
-      el.classList.remove('pos','neg','neu');
-      if (v==null){ el.textContent='---'; el.classList.add('neu'); return; }
-      el.textContent=(v*100).toFixed(2)+'%';
-      el.classList.add(v>0?'pos':(v<0?'neg':'neu'));
-    };
-    const setText=(id,text)=>{ const el=document.getElementById(id); if(el) el.textContent=text||'---'; };
-
-    async function fillCard(key){
-      const set = (suf, v)=>setVal(`${suf}-${key}`, v);
-      const setR = (suf, r)=>setText(`${suf}-range-${key}`, r);
-      const setPeriod = text => { const el=document.getElementById(`period-${key}`); if(el) el.textContent=text; };
-
-      try{
-        const latest = await latestFileDeep(WANT[key]);
-        if(!latest){
-          ['wk1','wk2','m1','m2','m3','m6','y1','y2','y3','y6'].forEach(x=> { set(x,null); setR(x,'---'); });
-          setPeriod('—'); return;
+          return { canon, ok };
         }
-        const latestText = (await fetchSmart(pubUrl(latest.fullPath))).canon;
-
-        const manifest = await readManifest(key);  // 不存在就忽略
-        let merged = latestText, start8='', end8='';
-        if(manifest?.baseline_path){
-          const baseText = (await fetchSmart(pubUrl(manifest.baseline_path))).canon;
-          const m = mergeByBaseline(baseText, latestText);
-          merged = m.combined; start8 = m.start8; end8 = m.end8;
-        }else{
-          const rows = parseCanon(latestText);
-          start8 = rows.length ? rows[0].ts.slice(0,8) : '';
-          end8   = rows.length ? rows[rows.length-1].ts.slice(0,8) : '';
+        function parseCanon(text){
+          const rows=[]; if(!text) return rows;
+          for(const line of text.split('\n')){ const m = line.match(CANON_RE); if (m) rows.push({ ts:m[1], line }); }
+          rows.sort((a,b)=> a.ts.localeCompare(b.ts)); return rows;
+        }
+        function mergeByBaseline(baseText, latestText){
+          const A = parseCanon(baseText), B = parseCanon(latestText);
+          const baseMin = A.length ? A[0].ts.slice(0,8) : (B.length? B[0].ts.slice(0,8) : '');
+          const baseMax = A.length ? A[A.length-1].ts : '';
+          const added = baseMax ? B.filter(x => x.ts > baseMax).map(x => x.line) : B.map(x => x.line);
+          const mergedLines = [...A.map(x => x.line), ...added];
+          const endDay = mergedLines.length ? mergedLines[mergedLines.length-1].match(CANON_RE)[1].slice(0,8) : baseMin;
+          return { combined: mergedLines.join('\n'), start8: baseMin, end8: endDay };
         }
 
-        const {days, vals} = dailySeriesFromMerged(merged);
+        function dailySeriesFromMerged(mergedTxt){
+          const parsed  = window.SHARED.parseTXT(mergedTxt);
+          const report  = window.SHARED.buildReport(parsed.rows);
+          const m=new Map();
+          for(const t of report.trades){ const d=String(t.tsOut).slice(0,8); m.set(d,(m.get(d)||0)+t.gainSlip); }
+          const days=[...m.keys()].sort();
+          const vals=days.map(d=>m.get(d));
+          return {days, vals};
+        }
 
-        set('wk1', simpleReturnWithRange(days, vals, 7).ret);
-        setR('wk1', simpleReturnWithRange(days, vals, 7).range);
-        set('wk2', simpleReturnWithRange(days, vals, 14).ret);
-        setR('wk2', simpleReturnWithRange(days, vals, 14).range);
-        set('m1', simpleReturnWithRange(days, vals, 30).ret);
-        setR('m1', simpleReturnWithRange(days, vals, 30).range);
-        set('m2', simpleReturnWithRange(days, vals, 60).ret);
-        setR('m2', simpleReturnWithRange(days, vals, 60).range);
-        set('m3', simpleReturnWithRange(days, vals, 90).ret);
-        setR('m3', simpleReturnWithRange(days, vals, 90).range);
-        set('m6', simpleReturnWithRange(days, vals, 180).ret);
-        setR('m6', simpleReturnWithRange(days, vals, 180).range);
+        const d8=s=> new Date(`${s.slice(0,4)}-${s.slice(4,6)}-${s.slice(6,8)}T00:00:00`);
+        const fmtD8=s=> `${s.slice(0,4)}/${s.slice(4,6)}/${s.slice(6,8)}`;
 
-        set('y1', simpleReturnYearWindowWithRange(days, vals, 365).ret);
-        setR('y1', simpleReturnYearWindowWithRange(days, vals, 365).range);
-        set('y2', simpleReturnYearWindowWithRange(days, vals, 730).ret);
-        setR('y2', simpleReturnYearWindowWithRange(days, vals, 730).range);
-        set('y3', simpleReturnYearWindowWithRange(days, vals, 1095).ret);
-        setR('y3', simpleReturnYearWindowWithRange(days, vals, 1095).range);
-        set('y6', simpleReturnYearWindowWithRange(days, vals, 2190).ret);
-        setR('y6', simpleReturnYearWindowWithRange(days, vals, 2190).range);
+        function simpleReturnWithRange(days, vals, winDays){
+          if(!days.length) return {ret:null, range:'---'};
+          const end = days[days.length-1];
+          const thr = new Date(d8(end).getTime() - (winDays-1)*86400000);
+          let i=0; while(i<days.length && d8(days[i]) < thr) i++;
+          if (i>=days.length) return {ret:null, range:'---'};
+          const startDay = days[i];
+          const pref=[0]; for(const v of vals) pref.push(pref[pref.length-1]+v);
+          const sum = pref[vals.length] - pref[i];
+          return { ret: sum/1_000_000, range: `${fmtD8(startDay)} - ${fmtD8(end)}` };
+        }
+        function simpleReturnYearWindowWithRange(days, vals, winDays){
+          if(!days.length) return {ret:null, range:'---'};
+          const first = days[0], last = days[days.length-1];
+          const cover = Math.max(1, Math.round((d8(last)-d8(first))/86400000)+1);
+          if (cover < winDays - 60) return {ret:null, range:'---'};
+          const end = last;
+          const thr = new Date(d8(end).getTime() - (winDays-1)*86400000);
+          let i=0; while(i<days.length && d8(days[i]) < thr) i++;
+          if (i>=days.length) i=0;
+          const startDay = days[i];
+          const pref=[0]; for(const v of vals) pref.push(pref[pref.length-1]+v);
+          const sum = pref[vals.length] - pref[i];
+          return { ret: sum/1_000_000, range: `${fmtD8(startDay)} - ${fmtD8(end)}` };
+        }
 
-        setPeriod(`${start8||'—'} - ${end8||'—'}`);
-      }catch(e){
-        ['wk1','wk2','m1','m2','m3','m6','y1','y2','y3','y6'].forEach(x=> { set(x,null); setR(x,'---'); });
-        setPeriod('—');
-      }
+        const setVal=(id,v)=>{
+          const el=document.getElementById(id); if(!el) return;
+          el.classList.remove('pos','neg','neu');
+          if (v==null){ el.textContent='---'; el.classList.add('neu'); return; }
+          el.textContent=(v*100).toFixed(2)+'%';
+          el.classList.add(v>0?'pos':(v<0?'neg':'neu'));
+        };
+        const setText=(id,text)=>{ const el=document.getElementById(id); if(el) el.textContent=text||'---'; };
+
+        async function fillCard(key){
+          const set = (suf, v)=>setVal(`${suf}-${key}`, v);
+          const setR = (suf, r)=>setText(`${suf}-range-${key}`, r);
+          const setPeriod = text => { const el=document.getElementById(`period-${key}`); if(el) el.textContent=text; };
+
+          try{
+            const latest = await latestFileDeep(WANT[key]);
+            if(!latest){
+              ['wk1','wk2','m1','m2','m3','m6','y1','y2','y3','y6'].forEach(x=> { set(x,null); setR(x,'---'); });
+              setPeriod('—'); return;
+            }
+            const latestText = (await fetchSmart(pubUrl(latest.fullPath))).canon;
+
+            const manifest = await readManifest(key);  // 不存在就忽略
+            let merged = latestText, start8='', end8='';
+            if(manifest?.baseline_path){
+              const baseText = (await fetchSmart(pubUrl(manifest.baseline_path))).canon;
+              const m = mergeByBaseline(baseText, latestText);
+              merged = m.combined; start8 = m.start8; end8 = m.end8;
+            }else{
+              const rows = parseCanon(latestText);
+              start8 = rows.length ? rows[0].ts.slice(0,8) : '';
+              end8   = rows.length ? rows[rows.length-1].ts.slice(0,8) : '';
+            }
+
+            const {days, vals} = dailySeriesFromMerged(merged);
+
+            const W1=simpleReturnWithRange(days, vals, 7),  W2=simpleReturnWithRange(days, vals, 14);
+            const M1=simpleReturnWithRange(days, vals, 30), M2=simpleReturnWithRange(days, vals, 60);
+            const M3=simpleReturnWithRange(days, vals, 90), M6=simpleReturnWithRange(days, vals, 180);
+            const Y1=simpleReturnYearWindowWithRange(days, vals, 365),
+                  Y2=simpleReturnYearWindowWithRange(days, vals, 730),
+                  Y3=simpleReturnYearWindowWithRange(days, vals, 1095),
+                  Y6=simpleReturnYearWindowWithRange(days, vals, 2190);
+
+            set('wk1',W1.ret); setR('wk1',W1.range);
+            set('wk2',W2.ret); setR('wk2',W2.range);
+            set('m1',M1.ret);  setR('m1',M1.range);
+            set('m2',M2.ret);  setR('m2',M2.range);
+            set('m3',M3.ret);  setR('m3',M3.range);
+            set('m6',M6.ret);  setR('m6',M6.range);
+            set('y1',Y1.ret);  setR('y1',Y1.range);
+            set('y2',Y2.ret);  setR('y2',Y2.range);
+            set('y3',Y3.ret);  setR('y3',Y3.range);
+            set('y6',Y6.ret);  setR('y6',Y6.range);
+
+            setPeriod(`${start8||'—'} - ${end8||'—'}`);
+          }catch(e){
+            ['wk1','wk2','m1','m2','m3','m6','y1','y2','y3','y6'].forEach(x=> { set(x,null); setR(x,'---'); });
+            setPeriod('—');
+          }
+        }
+
+        await Promise.all([fillCard("0807"), fillCard("1001"), fillCard("00909")]);
+      })();
     }
 
-    await Promise.all([fillCard("0807"), fillCard("1001"), fillCard("00909")]);
+    // ==== “擋新手”防護（非真正安全） ====
+    window.addEventListener('contextmenu', e=>{ e.preventDefault(); showShield(); }, {capture:true});
+    window.addEventListener('copy', e=>e.preventDefault(), {capture:true});
+    window.addEventListener('cut',  e=>e.preventDefault(), {capture:true});
+    window.addEventListener('selectstart', e=>e.preventDefault(), {capture:true});
+    window.addEventListener('keydown', (e)=>{
+      const K=(e.key||'').toUpperCase();
+      if(e.key==='F12'){ e.preventDefault(); showShield(); }
+      if(e.ctrlKey && ['U','S','P'].includes(K)){ e.preventDefault(); showShield(); }
+      if(e.ctrlKey && e.shiftKey && ['I','J','C','K'].includes(K)){ e.preventDefault(); showShield(); }
+    }, {capture:true});
+    function checkDev(){ if(window.outerWidth-window.innerWidth>160 || window.outerHeight-window.innerHeight>160) showShield(); }
+    setInterval(checkDev, 800);
+    function showShield(){ shield.style.display='flex'; }
   })();
   </script>
 </body>
