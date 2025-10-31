@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>台股-1031策略分析</title>
+  <meta name="robots" content="noindex,nofollow" />
+  <style>
+    body{font-family:ui-sans-serif,system-ui;-webkit-font-smoothing:antialiased;margin:0;padding:16px;background:#f7f7fb;color:#222}
+    .wrap{max-width:1440px;margin:0 auto}
+    .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+    .chip{display:inline-block;background:#eef;padding:6px 10px;border-radius:999px;font-size:12px}
+    .btn{background:#0d6efd;color:#fff;border:0;border-radius:10px;padding:8px 12px;cursor:pointer}
+    .btn.gray{background:#6c757d}
+    .card{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:14px;box-shadow:0 2px 8px rgba(0,0,0,.06)}
+    h1{margin:6px 0 8px 0}
+    .grid{display:grid;grid-template-columns:repeat(2,minmax(300px,1fr));gap:12px}
+    .full{grid-column:1/-1}
+    table{width:100%;border-collapse:separate;border-spacing:0}
+    th,td{padding:8px 10px;border-bottom:1px solid #eee;font-size:13px;white-space:nowrap}
+    th{text-align:left;background:#fafafa}
+    .right{text-align:right}
+    .muted{color:#6b7280}
+    .ok{color:#ef4444} .bad{color:#16a34a}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>台股-1031策略分析</h1>
+    <div class="row">
+      <span class="chip" id="chipVer">v1031</span>
+      <span class="chip" id="autostatus">初始化…</span>
+    </div>
+
+    <div class="grid" style="margin-top:12px">
+      <!-- Diff/Base/狀態 -->
+      <section class="card">
+        <h3 style="margin:0 0 6px">資料狀態</h3>
+        <div class="row">
+          <div class="chip" id="latestChip">最新檔：—</div>
+          <div class="chip" id="baseChip">基準：—</div>
+          <button class="btn gray" id="btnSetBase">設此為基準</button>
+        </div>
+        <p class="muted" style="margin:8px 0 0">來源：Supabase bucket <code>reports</code>；可用 <code>?file=</code> 指定路徑。</p>
+      </section>
+
+      <!-- 參數 -->
+      <section class="card">
+        <h3 style="margin:0 0 6px">參數</h3>
+        <div class="row">
+          <span class="chip">初始資金：<b id="chipCap">1,000,000</b></span>
+          <span class="chip">張數/單位：<b id="chipUnit">1000</b></span>
+          <span class="chip">費率：<b id="chipFee">broker-ceil</b></span>
+        </div>
+      </section>
+
+      <!-- 週次盈虧圖 -->
+      <section class="card full">
+        <h3 style="margin:0 0 6px">週次盈虧</h3>
+        <canvas id="chWeekly" height="120"></canvas>
+      </section>
+
+      <!-- KPI -->
+      <section class="card">
+        <h3 style="margin:0 0 6px">績效摘要</h3>
+        <table>
+          <tbody>
+            <tr><th>總報酬</th><td class="right" id="k_total">—</td></tr>
+            <tr><th>年化</th><td class="right" id="k_cagr">—</td></tr>
+            <tr><th>MaxDD</th><td class="right" id="k_mdd">—</td></tr>
+            <tr><th>PF</th><td class="right" id="k_pf">—</td></tr>
+            <tr><th>Hit</th><td class="right" id="k_hit">—</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- 目前持有 -->
+      <section class="card">
+        <h3 style="margin:0 0 6px">目前持有</h3>
+        <div id="lastBuyBar" class="muted">無持有</div>
+      </section>
+
+      <!-- 最佳化交易明細 -->
+      <section class="card full">
+        <h3 style="margin:0 6px 6px 0;display:inline-block">最佳化交易明細</h3>
+        <div style="overflow:auto">
+          <table id="optTable">
+            <thead>
+              <tr>
+                <th>日期</th><th>種類</th><th>成交價格</th><th>成交數量</th>
+                <th>買進金額</th><th>賣出金額</th><th>手續費</th><th>交易稅</th>
+                <th>成本</th><th>成本均價</th><th>累計成本</th><th>價格差</th>
+                <th>損益</th><th>報酬率</th><th>累計損益</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+
+    <p class="muted" style="margin-top:12px">© 三劍客量化科技 · 研究用</p>
+  </div>
+
+  <!-- 依賴：Chart.js / Supabase / 你的共用模組 / 引擎 -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+  <script src="shared.js?v=txfee45tax2"></script>
+  <script src="etf-engine.js?v=fullfee-v1"></script>
+  <script src="etf-chart.js?v=etf-chart-v1"></script>
+
+  <!-- 本頁邏輯（分離） -->
+  <script src="tw-1031.js?v=1031-v1" defer></script>
+</body>
+</html>
