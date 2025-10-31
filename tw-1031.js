@@ -1,21 +1,20 @@
 // tw-1031.js — 台股 1031（KPI 全移除；新增「交易明細」固定 1/1/2；保留週次圖＋最佳化表）
 (function(){
-  // ========= 小工具 =========
+  /* ===== 小工具 ===== */
   const $ = s => document.querySelector(s);
   const status = $('#autostatus');
   const set = (m,bad=false)=>{ if(status){ status.textContent=m; status.style.color=bad?'#c62828':'#666'; } };
   const fmtInt = n => Math.round(n || 0).toLocaleString();
   const tsPretty = ts14 => `${ts14.slice(0,4)}/${ts14.slice(4,6)}/${ts14.slice(6,8)} ${ts14.slice(8,10)}:${ts14.slice(10,12)}`;
 
-  // ========= 參數 =========
+  /* ===== 參數 ===== */
   const url = new URL(location.href);
   const CFG = {
     bucket: 'reports',
-    // 手續費/稅/每張股數可由 URL 覆寫：?fee=0.001425&tax=0.001&minfee=20&unit=1000
     feeRate: +(url.searchParams.get('fee') || 0.001425),
     taxRate: +(url.searchParams.get('tax') || 0.001),
     minFee : +(url.searchParams.get('minfee') || 20),
-    unitShares: +(url.searchParams.get('unit') || 1000),
+    unitShares: +(url.searchParams.get('unit') || 1000),   // 一張股數（交易明細 / 最佳化兩邊共用）
     initialCapital: 1_000_000,
   };
   $('#feeRateChip').textContent = (CFG.feeRate*100).toFixed(4)+'%';
@@ -25,35 +24,21 @@
   $('#slipChip').textContent = '0';
   $('#rfChip').textContent = '0.00%';
 
-  // ========= Supabase =========
+  /* ===== Supabase ===== */
   const SUPABASE_URL  = window.SUPABASE_URL  || "https://byhbmmnacezzgkwfkozs.supabase.co";
   const SUPABASE_KEY  = window.SUPABASE_ANON_KEY || "sb_publishable_xVe8fGbqQ0XGwi4DsmjPMg_Y2RBOD3t";
   const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, { global:{ fetch:(u,o={})=>fetch(u,{...o,cache:'no-store'}) } });
   const pubUrl = p => sb.storage.from(CFG.bucket).getPublicUrl(p).data.publicUrl;
 
-  // ========= CSV → canonical（只做多：買進/加碼/再加碼→新買；賣出→平賣） =========
-  function toCanonFrom1031CSV(raw){
-    const toHalf = s => s.replace(/[０-９]/g, d=>String.fromCharCode(d.charCodeAt(0)-0xFEE0)).replace(/，/g,',');
-    let txt = toHalf(raw).replace(/\ufeff/g,'').replace(/\r\n?/g,'\n');
-    const out=[];
-    for(const line0 of txt.split('\n')){
-      if(!line0) continue;
-      const line=line0.trim();
-      if(!line || /^日期\s*,\s*時間\s*,\s*價格\s*,\s*動作/i.test(line)) continue;
-      const parts=line.split(','); if(parts.length<4) continue;
-      const d8=(parts[0]||'').trim(); if(!/^\d{8}$/.test(d8)) continue;
-      let t=(parts[1]||'').trim(); if(/^\d{5}$/.test(t)) t='0'+t; if(!/^\d{6}$/.test(t)) continue;
-      const px=Number((parts[2]||'').trim()); if(!Number.isFinite(px)) continue;
-      const act=(parts[3]||'').trim();
-      let mapped=''; if(act.includes('賣出')) mapped='平賣';
-      else if(/買進|加碼攤平|再加碼攤平/.test(act)) mapped='新買';
-      else continue;
-      out.push(`${d8}${t}.000000 ${px.toFixed(6)} ${mapped}`);
-    }
-    return { canon: out.join('\n'), ok: out.length };
+  /* ===== 手續費稅 ===== */
+  function feesInt(price, shares, isSell){
+    const gross = price * shares;
+    const fee = Math.max(CFG.minFee, Math.ceil(gross * CFG.feeRate));
+    const tax = isSell ? Math.ceil(gross * CFG.taxRate) : 0;
+    return { gross, fee, tax };
   }
 
-  // ========= 下載（多編碼嘗試） =========
+  /* ===== 下載（多編碼） ===== */
   async function fetchText(u){
     const res=await fetch(u,{cache:'no-store'}); if(!res.ok) throw new Error(`${res.status} ${res.statusText}`);
     const buf=await res.arrayBuffer();
@@ -64,16 +49,75 @@
     return new TextDecoder('utf-8').decode(buf);
   }
 
-  // ========= parse + backtest =========
-  function feesInt(price, shares, isSell){
-    const gross = price * shares;
-    const fee = Math.max(CFG.minFee, Math.ceil(gross * CFG.feeRate));
-    const tax = isSell ? Math.ceil(gross * CFG.taxRate) : 0;
-    return { gross, fee, tax };
+  /* ===== CSV -> canonical（只做多） =====
+     特色：
+     - 僅抽出「前四欄」：日期、時間、價格、動作（之後的說明不管）
+     - 容錯：BOM、全形數字/逗號、Tab、奇異空白
+     - 動作映射：買進/加碼攤平/再加碼攤平 → 新買；賣出 → 平賣
+  */
+  function toCanonFrom1031CSV(raw){
+    const toHalf = s =>
+      s.replace(/[０-９]/g, d=>String.fromCharCode(d.charCodeAt(0)-0xFEE0))
+       .replace(/，/g, ',')
+       .replace(/\t/g, ',');
+    const clean = toHalf(raw)
+      .replace(/\r\n?/g,'\n')
+      .replace(/[\x00-\x08\x0B-\x1F\x7F]/g,'')
+      .replace(/[\u200B-\u200D]/g,'');
+
+    const out=[];
+
+    // 逐字掃描，安全取得前四個欄位（遇到第4欄後立刻停）
+    function first4Fields(line){
+      const arr=[]; let cur='', commas=0;
+      for(let i=0;i<line.length;i++){
+        const c=line[i];
+        if(c===','){
+          arr.push(cur.trim()); cur=''; commas++;
+          if(commas===3){ // 已取到前三個分隔（得到了四欄），剩下都忽略
+            // 第四欄內容是從下一個字元開始到下個逗號或行尾，但「動作」不會含逗號；直接抓到下個逗號或行尾
+            let j=i+1, tok='';
+            while(j<line.length && line[j]!==','){ tok+=line[j]; j++; }
+            arr.push(tok.trim());
+            return arr;
+          }
+        }else{
+          cur+=c;
+        }
+      }
+      // 若不到三個逗號，則最後一段也要推
+      if(cur.length) arr.push(cur.trim());
+      return arr;
+    }
+
+    for(let line of clean.split('\n')){
+      if(!line) continue;
+      line=line.trim();
+      if(!line || /^日期\s*,\s*時間\s*,\s*價格\s*,\s*動作/i.test(line)) continue;
+
+      const fields = first4Fields(line); // [日期,時間,價格,動作]
+      if(fields.length<4) continue;
+
+      const d8=fields[0]; if(!/^\d{8}$/.test(d8)) continue;
+      let t=fields[1]; if(/^\d{5}$/.test(t)) t='0'+t; if(!/^\d{6}$/.test(t)) continue;
+      const price = Number(fields[2]); if(!Number.isFinite(price)) continue;
+
+      const actRaw=fields[3];
+      let mapped='';
+      if(actRaw.includes('賣出')) mapped='平賣';
+      else if(/買進|加碼攤平|再加碼攤平/.test(actRaw)) mapped='新買';
+      else continue;
+
+      out.push(`${d8}${t}.000000 ${price.toFixed(6)} ${mapped}`);
+    }
+
+    return { canon: out.join('\n'), ok: out.length };
   }
+
+  /* ===== 回測引擎 ===== */
   const backtest = rows => window.ETF_ENGINE.backtest(rows, { ...CFG });
 
-  // ========= 週次圖 =========
+  /* ===== 週次圖 ===== */
   let chWeekly=null;
   function weekStartDate(ms){
     const d=new Date(ms), dow=(d.getUTCDay()+6)%7;
@@ -107,9 +151,9 @@
     });
   }
 
-  // ========= 交易明細（固定 1/1/2，無資金限制） =========
+  /* ===== 交易明細（固定 1/1/2，無資金限制） ===== */
   function buildSimpleExecs(execs){
-    // 以 bt.execs 的 BUY/SELL 時點為基準，對每段 BUY×n + SELL 套用 lots=[1,1,2]
+    // 用引擎的 BUY/SELL 節奏，對每段套用 lots=[1,1,2]（每張 unitShares）
     const segs=[], cur=[];
     for(const e of execs){ cur.push(e); if(e.side==='SELL'){ segs.push(cur.slice()); cur.length=0; } }
     if(cur.length) segs.push(cur.slice());
@@ -125,24 +169,18 @@
       let sharesHeld=0;
 
       for(let i=0;i<n;i++){
-        const b=buys[i];
-        const lots=plan[i];
+        const b=buys[i], lots=plan[i];
         const shares = lots * CFG.unitShares;
         const f = feesInt(b.price, shares, false);
-        out.push({
-          side:'BUY', ts:b.ts, tsMs:b.tsMs, price:b.price, shares,
-          buyAmount:f.gross, sellAmount:0, fee:f.fee, tax:0
-        });
+        out.push({ side:'BUY', ts:b.ts, tsMs:b.tsMs, price:b.price, shares,
+          buyAmount:f.gross, sellAmount:0, fee:f.fee, tax:0 });
         sharesHeld += shares;
       }
 
       if(sharesHeld>0){
-        const s=sell;
-        const f = feesInt(s.price, sharesHeld, true);
-        out.push({
-          side:'SELL', ts:s.ts, tsMs:s.tsMs, price:s.price, shares:sharesHeld,
-          buyAmount:0, sellAmount:f.gross, fee:f.fee, tax:f.tax
-        });
+        const s=sell; const f = feesInt(s.price, sharesHeld, true);
+        out.push({ side:'SELL', ts:s.ts, tsMs:s.tsMs, price:s.price, shares:sharesHeld,
+          buyAmount:0, sellAmount:f.gross, fee:f.fee, tax:f.tax });
       }
     }
     out.sort((a,b)=>a.tsMs-b.tsMs);
@@ -169,14 +207,9 @@
     }
   }
 
-  // ========= 最佳化交易（本金100萬；1/1/2；資金不足縮量；未平倉保留BUY） =========
-  function feesOpt(price, shares, isSell){
-    const gross = price*shares;
-    const fee = Math.max(CFG.minFee, Math.ceil(gross*CFG.feeRate));
-    const tax = isSell ? Math.ceil(gross*CFG.taxRate) : 0;
-    return {gross,fee,tax};
-  }
-  function buyCostLots(price,lots){ const sh = lots*CFG.unitShares; const f=feesOpt(price,sh,false); return { cost:f.gross+f.fee, shares:sh, f }; }
+  /* ===== 最佳化交易（本金100萬；1/1/2；資金不足縮量；未平倉保留BUY） ===== */
+  function feesOpt(price, shares, isSell){ const gross=price*shares; const fee=Math.max(CFG.minFee,Math.ceil(gross*CFG.feeRate)); const tax=isSell?Math.ceil(gross*CFG.taxRate):0; return {gross,fee,tax}; }
+  function buyCostLots(price,lots){ const sh=lots*CFG.unitShares; const f=feesOpt(price,sh,false); return { cost:f.gross+f.fee, shares:sh, f }; }
   function splitSegments(execs){ const segs=[], cur=[]; for(const e of execs){ cur.push(e); if(e.side==='SELL'){ segs.push(cur.slice()); cur.length=0; } } if(cur.length) segs.push(cur.slice()); return segs; }
 
   function buildOptimizedExecs(execs){
@@ -194,9 +227,8 @@
 
       for(let i=0;i<n;i++){
         const b=buys[i]; let lots=plan[i];
-        const oneC=buyCostLots(b.price,1).cost;
-        let affordable=Math.floor(remaining/oneC); if(affordable<=0) break;
-        if(lots>affordable) lots=affordable;
+        const oneC=buyCostLots(b.price,1).cost; let affordable=Math.floor(remaining/oneC);
+        if(affordable<=0) break; if(lots>affordable) lots=affordable;
 
         const bc=buyCostLots(b.price,lots);
         remaining-=bc.cost; cumCost+=bc.cost; sharesHeld+=bc.shares;
@@ -209,17 +241,17 @@
 
       if(sharesHeld>0){
         const s=sell; const st=feesOpt(s.price,sharesHeld,true);
-        const pnlFull= st.gross - st.fee - st.tax - cumCost;
-        cumPnlAll += pnlFull;
-        const sellCumCostDisp = cumCost + st.fee + st.tax;
-        const sellCostAvgDisp = sellCumCostDisp / sharesHeld;
-        const buyCostAvgBase = cumCost / sharesHeld;
-        const priceDiff = sellCostAvgDisp - buyCostAvgBase;
+        const pnlFull= st.gross - st.fee - st.tax - cumCost; cumPnlAll += pnlFull;
+
+        const sellCumCostDisp=cumCost+st.fee+st.tax;
+        const sellCostAvgDisp=sellCumCostDisp/sharesHeld;
+        const buyCostAvgBase=cumCost/sharesHeld;
+        const priceDiff=sellCostAvgDisp-buyCostAvgBase;
 
         out.push({ side:'SELL', ts:s.ts, tsMs:s.tsMs, price:s.price, shares:sharesHeld,
           buyAmount:0, sellAmount:st.gross, fee:st.fee, tax:st.tax, cost:0,
           cumCost, cumCostDisp:sellCumCostDisp, costAvgDisp:sellCostAvgDisp, priceDiff,
-          pnlFull, retPctUnit: sellCumCostDisp>0 ? (pnlFull / sellCumCostDisp) : null, cumPnlFull:cumPnlAll });
+          pnlFull, retPctUnit: sellCumCostDisp>0 ? (pnlFull/sellCumCostDisp) : null, cumPnlFull:cumPnlAll });
       }
     }
     out.sort((a,b)=>a.tsMs-b.tsMs);
@@ -241,6 +273,7 @@
       const retPctShow = (isSell && e.retPctUnit!=null) ? ((e.retPctUnit*100).toFixed(2)+'%') : '—';
       const pnlCell = e.pnlFull==null ? '—' : (e.pnlFull>0 ? `<span class="pnl-pos">${fmtInt(e.pnlFull)}</span>` : `<span class="pnl-neg">${fmtInt(e.pnlFull)}</span>`);
       const cumPnlCell = e.cumPnlFull==null ? '—' : (e.cumPnlFull>0 ? `<span class="pnl-pos">${fmtInt(e.cumPnlFull)}</span>` : `<span class="pnl-neg">${fmtInt(e.cumPnlFull)}</span>`);
+
       const tr=document.createElement('tr'); tr.className=isSell?'sell-row':'buy-row';
       tr.innerHTML=
         `<td>${tsPretty(e.ts)}</td>
@@ -262,20 +295,20 @@
     }
   }
 
-  // ========= 主流程 =========
+  /* ===== 主流程 ===== */
   async function boot(){
     try{
       set('從 Supabase 讀取清單…');
-      // 取得最相關檔
-      const prefix = url.searchParams.get('prefix') || '';
-      const { data } = await sb.storage.from(CFG.bucket).list(prefix, { limit:1000, sortBy:{column:'name',order:'asc'} });
-      const all = (data||[]).map(it=>({ name:it.name, fullPath:(prefix?prefix+'/':'')+it.name, updatedAt:it.updated_at?Date.parse(it.updated_at):0, size:it.metadata?.size||0 }));
-      const list = all.filter(f=>/\.txt$|\.csv$/i.test(f.name) && /1031/i.test(f.name));
-      list.sort((a,b)=>b.updatedAt-a.updatedAt || (b.size||0)-(a.size||0));
+      // 只列出檔名含 1031 的 txt/csv，取更新時間最新
+      const { data } = await sb.storage.from(CFG.bucket).list('', { limit:1000, sortBy:{column:'name',order:'asc'} });
+      const list = (data||[])
+        .map(it=>({ name:it.name, fullPath:it.name, updatedAt:it.updated_at?Date.parse(it.updated_at):0, size:it.metadata?.size||0 }))
+        .filter(f=>/\.txt$|\.csv$/i.test(f.name) && /1031/i.test(f.name))
+        .sort((a,b)=>b.updatedAt-a.updatedAt || (b.size||0)-(a.size||0));
       const latest = list[0];
       if(!latest){ set('找不到檔名含「1031」的 TXT。', true); return; }
       $('#latestName').textContent = latest.name;
-      $('#baseName').textContent = '（不使用）';
+      $('#baseName').textContent   = '（不使用）';
 
       // 下載並解析
       const txt = await fetchText(pubUrl(latest.fullPath));
