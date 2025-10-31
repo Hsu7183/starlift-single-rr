@@ -6,65 +6,83 @@
   <title>台股-1031版本｜圖表與交易明細</title>
   <meta name="robots" content="noindex,nofollow" />
   <style>
-    body{font-family:ui-sans-serif,system-ui;-webkit-font-smoothing:antialiased;margin:0;padding:16px;background:#f7f7fb;color:#222}
-    .wrap{max-width:1440px;margin:0 auto}
-    .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
-    .chip{display:inline-block;background:#eef;padding:6px 10px;border-radius:999px;font-size:12px}
-    .btn{background:#0d6efd;color:#fff;border:0;border-radius:10px;padding:8px 12px;cursor:pointer}
-    .btn.gray{background:#6c757d}
-    .card{background:#fff;border:1px solid #e5e7eb;border-radius:12px;box-shadow:0 2px 10px rgba(0,0,0,.03);padding:12px;margin-bottom:16px}
-    .muted{color:#666;font-size:13px}
+    body{font-family:Arial,"微軟正黑體",sans-serif;background:#f7f7fb;color:#222;margin:20px}
+    h1{margin:8px 0}
+    .topbar{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+    .home{text-decoration:none;color:#0d6efd;font-weight:700}.home::before{content:"← "}
+    .badge{margin-left:auto;background:#eef4ff;color:#0d6efd;padding:4px 8px;border-radius:999px;font-size:12px}
+    .panel{background:#fff;padding:16px;border-radius:10px;box-shadow:0 2px 6px rgba(0,0,0,.08);margin-bottom:16px}
+    .row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+    select,input[type="text"]{padding:8px 10px;border:1px solid #ddd;border-radius:8px;background:#fff;min-width:260px}
+    button{padding:8px 14px;border:0;border-radius:8px;cursor:pointer}
+    .primary{background:#0d6efd;color:#fff}.gray{background:#6c757d;color:#fff}
+    .muted{color:#666}
+    .chartbox{height:320px;margin-top:6px}
     .scroll-x{overflow-x:auto}
-    table{width:100%;border-collapse:collapse}
-    th,td{border-bottom:1px solid #eee;padding:6px 8px;font-size:13px;white-space:nowrap}
-    th{background:#fafafa;text-align:left}
+    table{width:100%;border-collapse:collapse;background:#fff;border-radius:10px;overflow:hidden}
+    th,td{border-bottom:1px solid #eee;padding:8px 10px;text-align:left;font-size:13px;white-space:nowrap}
+    th{background:#fafafa}
+    .right{text-align:right}
     .buy-row{background:#ffecec}
     .sell-row{background:#ecffec}
-    .chartbox{height:300px;margin-top:6px}
-    .pnl-pos{color:#d0021b;font-weight:600}
-    .pnl-neg{color:#0f8a00;font-weight:600}
   </style>
 
-  <!-- 依賴（與你現有頁面一致的版本） -->
+  <!-- 依賴（與上傳頁一致） -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
   <script src="shared.js?v=txfee45tax2"></script>
   <script src="etf-engine.js?v=fullfee-v1"></script>
 </head>
 <body>
-  <div class="wrap">
-    <h1 style="margin:6px 0 8px">台股-1031版本</h1>
+  <div class="topbar">
+    <a class="home" href="index.html">回首頁</a>
+    <span id="projBadge" class="badge">Bucket: reports（Public）</span>
+  </div>
+
+  <h1>台股-1031版本</h1>
+
+  <!-- 檔案選擇（讀取資料上傳區 /reports） -->
+  <div class="panel">
     <div class="row">
-      <span class="chip" id="autostatus">初始化中…</span>
-      <span class="chip">最新檔：<b id="latestName">—</b></span>
-      <span class="chip">期間：<b id="periodText">—</b></span>
+      <span class="muted">從上傳區選擇檔案：</span>
+      <select id="fileSel" aria-label="選擇檔案（reports/）"></select>
+      <button class="primary" id="btnLoad" disabled>載入</button>
+      <button class="gray" id="btnRefresh">重新整理清單</button>
     </div>
-
-    <!-- 週次盈虧圖 -->
-    <div class="card" id="weeklyCard" style="display:none">
-      <h3 style="margin:6px 0">每週獲利（長條）＋累積獲利（折線）</h3>
-      <div class="chartbox"><canvas id="chWeekly"></canvas></div>
-    </div>
-
-    <!-- 原始交易明細（execs） -->
-    <div class="card">
-      <h3 style="margin:6px 0">交易明細</h3>
-      <div class="scroll-x">
-        <table id="txTable">
-          <thead>
-            <tr>
-              <th>時間</th><th>動作</th><th>成交價</th><th>數量</th>
-              <th>手續費</th><th>交易稅</th><th>金額</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-      </div>
-      <p class="muted" style="margin:8px 0 0">說明：動作用語與原始 TXT 一致（新買/平賣/新賣/平買/強制平倉）。</p>
+    <div class="row" style="margin-top:6px">
+      <span class="muted">目前：</span><span id="currentFile" class="muted">—</span>
+      <span style="flex:1"></span>
+      <span class="muted">期間：</span><span id="periodText" class="muted">—</span>
+      <span style="flex:1"></span>
+      <span class="badge" id="autostatus">初始化中…</span>
     </div>
   </div>
 
-  <!-- 本頁邏輯（不含 KPI） -->
-  <script src="tw-1031.js?v=1031-no-kpi-v1" defer></script>
+  <!-- 週次盈虧圖 -->
+  <div class="panel" id="weeklyCard" style="display:none">
+    <h3 style="margin:0 0 6px">每週獲利（長條）＋累積獲利（折線）</h3>
+    <div class="chartbox"><canvas id="chWeekly"></canvas></div>
+  </div>
+
+  <!-- 交易明細 -->
+  <div class="panel">
+    <h3 style="margin:0 0 6px">交易明細</h3>
+    <div class="scroll-x">
+      <table>
+        <thead>
+          <tr>
+            <th>時間</th><th>動作</th><th>成交價</th><th>數量</th>
+            <th>手續費</th><th>交易稅</th><th>金額</th>
+          </tr>
+        </thead>
+        <tbody id="txBody">
+          <tr><td colspan="7" class="muted">尚未載入</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- 本頁邏輯 -->
+  <script src="tw-1031.js?v=1031-no-kpi-v3" defer></script>
 </body>
 </html>
