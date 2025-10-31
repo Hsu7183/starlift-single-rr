@@ -1,74 +1,35 @@
-// tw-1031.js — 台股 1031 策略頁（改自 00909 頁範本）
+// tw-1031.js — 只做圖表 + 交易明細（無 KPI）
 (function(){
   const $ = s => document.querySelector(s);
   const status = $('#autostatus');
-  const set = (m,bad=false)=>{ if(status){ status.textContent=m; status.className = bad?'chip bad':'chip ok'; } };
+  const set = (m,bad=false)=>{ if(status){ status.textContent=m; status.style.color = bad? '#c62828' : '#222'; } };
+  const fmtInt = n => Math.round(n || 0).toLocaleString();
+  const tsPretty = ts14 => `${ts14.slice(0,4)}/${ts14.slice(4,6)}/${ts14.slice(6,8)} ${ts14.slice(8,10)}:${ts14.slice(10,12)}`;
 
-  // ====== Supabase ======
+  // Supabase
   const SUPABASE_URL = "https://byhbmmnacezzgkwfkozs.supabase.co";
   const SUPABASE_ANON_KEY = "sb_publishable_xVe8fGbqQ0XGwi4DsmjPMg_Y2RBOD3t";
   const BUCKET = "reports";
   const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { global:{ fetch:(u,o={})=>fetch(u,{...o,cache:'no-store'}) } });
-  const pubUrl = (path) => sb.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
+  const pubUrl = p => sb.storage.from(BUCKET).getPublicUrl(p).data.publicUrl;
 
-  // ====== Helpers ======
-  const q = new URLSearchParams(location.search);
-  const OVERRIDE_FILE = q.get('file') || '';
-  const MANIFEST_NAME = '1031';
-
-  const CANON_RE=/^(\d{14})\.0{6}\s+(\d+\.\d{6})\s+(新買|平賣|新賣|平買|強制平倉|強平)\s*$/;
-  const EXTRACT_RE=/.*?(\d{14})(?:\.0{1,6})?\s+(\d+(?:\.\d{1,6})?)\s*(新買|平賣|新賣|平買|強制平倉|強平)\s*$/;
-
-  function normalizeText(raw){
-    let s=raw.replace(/\ufeff/gi,'').replace(/\u200b|\u200c|\u200d/gi,''); s=s.replace(/[\x00-\x09\x0B-\x1F\x7F]/g,'').replace(/\r\n?/g,'\n').replace(/\u3000/g,' ');
-    return s.split('\n').map(l=>l.replace(/\s+/g,' ').trim()).filter(Boolean).join('\n');
-  }
-  function canonicalize(txt){
-    const out=[], lines=txt.split('\n'); let ok=0;
-    for(const l of lines){ const m=l.match(EXTRACT_RE); if(m){ const ts=m[1], px=Number(m[2]); const p6=Number.isFinite(px)?px.toFixed(6):m[2]; let act=m[3]; if(act==='強平') act='強制平倉'; out.push(`${ts}.000000 ${p6} ${act}`); ok++; } }
-    return { canon: out.join('\n'), ok };
-  }
-  async function fetchSmart(url){
-    const res=await fetch(url,{cache:'no-store'}); if(!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-    const buf=await res.arrayBuffer();
-    for(const enc of ['utf-8','big5','utf-16le','utf-16be']){ try{ const td=new TextDecoder(enc); const norm=normalizeText(td.decode(buf)); const {canon,ok}=canonicalize(norm); if(ok>0) return {canon,ok}; }catch{} }
-    const td=new TextDecoder('utf-8'); const norm=normalizeText(td.decode(buf)); const {canon,ok}=canonicalize(norm); return {canon,ok};
-  }
-  function parseCanon(text){
-    const rows=[]; if(!text) return rows; for(const line of text.split('\n')){ const m=line.match(CANON_RE); if(m) rows.push({ts:m[1], line}); }
-    rows.sort((a,b)=>a.ts.localeCompare(b.ts)); return rows;
-  }
-  function mergeByBaseline(baseText, latestText){
-    const A=parseCanon(baseText), B=parseCanon(latestText);
-    const baseMax=A.length?A[A.length-1].ts:'';
-    const added=baseMax?B.filter(x=>x.ts>baseMax).map(x=>x.line):B.map(x=>x.line);
-    const mergedLines=[...A.map(x=>x.line), ...added];
-    return mergedLines.join('\n');
-  }
-
-  async function readManifest(){
-    try{
-      const { data } = await sb.storage.from(BUCKET).download(`manifests/${MANIFEST_NAME}.json`);
-      if(!data) return null;
-      return JSON.parse(await data.text());
-    }catch{ return null; }
-  }
+  // 取得最新 1031 檔
   async function latest1031(){
     const all=[];
-    async function listDeep(prefix, depth){
-      const p = (prefix && !prefix.endsWith('/')) ? prefix + '/' : (prefix || '');
-      const { data } = await sb.storage.from(BUCKET).list(p, { limit:1000, sortBy:{column:'name',order:'asc'} });
+    async function listDeep(prefix){
+      const pp = (prefix && !prefix.endsWith('/')) ? prefix + '/' : (prefix || '');
+      const { data } = await sb.storage.from(BUCKET).list(pp, { limit:1000, sortBy:{column:'name',order:'asc'} });
       for(const it of (data||[])){
-        if(it.id===null) await listDeep(p+it.name, depth+1);
-        else all.push({...it, fullPath: p+it.name});
+        if(it.id===null) await listDeep(pp+it.name);
+        else all.push({...it, fullPath: pp+it.name});
       }
     }
-    await listDeep('',0);
+    await listDeep('');
     const files = all.filter(x=>/1031/i.test(x.name));
     if(!files.length) return null;
-    const scoreInName = n => { const m=(n||'').match(/\b(20\d{6})\b/g); return m?Math.max(...m.map(s=>+s)):0; };
+    const score = n => { const m=(n||'').match(/\b(20\d{6})\b/g); return m?Math.max(...m.map(s=>+s)):0; };
     files.sort((a,b)=>{
-      const sa=scoreInName(a.name), sb=scoreInName(b.name);
+      const sa=score(a.name), sb=score(b.name);
       if(sa!==sb) return sb-sa;
       const ta=a.updated_at?Date.parse(a.updated_at):0, tb=b.updated_at?Date.parse(b.updated_at):0;
       if(ta!==tb) return tb-ta;
@@ -77,96 +38,92 @@
     return files[0];
   }
 
-  // ====== Chart ======
-  let chWeekly=null;
-  function drawWeekly(days, vals){
-    const ctx = document.getElementById('chWeekly');
+  // 週次圖
+  let chWeekly = null;
+  function weekStartDate(ms){
+    const d=new Date(ms), dow=(d.getUTCDay()+6)%7;
+    const s=new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()-dow));
+    return s.toISOString().slice(0,10);
+  }
+  function buildWeeklyFromExecs(execs){
+    const m=new Map(), order=[];
+    for(const e of execs){
+      // 只在賣出那筆記錄 PnL（引擎應提供 pnlFull）；若沒有就跳過
+      if(e.side!=='SELL' || typeof e.pnlFull!=='number') continue;
+      const wk = weekStartDate(e.tsMs);
+      if(!m.has(wk)){ m.set(wk,0); order.push(wk); }
+      m.set(wk, m.get(wk)+e.pnlFull);
+    }
+    const labels=order, weekly=labels.map(wk=>m.get(wk)||0);
+    const cum=[]; let s=0; for(const v of weekly){ s+=v; cum.push(s); }
+    return { labels, weekly, cum };
+  }
+  function renderWeeklyChart(execs){
+    const card=$('#weeklyCard'), ctx=$('#chWeekly');
+    const W = buildWeeklyFromExecs(execs);
+    if(!W.labels.length){ card.style.display='none'; return; }
+    card.style.display='';
     if(chWeekly) chWeekly.destroy();
-    const cum = []; let acc=0; for(const v of vals){ acc+=v; cum.push(acc); }
     chWeekly = new Chart(ctx, {
-      type:'line',
-      data:{ labels:days, datasets:[{ label:'週盈虧', data:vals }, { label:'累積', data:cum }] },
-      options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ display:true } }, scales:{ x:{ display:false } } }
+      data:{
+        labels:W.labels,
+        datasets:[
+          { type:'bar', label:'每週獲利', data:W.weekly, borderWidth:1 },
+          { type:'line', label:'累積淨利', data:W.cum, borderWidth:2, tension:0.2, pointRadius:0 }
+        ]
+      },
+      options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:true}}, scales:{ x:{ticks:{maxTicksLimit:12}} } }
     });
   }
 
-  // ====== Renderers ======
-  function fmtPct(x){ return (x*100).toFixed(2)+'%'; }
-  function fmtMoney(x){ return (Math.round(x)).toLocaleString(); }
-
-  function renderKPI(k){
-    $('#k_total').textContent = fmtPct(k.totalReturn);
-    $('#k_cagr').textContent  = fmtPct(k.cagr);
-    $('#k_mdd').textContent   = fmtPct(k.maxDD);
-    $('#k_pf').textContent    = (k.pf||0).toFixed(2);
-    $('#k_hit').textContent   = fmtPct(k.hit);
-  }
-  function renderTable(rows){
-    const tb = $('#optTable tbody'); tb.innerHTML='';
-    for(const r of rows){
+  // 交易明細表（原始 execs）
+  function renderTxTable(execs){
+    const tb = $('#txTable tbody'); tb.innerHTML='';
+    for(const e of execs){
       const tr=document.createElement('tr');
-      const cells=[r.date, r.type, r.price, r.qty, r.buyAmt, r.sellAmt, r.fee, r.tax, r.cost, r.avgCost, r.cumCost, r.diff, r.pnl, r.ret, r.cumPnl];
-      cells.forEach((c,i)=>{ const td=document.createElement('td'); td.textContent=(i>=2?Number(c).toLocaleString():c); if([2,3,4,5,6,7,8,9,10,11,12,14].includes(i)) td.className='right'; tr.appendChild(td); });
+      tr.className = (e.side==='SELL'?'sell-row':'buy-row');
+      const fee = e.fee!=null ? e.fee : 0;
+      const tax = e.tax!=null ? e.tax : 0;
+      const amt = e.side==='SELL' ? (e.sellAmount??0) : (e.buyAmount??0);
+      tr.innerHTML = `
+        <td>${e.ts ? tsPretty(e.ts) : new Date(e.tsMs).toISOString().slice(0,16).replace('T',' ')}</td>
+        <td>${e.side==='BUY'?'買進':(e.side==='SELL'?'賣出':(e.side||'—'))}</td>
+        <td>${e.price!=null ? Number(e.price).toFixed(2) : '—'}</td>
+        <td>${fmtInt(e.shares||0)}</td>
+        <td>${fmtInt(fee)}</td>
+        <td>${fmtInt(tax)}</td>
+        <td>${fmtInt(amt)}</td>
+      `;
       tb.appendChild(tr);
     }
   }
 
-  // ====== Main ======
-  (async function main(){
+  // 主流程
+  (async function boot(){
     try{
-      set('讀取設定…');
-      const manifest = await readManifest();
+      set('尋找 1031 最新檔…');
+      const f = await latest1031();
+      if(!f){ set('找不到檔名含「1031」的檔案（reports/）', true); return; }
+      $('#latestName').textContent = f.fullPath;
 
-      let latestPath = OVERRIDE_FILE;
-      if(!latestPath){
-        set('尋找 1031 最新檔…');
-        const f = await latest1031();
-        if(!f) throw new Error('找不到含 1031 的檔案');
-        latestPath = f.fullPath;
-        $('#latestChip').textContent = '最新檔：' + latestPath;
-      }else{
-        $('#latestChip').textContent = '指定檔：' + latestPath;
-      }
+      set('下載/解析…');
+      const url = pubUrl(f.fullPath);
+      const txt = await fetch(url, {cache:'no-store'}).then(r=>r.text());
+      const rows = window.ETF_ENGINE.parseCanon(txt);
+      if(!rows.length){ set('TXT 內容無交易行可解析', true); return; }
 
-      let mergedText='';
-      if(manifest?.baseline_path){
-        $('#baseChip').textContent = '基準：' + manifest.baseline_path;
-        const baseTxt = (await fetchSmart(pubUrl(manifest.baseline_path))).canon;
-        const latTxt  = (await fetchSmart(pubUrl(latestPath))).canon;
-        mergedText = mergeByBaseline(baseTxt, latTxt);
-      }else{
-        $('#baseChip').textContent = '基準：—';
-        mergedText = (await fetchSmart(pubUrl(latestPath))).canon;
-      }
+      const start = rows[0].day, end = rows.at(-1).day;
+      $('#periodText').textContent = `${start} - ${end}`;
 
-      set('解析/回測…');
-      const rows = window.ETF_ENGINE.parseCanon(mergedText);
-      const CFG  = window.ETF_ENGINE.defaultCFG();
-      const R    = window.ETF_ENGINE.backtest(rows, CFG);
-
-      // 週盈虧
-      const week = window.ETF_CHART.weeklySeriesFromTrades(R.trades);
-      drawWeekly(week.labels, week.pnl);
-
-      // KPI
-      renderKPI({
-        totalReturn: R.kpi.totalReturn,
-        cagr: R.kpi.cagr,
-        maxDD: R.kpi.maxDD,
-        pf: R.kpi.pf,
-        hit: R.kpi.hitRate
-      });
-
-      // 交易表
-      renderTable(window.ETF_ENGINE.toExecTable(R.execs));
+      set('回測/繪圖…');
+      const bt = window.ETF_ENGINE.backtest(rows, window.ETF_ENGINE.defaultCFG());
+      renderWeeklyChart(bt.execs);
+      renderTxTable(bt.execs);
 
       set('完成');
-    }catch(e){
-      console.error(e);
-      set('錯誤：'+e.message, true);
+    }catch(err){
+      console.error(err);
+      set('錯誤：'+(err?.message||String(err)), true);
     }
   })();
-
-  // 設此為基準（寫 manifest 需你提供 server 端；此處僅示意）
-  $('#btnSetBase').addEventListener('click', ()=>alert('此按鈕僅示意：若要寫入 manifests/1031.json，需在後端（或本地工具）處理。'));
 })();
