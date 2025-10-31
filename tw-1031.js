@@ -14,7 +14,7 @@
   const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
     global:{ fetch:(u,o={})=>fetch(u,{...o,cache:'no-store'}) }
   });
-  (function markProj(){ try{ const prj=(new URL(SUPABASE_URL).hostname||'').split('.')[0]; $('#projBadge').textContent=`Bucket: ${BUCKET}（Public）｜Project: ${prj}`; }catch{} })();
+  (function markProj(){ try{ const prj=(new URL(SUPABASE_URL).hostname||'').split('.')[0]; $('#projBadge')?.textContent=`Bucket: ${BUCKET}（Public）｜Project: ${prj}`; }catch{} })();
   const pubUrl = p => sb.storage.from(BUCKET).getPublicUrl(p).data.publicUrl;
 
   // ===== DOM =====
@@ -23,43 +23,31 @@
   const btnRefresh = $('#btnRefresh');
   const currentFile = $('#currentFile');
   const periodText = $('#periodText');
-
   const q = new URLSearchParams(location.search);
-  const OVERRIDE_FILE = q.get('file') || ''; // 可帶完整 URL 或桶內路徑
+  const OVERRIDE_FILE = q.get('file') || '';
 
-  // ===== 清單（參考上傳頁：遞迴掃描 + 排序） =====
+  // ===== 清單（遞迴掃描 + 排序；只列 .txt/.csv；優先 1031） =====
   async function listRecursive(path="", acc=[]){
     const p = (path && !path.endsWith('/')) ? path+'/' : (path||'');
     const { data, error } = await sb.storage.from(BUCKET).list(p, { limit: 1000, sortBy:{column:'name',order:'asc'} });
     if(error) throw new Error(error.message||'list error');
     for(const it of (data||[])){
-      if(!it.id && !it.metadata){ // folder
-        await listRecursive(p + it.name, acc);
-      }else{
-        acc.push({ fullPath: p + it.name, item: it });
-      }
+      if(!it.id && !it.metadata){ await listRecursive(p + it.name, acc); }
+      else acc.push({ fullPath: p + it.name, item: it });
     }
     return acc;
   }
-
   function scoreByNameDate(name){
-    // 以檔名最大 YYYYMMDD 作為排序加權
     const m=(name||'').match(/\b(20\d{6})\b/g);
     return m ? Math.max(...m.map(s=>+s)) : 0;
   }
-
   async function refreshList(){
     set('讀取上傳區清單…');
-    sel.innerHTML = '<option value="">（選擇檔案）</option>';
-    btnLoad.disabled = true;
-
+    sel.innerHTML = '<option value="">（選擇檔案）</option>'; btnLoad.disabled = true;
     const all = await listRecursive("");
-    // 只留 txt/csv
     const files = all
       .filter(x => /\.txt$|\.csv$/i.test(x.fullPath))
       .map(x => ({ path:x.fullPath, name:x.fullPath.split('/').pop(), size:x.item?.metadata?.size||0, updated:x.item?.updated_at||'' }));
-
-    // 優先「含 1031」，否則列全部
     const f1031 = files.filter(f=>/1031/i.test(f.name));
     const list = (f1031.length ? f1031 : files).sort((a,b)=>{
       const sa=scoreByNameDate(a.name), sb=scoreByNameDate(b.name);
@@ -68,7 +56,6 @@
       if(ta!==tb) return tb-ta;
       return (b.size||0)-(a.size||0);
     });
-
     for(const f of list){
       const opt = document.createElement('option');
       opt.value = f.path;
@@ -78,16 +65,48 @@
     btnLoad.disabled = !sel.value;
     set('就緒');
   }
-  sel.addEventListener('change', ()=>{ btnLoad.disabled = !sel.value; });
+  sel?.addEventListener('change', ()=>{ btnLoad.disabled = !sel.value; });
 
-  // ===== 下載與解析 =====
+  // ===== 下載 =====
   async function fetchText(u){
     const res = await fetch(u, {cache:'no-store'});
     if(!res.ok) throw new Error(`${res.status} ${res.statusText}`);
     return await res.text();
   }
 
-  // ===== 週次盈虧圖 =====
+  // ===== 1031 專屬：CSV → canonical 轉換 =====
+  // 支援行首格式：YYYYMMDD,hhmmss,price,action,...
+  // 映射：買進/加碼攤平/再加碼攤平 -> 新買；賣出 -> 平賣
+  function toCanonFrom1031CSV(raw){
+    // 清理 BOM / 零寬 / 控制字元
+    let txt = raw.replace(/\ufeff/gi,'').replace(/[\u200B-\u200D]/g,'')
+                 .replace(/[\x00-\x09\x0B-\x1F\x7F]/g,'').replace(/\r\n?/g,'\n');
+    const out=[]; let ok=0;
+    const mapAction = a=>{
+      if(/賣出/.test(a)) return '平賣';
+      if(/買進|加碼攤平|再加碼攤平/.test(a)) return '新買';
+      return ''; // unsupported
+    };
+    for(const line of txt.split('\n')){
+      if(!line.trim()) continue;
+      // 跳過表頭（含「日期,時間,價格,動作」）
+      if(/^日期\s*,\s*時間\s*,\s*價格\s*,\s*動作/i.test(line)) continue;
+
+      const m = line.match(/^\s*(\d{8})\s*,\s*(\d{5,6})\s*,\s*(\d+(?:\.\d+)?)\s*,\s*([^,]+)\s*/);
+      if(!m) continue;
+
+      const d8 = m[1];
+      let t = m[2]; if(t.length===5) t = '0' + t; // 90500 -> 090500
+      const px = Number(m[3]); const p6 = Number.isFinite(px) ? px.toFixed(6) : m[3];
+      const act = mapAction(m[4].trim());
+      if(!act) continue;
+
+      out.push(`${d8}${t}.000000 ${p6} ${act}`); ok++;
+    }
+    return { canon: out.join('\n'), ok };
+  }
+
+  // ===== 每週盈虧圖 =====
   let chWeekly = null;
   function weekStartDateUTC(ms){
     const d=new Date(ms), dow=(d.getUTCDay()+6)%7;
@@ -155,18 +174,20 @@
     try{
       set('下載/解析…');
       const url = /^https?:\/\//i.test(fullPath) ? fullPath : pubUrl(fullPath);
-      const txt = await fetchText(url);
+      const raw = await fetchText(url);
 
-      // 解析：ETF_ENGINE.parseCanon 支援 canonical 與你貼的 CSV 格式
-      const rows = window.ETF_ENGINE.parseCanon(txt);
-      if(!rows.length) throw new Error('TXT 內容無可解析的交易行');
+      // 專屬轉換：CSV -> canonical
+      const { canon, ok } = toCanonFrom1031CSV(raw);
+      if(ok === 0) throw new Error('TXT 內容無可解析的交易行（1031 CSV 轉換失敗）');
 
-      // 期間
+      // 交給引擎 parse/backtest
+      const rows = window.ETF_ENGINE.parseCanon(canon);
+      if(!rows.length) throw new Error('轉換後資料為空');
+
       const start = rows[0].day, end = rows.at(-1).day;
       periodText.textContent = `${start} - ${end}`;
       currentFile.textContent = fullPath;
 
-      // 回測
       set('回測/繪圖…');
       const CFG = window.ETF_ENGINE.defaultCFG ? window.ETF_ENGINE.defaultCFG() : {};
       const bt  = window.ETF_ENGINE.backtest(rows, CFG);
@@ -182,25 +203,19 @@
   }
 
   // ===== 事件 =====
-  btnLoad.addEventListener('click', ()=>{
-    const path = sel.value;
-    if(path) loadAndRender(path);
-  });
-  btnRefresh.addEventListener('click', ()=>refreshList());
+  btnLoad?.addEventListener('click', ()=>{ const path = sel.value; if(path) loadAndRender(path); });
+  btnRefresh?.addEventListener('click', ()=>refreshList());
 
   // ===== 開機流程 =====
   (async function boot(){
     try{
       await refreshList();
-
-      const override = OVERRIDE_FILE;
-      if(override){
-        currentFile.textContent = override.split('/').pop() || override;
-        await loadAndRender(override);
+      if(OVERRIDE_FILE){
+        currentFile.textContent = OVERRIDE_FILE.split('/').pop() || OVERRIDE_FILE;
+        await loadAndRender(OVERRIDE_FILE);
         return;
       }
-      // 預設載第一筆
-      if(sel.options.length>1){
+      if(sel && sel.options.length>1){
         sel.selectedIndex = 1;
         await loadAndRender(sel.value);
       }else{
