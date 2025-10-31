@@ -144,29 +144,20 @@
             <p class="period">期間：<span id="period-00909">—</span></p>
           </div>
         </a>
-
-        <!-- ✅ 新增：台股-1031版本 -->
-        <a class="card" href="tw-1031.html">
-          <p class="card-title red">台股-1031版本</p>
-          <div class="lines">
-            <p class="line"><span class="label">近1週報酬率</span><span id="wk1-range-1031" class="range">—</span><span id="wk1-1031" class="val neu">—</span></p>
-            <p class="line"><span class="label">近2週報酬率</span><span id="wk2-range-1031" class="range">—</span><span id="wk2-1031" class="val neu">—</span></p>
-            <p class="line"><span class="label">近1月報酬率</span><span id="m1-range-1031"  class="range">—</span><span id="m1-1031"  class="val neu">—</span></p>
-            <p class="line"><span class="label">近2月報酬率</span><span id="m2-range-1031"  class="range">—</span><span id="m2-1031"  class="val neu">—</span></p>
-            <p class="line"><span class="label">近3月報酬率</span><span id="m3-range-1031"  class="range">—</span><span id="m3-1031"  class="val neu">—</span></p>
-            <p class="line"><span class="label">近6月報酬率</span><span id="m6-range-1031"  class="range">—</span><span id="m6-1031"  class="val neu">—</span></p>
-            <p class="line"><span class="label">近1年報酬率</span><span id="y1-range-1031"  class="range">—</span><span id="y1-1031"  class="val neu">—</span></p>
-            <p class="line"><span class="label">近2年報酬率</span><span id="y2-range-1031"  class="range">—</span><span id="y2-1031"  class="val neu">—</span></p>
-            <p class="line"><span class="label">近3年報酬率</span><span id="y3-range-1031"  class="range">—</span><span id="y3-1031"  class="val neu">—</span></p>
-            <p class="line"><span class="label">近6年報酬率</span><span id="y6-range-1031"  class="range">—</span><span id="y6-1031"  class="val neu">—</span></p>
-            <p class="period">期間：<span id="period-1031">—</span></p>
-          </div>
-        </a>
+        <!-- ⚠️ 依指示：此欄位不再出現「台股-1031版本」 -->
       </div>
 
       <div class="strategy-col">
         <p class="subcat">盤整型</p>
+        <!-- 既有「研發中」 -->
         <a class="card" href="#"><p class="card-title gray">研發中</p></a>
+        <!-- 右邊再新增一個「研發中」 -->
+        <a class="card" href="#"><p class="card-title gray">研發中</p></a>
+        <!-- 其下新增：台股-1031版本（只做圖表+交易明細的分頁） -->
+        <a class="card" href="tw-1031.html">
+          <p class="card-title red">台股-1031版本</p>
+          <p class="card-desc">只顯示「每週獲利圖 + 交易明細」，不含 KPI。</p>
+        </a>
       </div>
     </div>
 
@@ -192,7 +183,7 @@
     </div>
   </div>
 
-  <!-- ===== JS：密碼門檻 + 動態載入 + 報酬填值 ===== -->
+  <!-- ===== JS：密碼門檻 + 動態載入 + 報酬填值（與你前版一致，僅維持 0807/1001/00909/1031 指標填值） ===== -->
   <script>
   (function(){
     'use strict';
@@ -238,7 +229,6 @@
         const BUCKET = "reports";
         const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { global:{ fetch:(u,o={})=>fetch(u,{...o,cache:'no-store'}) } });
 
-        // ✅ 加入 1031
         const WANT = { "0807": /0807/i, "1001": /1001/i, "00909": /00909/i, "1031": /1031/i };
         const pubUrl = (path) => sb.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
 
