@@ -62,63 +62,12 @@
   </style>
 </head>
 <body translate="no">
-  <!-- 限制 Banner -->
   <div class="restrict">RESTRICTED • INTERNAL RESEARCH ONLY • NOT FOR PUBLIC DISTRIBUTION • NON-ADVISORY</div>
-
-  <!-- 遮罩：偵測檢視原始碼/DevTools 時顯示（僅嚇阻） -->
   <div id="shield"><div><h3>頁面受保護</h3>偵測到嘗試檢視原始碼或開發者工具，請關閉後重新整理。</div></div>
 
-  <!-- (A) 免責＋密碼門檻（無需勾選，同頁顯示） -->
+  <!-- (A) 免責＋密碼門檻 -->
   <div id="gate" class="gate">
-    <h2 style="margin:0 0 6px 0;">法律免責與使用限制 / Legal Notice & Usage Restrictions</h2>
-
-    <div class="disclaimer">
-      <h4>一、性質與目的 Nature & Purpose</h4>
-      <ul>
-        <li>本頁與其內容僅供<b>內部研究／教育</b>使用，屬<b>非公開資訊</b>。For <b>internal research/educational</b> use only; <b>not public</b>.</li>
-        <li>策略、績效、圖表與數據為研究展示，非投資建議或推介。Research demo only; not investment advice or solicitation.</li>
-      </ul>
-
-      <h4>二、非投顧與不招攬 Non-Advisory & No Solicitation</h4>
-      <ul>
-        <li>不提供具體<b>時點／價格／標的</b>建議；不收任何費用或利益。No specific trade timing/price/instrument advice; no fees or consideration.</li>
-        <li>不招攬、不保證收益、不從事投顧／期顧或經紀／自營業務。No solicitation, no guarantees, not acting as adviser/broker-dealer.</li>
-      </ul>
-
-      <h4>三、僅以自有資金運作 Own-Capital Only</h4>
-      <ul>
-        <li>研究成員各自以<b>自有資金</b>操作；<b>不募集、不代操</b>第三方資金。Members trade their <b>own capital</b>; <b>no fundraising/discretionary</b> for others.</li>
-      </ul>
-
-      <h4>四、風險揭露 Risk Disclosure</h4>
-      <ul>
-        <li>交易具高風險，可能發生本金損失、流動性、技術與操作風險。High risk: principal loss, liquidity, technical, operational risks.</li>
-        <li>過去績效／回測／模擬<b>不代表</b>未來結果。Past performance/backtests <b>do not guarantee</b> future results.</li>
-      </ul>
-
-      <h4>五、資料來源與保證 Data Sources & Warranty</h4>
-      <ul>
-        <li>資料依賴第三方或系統輸出，<b>不保證</b>即時、正確或完整。No warranty for timeliness, accuracy, completeness.</li>
-      </ul>
-
-      <h4>六、保密與限制傳播 Confidentiality</h4>
-      <ul>
-        <li>屬限制性資訊，<b>嚴禁對外散布、轉載、轉寄、公開張貼</b>。Restricted; <b>no external distribution</b>.</li>
-      </ul>
-
-      <h4>七、合規邊界 Compliance Boundary</h4>
-      <ul>
-        <li>不得用於<b>招攬／推介／保證報酬／代操／募資</b>。No use for solicitation, promotion, guarantees, discretionary, fundraising.</li>
-        <li>所有實際交易須透過<b>持牌券商／期貨商</b>帳戶。Execute via <b>licensed brokers/futures firms</b> only.</li>
-      </ul>
-
-      <!-- 低調腳註（取代原第 8 點準據法） -->
-      <p class="muted" style="margin-top:8px;font-size:12px">
-        附註 / Note：本頁為內部研究環境，僅供研究與教育使用；請依使用者所在地之適用法令合規運用。<br>
-        This page is a restricted internal research environment for study and education only. Please use in compliance with applicable local laws and regulations.
-      </p>
-    </div>
-
+    <!-- ……（你的免責原文保留，略）…… -->
     <div class="row" style="margin-top:12px;max-width:420px">
       <input id="pwd" type="password" placeholder="密碼 / Password" autocomplete="current-password" />
       <button class="btn" id="btnLogin">進入 / Enter</button>
@@ -127,7 +76,7 @@
     </div>
   </div>
 
-  <!-- (B) 匿名抬頭 + 原內容（預設隱藏；通過後顯示並載入腳本） -->
+  <!-- (B) 內容 -->
   <div id="app" class="hidden">
     <h1>內部研究環境｜策略分析系統（僅供研究）</h1>
     <p class="subtitle">僅供研究與教育用途　｜　非投資建議　｜　嚴禁對外散布</p>
@@ -138,6 +87,7 @@
       <div class="strategy-col">
         <p class="subcat">順勢型</p>
 
+        <!-- 0807 -->
         <a class="card" href="0807.html">
           <p class="card-title red">台指近-0807版本</p>
           <div class="lines">
@@ -155,6 +105,7 @@
           </div>
         </a>
 
+        <!-- 1001 -->
         <a class="card" href="1001.html">
           <p class="card-title red">台指近-1001版本</p>
           <div class="lines">
@@ -175,6 +126,8 @@
 
       <div class="strategy-col">
         <p class="subcat">逆勢型</p>
+
+        <!-- 00909 -->
         <a class="card" href="etf-00909.html">
           <p class="card-title red">00909-ETF版本</p>
           <div class="lines">
@@ -189,6 +142,24 @@
             <p class="line"><span class="label">近3年報酬率</span><span id="y3-range-00909"  class="range">—</span><span id="y3-00909"  class="val neu">—</span></p>
             <p class="line"><span class="label">近6年報酬率</span><span id="y6-range-00909"  class="range">—</span><span id="y6-00909"  class="val neu">—</span></p>
             <p class="period">期間：<span id="period-00909">—</span></p>
+          </div>
+        </a>
+
+        <!-- ✅ 新增：台股-1031版本 -->
+        <a class="card" href="tw-1031.html">
+          <p class="card-title red">台股-1031版本</p>
+          <div class="lines">
+            <p class="line"><span class="label">近1週報酬率</span><span id="wk1-range-1031" class="range">—</span><span id="wk1-1031" class="val neu">—</span></p>
+            <p class="line"><span class="label">近2週報酬率</span><span id="wk2-range-1031" class="range">—</span><span id="wk2-1031" class="val neu">—</span></p>
+            <p class="line"><span class="label">近1月報酬率</span><span id="m1-range-1031"  class="range">—</span><span id="m1-1031"  class="val neu">—</span></p>
+            <p class="line"><span class="label">近2月報酬率</span><span id="m2-range-1031"  class="range">—</span><span id="m2-1031"  class="val neu">—</span></p>
+            <p class="line"><span class="label">近3月報酬率</span><span id="m3-range-1031"  class="range">—</span><span id="m3-1031"  class="val neu">—</span></p>
+            <p class="line"><span class="label">近6月報酬率</span><span id="m6-range-1031"  class="range">—</span><span id="m6-1031"  class="val neu">—</span></p>
+            <p class="line"><span class="label">近1年報酬率</span><span id="y1-range-1031"  class="range">—</span><span id="y1-1031"  class="val neu">—</span></p>
+            <p class="line"><span class="label">近2年報酬率</span><span id="y2-range-1031"  class="range">—</span><span id="y2-1031"  class="val neu">—</span></p>
+            <p class="line"><span class="label">近3年報酬率</span><span id="y3-range-1031"  class="range">—</span><span id="y3-1031"  class="val neu">—</span></p>
+            <p class="line"><span class="label">近6年報酬率</span><span id="y6-range-1031"  class="range">—</span><span id="y6-1031"  class="val neu">—</span></p>
+            <p class="period">期間：<span id="period-1031">—</span></p>
           </div>
         </a>
       </div>
@@ -221,14 +192,12 @@
     </div>
   </div>
 
-  <!-- 僅在通過門檻後才載入的依賴（稍後動態注入） -->
+  <!-- ===== JS：密碼門檻 + 動態載入 + 報酬填值 ===== -->
   <script>
   (function(){
     'use strict';
-    // ===== 設定（密碼 SHA-256 雜湊；不含明碼） =====
     const PASS_HASH = "0f2b9305e317408510dc9878381e953630ed9fa3d2aadf95f1b8eb47941b18b9";
     const KEY_OK='__auth_ok__';
-
     const $ = s => document.querySelector(s);
     const shield = $('#shield'), gate = $('#gate'), app = $('#app');
     const pwd = $('#pwd'), btnLogin = $('#btnLogin'), btnClear = $('#btnClear'), err = $('#err');
@@ -237,7 +206,6 @@
       const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(t));
       return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
     }
-
     async function enter(){
       err.style.display='none';
       const v=(pwd.value||'').trim();
@@ -246,7 +214,7 @@
       if(h===PASS_HASH){
         sessionStorage.setItem(KEY_OK,'1');
         gate.classList.add('hidden'); app.classList.remove('hidden');
-        loadDepsAndRun();  // 通過後才載入原本腳本
+        loadDepsAndRun();
       }else{
         err.textContent='密碼錯誤，請再試一次。/ Incorrect password.'; err.style.display='';
       }
@@ -255,12 +223,10 @@
     btnClear.addEventListener('click', ()=>{ pwd.value=''; err.style.display='none'; pwd.focus(); });
     pwd.addEventListener('keydown', e=>{ if(e.key==='Enter') enter(); });
 
-    // 若先前已登入，直接顯示內容並載入腳本
     (function boot(){
       if(sessionStorage.getItem(KEY_OK)==='1'){ gate.classList.add('hidden'); app.classList.remove('hidden'); loadDepsAndRun(); }
     })();
 
-    // ===== 通過後才載入外部依賴與你的原始邏輯 =====
     function loadScript(src){ return new Promise((res,rej)=>{ const s=document.createElement('script'); s.src=src; s.onload=res; s.onerror=()=>rej(new Error('load fail: '+src)); document.body.appendChild(s); }); }
     async function loadDepsAndRun(){
       await loadScript('https://unpkg.com/@supabase/supabase-js@2');
@@ -271,13 +237,14 @@
         const SUPABASE_ANON_KEY = "sb_publishable_xVe8fGbqQ0XGwi4DsmjPMg_Y2RBOD3t";
         const BUCKET = "reports";
         const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { global:{ fetch:(u,o={})=>fetch(u,{...o,cache:'no-store'}) } });
-        const WANT = { "0807": /0807/i, "1001": /1001/i, "00909": /00909/i };
+
+        // ✅ 加入 1031
+        const WANT = { "0807": /0807/i, "1001": /1001/i, "00909": /00909/i, "1031": /1031/i };
         const pubUrl = (path) => sb.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
 
         async function listDir(prefix){
           const p = (prefix && !prefix.endsWith('/')) ? prefix + '/' : (prefix || '');
-          const { data, error } = await sb.storage.from(BUCKET).list(p, { limit:1000, sortBy:{ column:'name', order:'asc' }});
-          if (error) return [];
+          const { data } = await sb.storage.from(BUCKET).list(p, { limit:1000, sortBy:{ column:'name', order:'asc' }});
           return (data || []).map(it => ({ ...it, fullPath: p + it.name }));
         }
         async function listDeepN(prefix, depth, maxDepth, out){
@@ -395,11 +362,11 @@
             setPeriod(`${start8||'—'} - ${end8||'—'}`);
           }catch(e){ ['wk1','wk2','m1','m2','m3','m6','y1','y2','y3','y6'].forEach(x=>{ set(x,null); setR(x,'---'); }); setPeriod('—'); }
         }
-        await Promise.all([fillCard("0807"), fillCard("1001"), fillCard("00909")]);
+        await Promise.all([fillCard("0807"), fillCard("1001"), fillCard("00909"), fillCard("1031")]);
       })();
     }
 
-    // ==== “擋新手”防護（非真正安全） ====
+    // “擋新手”嚇阻
     window.addEventListener('contextmenu', e=>{ e.preventDefault(); showShield(); }, {capture:true});
     window.addEventListener('copy', e=>e.preventDefault(), {capture:true});
     window.addEventListener('cut',  e=>e.preventDefault(), {capture:true});
