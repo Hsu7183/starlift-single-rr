@@ -16,7 +16,8 @@
     .section-title-blue{ max-width:1100px; margin:10px auto 12px; font-size:20px; font-weight:800; color:#0d6efd; letter-spacing:.5px }
     .section-title-black{ max-width:1100px; margin:10px auto 12px; font-size:20px; font-weight:800; color:#111; letter-spacing:.5px }
 
-    .strategy-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:20px; max-width:1100px; margin:0 auto 28px }
+    /* 👇 改為四欄，以容納新增的「研發中」類別 */
+    .strategy-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:20px; max-width:1100px; margin:0 auto 28px }
     .strategy-col{ display:flex; flex-direction:column; gap:12px }
     .subcat{ font-weight:700; font-size:16px; color:#c62828; margin:0 0 4px 0; text-align:center }
     .nav{ display:grid; grid-template-columns:repeat(3,1fr); gap:20px; max-width:1100px; margin:0 auto 28px }
@@ -84,10 +85,10 @@
 
     <h3 class="section-title-red">交易策略</h3>
     <div class="strategy-grid">
+      <!-- 1) 順勢型 -->
       <div class="strategy-col">
         <p class="subcat">順勢型</p>
 
-        <!-- 0807 -->
         <a class="card" href="0807.html">
           <p class="card-title red">台指近-0807版本</p>
           <div class="lines">
@@ -105,7 +106,6 @@
           </div>
         </a>
 
-        <!-- 1001 -->
         <a class="card" href="1001.html">
           <p class="card-title red">台指近-1001版本</p>
           <div class="lines">
@@ -124,10 +124,10 @@
         </a>
       </div>
 
+      <!-- 2) 逆勢型 -->
       <div class="strategy-col">
         <p class="subcat">逆勢型</p>
 
-        <!-- 00909 -->
         <a class="card" href="etf-00909.html">
           <p class="card-title red">00909-ETF版本</p>
           <div class="lines">
@@ -144,19 +144,21 @@
             <p class="period">期間：<span id="period-00909">—</span></p>
           </div>
         </a>
-        <!-- ⚠️ 依指示：此欄位不再出現「台股-1031版本」 -->
+        <!-- 依指示：這一欄不再放「台股-1031版本」 -->
       </div>
 
+      <!-- 3) 盤整型（清空） -->
       <div class="strategy-col">
         <p class="subcat">盤整型</p>
-        <!-- 既有「研發中」 -->
-        <a class="card" href="#"><p class="card-title gray">研發中</p></a>
-        <!-- 右邊再新增一個「研發中」 -->
-        <a class="card" href="#"><p class="card-title gray">研發中</p></a>
-        <!-- 其下新增：台股-1031版本（只做圖表+交易明細的分頁） -->
+        <!-- （空白保留，暫無分頁卡片） -->
+      </div>
+
+      <!-- 4) 研發中（黑字；新增 1031 分頁） -->
+      <div class="strategy-col">
+        <p class="subcat" style="color:#111">研發中</p>
         <a class="card" href="tw-1031.html">
           <p class="card-title red">台股-1031版本</p>
-          <p class="card-desc">只顯示「每週獲利圖 + 交易明細」，不含 KPI。</p>
+          <p class="card-desc">僅顯示每週獲利圖與交易明細（不含 KPI）。</p>
         </a>
       </div>
     </div>
@@ -183,7 +185,7 @@
     </div>
   </div>
 
-  <!-- ===== JS：密碼門檻 + 動態載入 + 報酬填值（與你前版一致，僅維持 0807/1001/00909/1031 指標填值） ===== -->
+  <!-- ===== JS：密碼門檻 + 動態載入 + 報酬填值 ===== -->
   <script>
   (function(){
     'use strict';
@@ -284,7 +286,7 @@
         }
         function parseCanon(text){
           const rows=[]; if(!text) return rows; for(const line of text.split('\n')){ const m=line.match(CANON_RE); if(m) rows.push({ts:m[1], line}); }
-          rows.sort((a,b)=>a.ts.localeCompare(b.ts)); return rows;
+        rows.sort((a,b)=>a.ts.localeCompare(b.ts)); return rows;
         }
         function mergeByBaseline(baseText, latestText){
           const A=parseCanon(baseText), B=parseCanon(latestText);
