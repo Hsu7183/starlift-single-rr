@@ -27,7 +27,7 @@
     .sell-row{background:#ecffec}
   </style>
 
-  <!-- 依賴（版本與你的上傳頁一致） -->
+  <!-- 依賴 -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
   <script src="shared.js?v=txfee45tax2"></script>
@@ -41,7 +41,6 @@
 
   <h1>台股-1031版本</h1>
 
-  <!-- 檔案選擇（直接讀上傳區 /reports） -->
   <div class="panel">
     <div class="row">
       <span class="muted">從上傳區選擇檔案：</span>
@@ -58,13 +57,11 @@
     </div>
   </div>
 
-  <!-- 週次盈虧圖 -->
   <div class="panel" id="weeklyCard" style="display:none">
     <h3 style="margin:0 0 6px">每週獲利（長條）＋累積獲利（折線）</h3>
     <div class="chartbox"><canvas id="chWeekly"></canvas></div>
   </div>
 
-  <!-- 交易明細 -->
   <div class="panel">
     <h3 style="margin:0 0 6px">交易明細</h3>
     <div class="scroll-x">
@@ -82,7 +79,6 @@
     </div>
   </div>
 
-  <!-- 本頁邏輯（版本號請更新以避免快取） -->
-  <script src="tw-1031.js?v=1031-no-kpi-v5" defer></script>
+  <script src="tw-1031.js?v=1031-no-kpi-v6" defer></script>
 </body>
 </html>
