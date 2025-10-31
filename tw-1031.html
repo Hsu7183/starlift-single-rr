@@ -44,6 +44,7 @@
     <h1>台股-1031策略分析</h1>
     <div class="subtitle muted sm">版權所有：<b>三劍客量化科技</b>（共同創辦人：<b>許夏睿、何冠緯、張宸</b>）</div>
 
+    <!-- 目前持有（多筆換行） -->
     <div id="lastBuyBar" class="muted" style="display:none;"></div>
 
     <p class="muted">本頁不公開，為公司內部針對 <b>1031</b> 策略分析研究。</p>
@@ -77,7 +78,7 @@
       <div class="chartbox"><canvas id="chWeekly"></canvas></div>
     </div>
 
-    <!-- ✅ 交易明細（固定 1-1-2；1000股/張） -->
+    <!-- 交易明細（固定 1-1-2；1000股/張，可 ?unit= 調整） -->
     <div class="card" id="execCard" style="display:none">
       <h3 style="margin:6px 0">交易明細（固定 1-1-2，預設 1000 股/張）</h3>
       <div class="scroll-x">
@@ -94,7 +95,7 @@
       <p class="muted" style="margin:6px 0 0">說明：新買/加碼/再加碼＝1/1/2 張（可用 <code>?unit=1000</code> 調整每張股數）。</p>
     </div>
 
-    <!-- 最佳化交易明細（保留原邏輯） -->
+    <!-- 最佳化交易明細 -->
     <div class="card">
       <h3 style="margin:6px 0">最佳化交易明細</h3>
       <div class="scroll-x"><table id="optTable"><thead></thead><tbody></tbody></table></div>
@@ -102,6 +103,7 @@
   </div>
 
   <script src="etf-engine.js?v=fullfee-v1"></script>
-  <script src="tw-1031.js?v=add-exec-1-1-2-v1"></script>
+  <!-- 務必更新版本尾碼避免快取 -->
+  <script src="tw-1031.js?v=only-weekly-and-opt-v9"></script>
 </body>
 </html>
