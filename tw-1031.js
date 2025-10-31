@@ -1,77 +1,100 @@
-// tw-1031.js — 台股 1031 版本（只顯示：每週盈虧圖 + 交易明細）
-// 依賴：Chart.js、@supabase/supabase-js、shared.js、etf-engine.js
+// tw-1031.js — 台股 1031（直接讀「資料上傳區 /reports」）
+// 顯示：每週盈虧圖 + 交易明細；不含 KPI
 (function(){
   const $ = s => document.querySelector(s);
   const status = $('#autostatus');
-  const set = (m,bad=false)=>{ if(status){ status.textContent=m; status.style.color = bad ? '#c62828' : '#222'; } };
+  const set = (m,bad=false)=>{ if(status){ status.textContent=m; status.style.background = bad ? '#fee2e2' : '#eef4ff'; status.style.color = bad ? '#b91c1c' : '#0d6efd'; } };
   const fmtInt = n => Math.round(n || 0).toLocaleString();
   const tsPretty = ts14 => `${ts14.slice(0,4)}/${ts14.slice(4,6)}/${ts14.slice(6,8)} ${ts14.slice(8,10)}:${ts14.slice(10,12)}`;
 
-  // ====== Supabase 參數 ======
-  const SUPABASE_URL = "https://byhbmmnacezzgkwfkozs.supabase.co";
-  const SUPABASE_ANON_KEY = "sb_publishable_xVe8fGbqQ0XGwi4DsmjPMg_Y2RBOD3t";
+  // ===== Supabase（優先用上傳頁掛的全域變數） =====
+  const SUPABASE_URL  = window.SUPABASE_URL  || "https://byhbmmnacezzgkwfkozs.supabase.co";
+  const SUPABASE_KEY  = window.SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ5aGJtbW5hY2V6emdrd2Zrb3pzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg1OTE0NzksImV4cCI6MjA3NDE2NzQ3OX0.VCSye3-fKrQphejdJSWAM6iRzv_7gkl8MLe7NeVszR0";
   const BUCKET = "reports";
-  const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
     global:{ fetch:(u,o={})=>fetch(u,{...o,cache:'no-store'}) }
   });
+  (function markProj(){ try{ const prj=(new URL(SUPABASE_URL).hostname||'').split('.')[0]; $('#projBadge').textContent=`Bucket: ${BUCKET}（Public）｜Project: ${prj}`; }catch{} })();
   const pubUrl = p => sb.storage.from(BUCKET).getPublicUrl(p).data.publicUrl;
 
-  // ====== 讀取邏輯 ======
-  const q = new URLSearchParams(location.search);
-  const OVERRIDE_FILE = q.get('file') || ''; // 支援 ?file=reports/path/to/file.txt
+  // ===== DOM =====
+  const sel = $('#fileSel');
+  const btnLoad = $('#btnLoad');
+  const btnRefresh = $('#btnRefresh');
+  const currentFile = $('#currentFile');
+  const periodText = $('#periodText');
 
-  async function listAllFiles(prefix=''){
-    const all=[];
-    async function listDeep(dir){
-      const pp = (dir && !dir.endsWith('/')) ? dir + '/' : (dir || '');
-      const { data } = await sb.storage.from(BUCKET).list(pp, { limit:1000, sortBy:{column:'name',order:'asc'} });
-      for(const it of (data||[])){
-        if(it.id===null){ await listDeep(pp+it.name); }
-        else all.push({...it, fullPath: pp+it.name});
+  const q = new URLSearchParams(location.search);
+  const OVERRIDE_FILE = q.get('file') || ''; // 可帶完整 URL 或桶內路徑
+
+  // ===== 清單（參考上傳頁：遞迴掃描 + 排序） =====
+  async function listRecursive(path="", acc=[]){
+    const p = (path && !path.endsWith('/')) ? path+'/' : (path||'');
+    const { data, error } = await sb.storage.from(BUCKET).list(p, { limit: 1000, sortBy:{column:'name',order:'asc'} });
+    if(error) throw new Error(error.message||'list error');
+    for(const it of (data||[])){
+      if(!it.id && !it.metadata){ // folder
+        await listRecursive(p + it.name, acc);
+      }else{
+        acc.push({ fullPath: p + it.name, item: it });
       }
     }
-    await listDeep(prefix);
-    return all;
+    return acc;
   }
 
-  function scoreByDateInName(name){
-    // 以檔名中最大 YYYYMMDD 當排序權重
+  function scoreByNameDate(name){
+    // 以檔名最大 YYYYMMDD 作為排序加權
     const m=(name||'').match(/\b(20\d{6})\b/g);
     return m ? Math.max(...m.map(s=>+s)) : 0;
   }
 
-  async function latestFile1031(){
-    const all = await listAllFiles('');
-    const cands = all.filter(x=>/1031/i.test(x.name));
-    if(!cands.length) return null;
-    cands.sort((a,b)=>{
-      const sa=scoreByDateInName(a.name), sb=scoreByDateInName(b.name);
-      if(sa!==sb) return sb-sa;
-      const ta=a.updated_at?Date.parse(a.updated_at):0, tb=b.updated_at?Date.parse(b.updated_at):0;
-      if(ta!==tb) return tb-ta;
-      return (b.metadata?.size||0)-(a.metadata?.size||0);
-    });
-    return cands[0];
-  }
+  async function refreshList(){
+    set('讀取上傳區清單…');
+    sel.innerHTML = '<option value="">（選擇檔案）</option>';
+    btnLoad.disabled = true;
 
+    const all = await listRecursive("");
+    // 只留 txt/csv
+    const files = all
+      .filter(x => /\.txt$|\.csv$/i.test(x.fullPath))
+      .map(x => ({ path:x.fullPath, name:x.fullPath.split('/').pop(), size:x.item?.metadata?.size||0, updated:x.item?.updated_at||'' }));
+
+    // 優先「含 1031」，否則列全部
+    const f1031 = files.filter(f=>/1031/i.test(f.name));
+    const list = (f1031.length ? f1031 : files).sort((a,b)=>{
+      const sa=scoreByNameDate(a.name), sb=scoreByNameDate(b.name);
+      if(sa!==sb) return sb-sa;
+      const ta=a.updated?Date.parse(a.updated):0, tb=b.updated?Date.parse(b.updated):0;
+      if(ta!==tb) return tb-ta;
+      return (b.size||0)-(a.size||0);
+    });
+
+    for(const f of list){
+      const opt = document.createElement('option');
+      opt.value = f.path;
+      opt.textContent = `${f.path}  ${f.updated?('· '+f.updated.replace('T',' ').slice(0,16)):'· —'}`;
+      sel.appendChild(opt);
+    }
+    btnLoad.disabled = !sel.value;
+    set('就緒');
+  }
+  sel.addEventListener('change', ()=>{ btnLoad.disabled = !sel.value; });
+
+  // ===== 下載與解析 =====
   async function fetchText(u){
     const res = await fetch(u, {cache:'no-store'});
     if(!res.ok) throw new Error(`${res.status} ${res.statusText}`);
     return await res.text();
   }
 
-  // ====== 每週盈虧圖 ======
+  // ===== 週次盈虧圖 =====
   let chWeekly = null;
-
   function weekStartDateUTC(ms){
-    // 以 UTC 周一為起點
     const d=new Date(ms), dow=(d.getUTCDay()+6)%7;
     const s=new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()-dow));
     return s.toISOString().slice(0,10);
   }
-
   function buildWeeklyFromExecs(execs){
-    // 只在 SELL 那筆累計 pnlFull
     const m=new Map(), order=[];
     for(const e of execs){
       if(e.side!=='SELL' || typeof e.pnlFull!=='number') continue;
@@ -84,7 +107,6 @@
     const cum=[]; let s=0; for(const v of weekly){ s+=v; cum.push(s); }
     return { labels, weekly, cum };
   }
-
   function renderWeeklyChart(execs){
     const card=$('#weeklyCard'), ctx=$('#chWeekly');
     const W = buildWeeklyFromExecs(execs);
@@ -99,77 +121,56 @@
           { type:'line', label:'累積淨利', data:W.cum,    borderWidth:2, tension:0.2, pointRadius:0 }
         ]
       },
-      options:{
-        responsive:true, maintainAspectRatio:false,
-        plugins:{ legend:{ display:true } },
-        scales:{ x:{ ticks:{ maxTicksLimit:12 } } }
-      }
+      options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ display:true } }, scales:{ x:{ ticks:{ maxTicksLimit:12 } } } }
     });
   }
 
-  // ====== 交易明細表（原始 execs） ======
+  // ===== 交易明細表 =====
   function renderTxTable(execs){
-    const tb = $('#txTable tbody'); tb.innerHTML='';
+    const tb = $('#txBody'); tb.innerHTML='';
     for(const e of execs){
       const tr=document.createElement('tr');
       tr.className = (e.side==='SELL'?'sell-row':'buy-row');
       const fee = e.fee!=null ? e.fee : 0;
       const tax = e.tax!=null ? e.tax : 0;
-      // 顯示金額：SELL 顯示賣出金額、BUY 顯示買進金額
       const amt = e.side==='SELL' ? (e.sellAmount??0) : (e.buyAmount??0);
-      // 顯示時間：若有 ts（YYYYMMDDhhmmss），用 tsPretty；否則以 tsMs 推一個可讀字串
       const tsShow = e.ts ? tsPretty(e.ts) :
                      (e.tsMs ? new Date(e.tsMs).toISOString().slice(0,16).replace('T',' ') : '—');
       tr.innerHTML = `
         <td>${tsShow}</td>
         <td>${e.side==='BUY'?'買進':(e.side==='SELL'?'賣出':(e.side||'—'))}</td>
         <td>${e.price!=null ? Number(e.price).toFixed(2) : '—'}</td>
-        <td>${fmtInt(e.shares||0)}</td>
-        <td>${fmtInt(fee)}</td>
-        <td>${fmtInt(tax)}</td>
-        <td>${fmtInt(amt)}</td>
+        <td class="right">${fmtInt(e.shares||0)}</td>
+        <td class="right">${fmtInt(fee)}</td>
+        <td class="right">${fmtInt(tax)}</td>
+        <td class="right">${fmtInt(amt)}</td>
       `;
       tb.appendChild(tr);
     }
+    if(!execs.length){ tb.innerHTML = '<tr><td colspan="7" class="muted">（無資料）</td></tr>'; }
   }
 
-  // ====== 主流程 ======
-  (async function boot(){
+  // ===== 載入並渲染 =====
+  async function loadAndRender(fullPath){
     try{
-      set('初始化…');
-
-      // 讀檔：優先 ?file= 覆蓋，否則自動找含 1031 的最新檔
-      let fullPath = '';
-      if(OVERRIDE_FILE){
-        fullPath = OVERRIDE_FILE;
-        $('#latestName').textContent = fullPath.split('/').pop() || fullPath;
-      }else{
-        set('尋找 1031 最新檔…');
-        const f = await latestFile1031();
-        if(!f) throw new Error('找不到檔名含「1031」的檔案（reports/）');
-        fullPath = f.fullPath;
-        $('#latestName').textContent = fullPath;
-      }
-
       set('下載/解析…');
       const url = /^https?:\/\//i.test(fullPath) ? fullPath : pubUrl(fullPath);
       const txt = await fetchText(url);
 
-      // 解析成 rows（依你的引擎口徑）
-      // window.ETF_ENGINE.parseCanon 支援標準：YYYYMMDDhhmmss.000000 <price(6d)> <動作>
+      // 解析：ETF_ENGINE.parseCanon 支援 canonical 與你貼的 CSV 格式
       const rows = window.ETF_ENGINE.parseCanon(txt);
-      if(!rows.length) throw new Error('TXT 內容無交易行可解析');
+      if(!rows.length) throw new Error('TXT 內容無可解析的交易行');
 
       // 期間
       const start = rows[0].day, end = rows.at(-1).day;
-      $('#periodText').textContent = `${start} - ${end}`;
+      periodText.textContent = `${start} - ${end}`;
+      currentFile.textContent = fullPath;
 
-      // 回測（用引擎預設 CFG，沿用你現有口徑）
+      // 回測
       set('回測/繪圖…');
       const CFG = window.ETF_ENGINE.defaultCFG ? window.ETF_ENGINE.defaultCFG() : {};
       const bt  = window.ETF_ENGINE.backtest(rows, CFG);
 
-      // 繪圖 + 明細
       renderWeeklyChart(bt.execs);
       renderTxTable(bt.execs);
 
@@ -177,6 +178,37 @@
     }catch(err){
       console.error(err);
       set('錯誤：' + (err?.message || String(err)), true);
+    }
+  }
+
+  // ===== 事件 =====
+  btnLoad.addEventListener('click', ()=>{
+    const path = sel.value;
+    if(path) loadAndRender(path);
+  });
+  btnRefresh.addEventListener('click', ()=>refreshList());
+
+  // ===== 開機流程 =====
+  (async function boot(){
+    try{
+      await refreshList();
+
+      const override = OVERRIDE_FILE;
+      if(override){
+        currentFile.textContent = override.split('/').pop() || override;
+        await loadAndRender(override);
+        return;
+      }
+      // 預設載第一筆
+      if(sel.options.length>1){
+        sel.selectedIndex = 1;
+        await loadAndRender(sel.value);
+      }else{
+        set('清單為空，請先到「資料上傳區」上傳檔案。', true);
+      }
+    }catch(err){
+      console.error(err);
+      set('初始化失敗：' + (err?.message || String(err)), true);
     }
   })();
 })();
