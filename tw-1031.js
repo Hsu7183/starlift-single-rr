@@ -1,24 +1,28 @@
-// tw-1031.js — 台股 1031（讀「資料上傳區 /reports」）
-// 只做多（買進/加碼/再加碼 -> 新買；賣出 -> 平賣）；只顯示：每週盈虧圖 + 交易明細；不含 KPI
+// tw-1031.js — 台股 1031（讀 /reports，上傳區格式：日期,時間,價格,動作,說明…）
+// 僅多單：買進/加碼攤平/再加碼攤平 → 新買；賣出 → 平賣
+// 僅顯示：每週盈虧圖 + 交易明細（不含 KPI）
 (function(){
+  /* ===== 基本工具 ===== */
   const $ = s => document.querySelector(s);
   const statusEl = $('#autostatus');
   const setStatus = (m,bad=false)=>{ if(statusEl){ statusEl.textContent=m; statusEl.style.background=bad?'#fee2e2':'#eef4ff'; statusEl.style.color=bad?'#b91c1c':'#0d6efd'; } };
   const fmtInt = n => Math.round(n||0).toLocaleString();
   const tsPretty = ts14 => `${ts14.slice(0,4)}/${ts14.slice(4,6)}/${ts14.slice(6,8)} ${ts14.slice(8,10)}:${ts14.slice(10,12)}`;
 
-  // ===== Supabase =====
+  /* ===== Supabase 連線（沿用上傳頁全域；無則 fallback） ===== */
   const SUPABASE_URL = window.SUPABASE_URL || "https://byhbmmnacezzgkwfkozs.supabase.co";
   const SUPABASE_KEY = window.SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ5aGJtbW5hY2V6emdrd2Zrb3pzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg1OTE0NzksImV4cCI6MjA3NDE2NzQ3OX0.VCSye3-fKrQphejdJSWAM6iRzv_7gkl8MLe7NeVszR0";
-  const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, { global:{ fetch:(u,o={})=>fetch(u,{...o,cache:'no-store'}) } });
   const BUCKET = 'reports';
+  const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, { global:{ fetch:(u,o={})=>fetch(u,{...o,cache:'no-store'}) } });
   const pubUrl = p => sb.storage.from(BUCKET).getPublicUrl(p).data.publicUrl;
 
-  // ===== UI =====
+  try{ const prj=(new URL(SUPABASE_URL).hostname||'').split('.')[0]; const b=$('#projBadge'); if(b){ b.textContent=`Bucket: ${BUCKET}（Public）｜Project: ${prj}`; } }catch(_){}
+
+  /* ===== UI refs ===== */
   const sel=$('#fileSel'), btnLoad=$('#btnLoad'), btnRefresh=$('#btnRefresh'), currentFile=$('#currentFile'), periodText=$('#periodText');
   const q=new URLSearchParams(location.search); const OVERRIDE_FILE=q.get('file')||'';
 
-  // ===== List =====
+  /* ===== 列上傳區檔案（遞迴；只列 .txt/.csv；優先 1031） ===== */
   async function listRecursive(prefix='',acc=[]){
     const p = prefix && !prefix.endsWith('/') ? prefix+'/' : prefix;
     const {data,error}=await sb.storage.from(BUCKET).list(p,{limit:1000,sortBy:{column:'name',order:'asc'}});
@@ -29,16 +33,15 @@
     }
     return acc;
   }
-  const scoreByNameDate=name=>{
-    const m=(name||'').match(/\b(20\d{6})\b/g);
-    return m ? Math.max(...m.map(x=>+x)) : 0;
+  const scoreByNameDate = name => {
+    const m=(name||'').match(/\b(20\d{6})\b/g); return m ? Math.max(...m.map(x=>+x)) : 0;
   };
   async function refreshList(){
     setStatus('讀取上傳區清單…');
     sel.innerHTML='<option value="">（選擇檔案）</option>'; btnLoad.disabled=true;
     const all=await listRecursive('');
     const files=all.filter(x=>/\.txt$|\.csv$/i.test(x.fullPath)).map(x=>({
-      path:x.fullPath,name:x.fullPath.split('/').pop(),size:x.item?.metadata?.size||0,updated:x.item?.updated_at||''
+      path:x.fullPath, name:x.fullPath.split('/').pop(), updated:x.item?.updated_at||'', size:x.item?.metadata?.size||0
     }));
     const f1031=files.filter(f=>/1031/i.test(f.name));
     const list=(f1031.length?f1031:files).sort((a,b)=>{
@@ -59,54 +62,67 @@
   sel.addEventListener('change',()=>btnLoad.disabled=!sel.value);
   btnRefresh.addEventListener('click',()=>refreshList());
 
-  // ===== 下載 =====
-  const fetchText = u => fetch(u,{cache:'no-store'}).then(r=>{ if(!r.ok) throw new Error(r.status+' '+r.statusText); return r.text(); });
+  /* ===== 多編碼讀檔（比照 00909 版 fetchText 強化） ===== */
+  async function fetchSmart(url){
+    const res=await fetch(url,{cache:'no-store'}); if(!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+    const buf=await res.arrayBuffer();
+    const trials=['utf-8','big5','utf-16le','utf-16be','windows-1252'];
+    let bestTxt='', bestScore=-1;
+    for(const enc of trials){
+      try{
+        let txt=new TextDecoder(enc,{fatal:false}).decode(buf);
+        // 清理常見雜訊
+        txt=txt.replace(/\ufeff/g,'').replace(/\r\n?/g,'\n');
+        // 粗略評分：符合「日期,時間,價格,動作」或至少找到數筆「YYYYMMDD,hhmmss,price,」
+        const sample=txt.slice(0,2000);
+        const kw = /日期\s*,\s*時間\s*,\s*價格\s*,\s*動作/.test(sample) ? 50 : 0;
+        const rows = (txt.match(/^\s*\d{8}\s*,\s*\d{5,6}\s*,\s*\d+(?:\.\d+)?\s*,/gm)||[]).length;
+        const score = kw + rows;
+        if(score>bestScore){ bestScore=score; bestTxt=txt; }
+      }catch{ /* ignore */ }
+    }
+    return bestTxt || new TextDecoder('utf-8').decode(buf);
+  }
 
-  // ===== Parser：1031 CSV -> canonical（只做多） =====
+  /* ===== 1031 CSV → canonical （只做多） ===== */
   function toCanonFrom1031CSV(raw){
-    // 1) 換行標準化；2) 移除 BOM/奇異控制碼；3) 刪除不可見空白；4) 只取前四欄
-    const txt = raw.replace(/\ufeff/g,'')
-                   .replace(/\r\n?/g,'\n')
-                   .replace(/[\x00-\x09\x0B-\x1F\x7F]/g,'')
-                   .replace(/[\u200B-\u200D]/g,'');
+    // 1) 全形逗號/數字轉半形  2) 移除控制碼  3) 嚴格只取前四欄
+    const toHalf = s => s.replace(/[０-９]/g, d=>String.fromCharCode(d.charCodeAt(0)-0xFEE0))
+                         .replace(/，/g, ',');
+    const clean = raw.replace(/[\x00-\x08\x0B-\x1F\x7F]/g,'').replace(/[\u200B-\u200D]/g,'');
+    const txt = toHalf(clean).replace(/\r\n?/g,'\n').replace(/\ufeff/g,'');
     const out=[];
     for (let line of txt.split('\n')) {
       if (!line) continue;
       line = line.trim();
-      if (!line || line.startsWith('日期')) continue;
+      if (!line || /^日期\s*,\s*時間\s*,\s*價格\s*,\s*動作/i.test(line)) continue;
 
-      // 有些行可能因為結尾多逗號或有中文逗號：先把全形逗號替換為半形，再 split
-      line = line.replace(/，/g, ',');
       const parts = line.split(',');
       if (parts.length < 4) continue;
 
       const d8 = (parts[0]||'').trim();
-      const t0 = (parts[1]||'').trim();
-      const px0= (parts[2]||'').trim();
-      const act0= (parts[3]||'').trim();
-
       if (!/^\d{8}$/.test(d8)) continue;
-      let t = t0;
+
+      let t = (parts[1]||'').trim();
       if (/^\d{5}$/.test(t)) t = '0'+t;
       if (!/^\d{6}$/.test(t)) continue;
 
-      // 價格可能是整數或小數，先轉數字再固定 6 位
-      const price = Number(px0);
+      const pstr = (parts[2]||'').trim();
+      const price = Number(pstr);
       if (!Number.isFinite(price)) continue;
-      const p6 = price.toFixed(6);
 
-      // 只做多的動作映射
+      const act0 = (parts[3]||'').trim();
       let mapped = '';
-      if (act0.indexOf('賣出') >= 0) mapped = '平賣';
-      else if (/(買進|加碼攤平|再加碼攤平)/.test(act0)) mapped = '新買';
-      else continue;
+      if (act0.includes('賣出')) mapped = '平賣';
+      else if (/買進|加碼攤平|再加碼攤平/.test(act0)) mapped = '新買';
+      else continue; // 只做多 + 賣出
 
-      out.push(`${d8}${t}.000000 ${p6} ${mapped}`);
+      out.push(`${d8}${t}.000000 ${price.toFixed(6)} ${mapped}`);
     }
     return { canon: out.join('\n'), ok: out.length };
   }
 
-  // ===== 每週盈虧圖 =====
+  /* ===== 圖表：每週盈虧（以 SELL 的 pnlFull 歸屬至該週） ===== */
   let chWeekly=null;
   const weekStartDateUTC=ms=>{
     const d=new Date(ms), dow=(d.getUTCDay()+6)%7;
@@ -114,58 +130,61 @@
     return s.toISOString().slice(0,10);
   };
   function buildWeeklyFromExecs(execs){
-    const m={},order=[];
+    const m={}, order=[];
     for(const e of execs){
-      if(e.side!=='SELL'||typeof e.pnlFull!=='number') continue;
+      if(e.side!=='SELL' || typeof e.pnlFull!=='number') continue;
       const wk=weekStartDateUTC(e.tsMs);
       if(!(wk in m)){ m[wk]=0; order.push(wk); }
       m[wk]+=e.pnlFull;
     }
-    const weekly=order.map(k=>m[k]||0); let s=0; const cum=weekly.map(v=>s+=v);
-    return {labels:order,weekly,cum};
+    const weekly=order.map(k=>m[k]||0);
+    let s=0; const cum=weekly.map(v=>s+=v);
+    return { labels:order, weekly, cum };
   }
   function renderWeeklyChart(execs){
-    const card=$('#weeklyCard'),ctx=$('#chWeekly');
+    const card=$('#weeklyCard'), ctx=$('#chWeekly');
     const W=buildWeeklyFromExecs(execs);
     if(!W.labels.length){ card.style.display='none'; return; }
     card.style.display='';
     if(chWeekly) chWeekly.destroy();
-    chWeekly=new Chart(ctx,{data:{
-      labels:W.labels,
-      datasets:[
-        {type:'bar',label:'每週獲利',data:W.weekly,borderWidth:1},
-        {type:'line',label:'累積淨利',data:W.cum,borderWidth:2,tension:0.2,pointRadius:0}
+    chWeekly=new Chart(ctx,{
+      data:{ labels:W.labels, datasets:[
+        { type:'bar',  label:'每週獲利', data:W.weekly, borderWidth:1 },
+        { type:'line', label:'累積淨利', data:W.cum,    borderWidth:2, tension:0.2, pointRadius:0 }
       ]},
-      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:true}},scales:{x:{ticks:{maxTicksLimit:12}}}}
+      options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:true}}, scales:{ x:{ticks:{maxTicksLimit:12}} } }
     });
   }
 
-  // ===== 交易明細表 =====
+  /* ===== 交易明細表 ===== */
   function renderTxTable(execs){
     const tb=$('#txBody'); tb.innerHTML='';
     if(!execs.length){ tb.innerHTML='<tr><td colspan="7" class="muted">（無資料）</td></tr>'; return; }
     for(const e of execs){
       const tr=document.createElement('tr'); tr.className=e.side==='SELL'?'sell-row':'buy-row';
-      const fee=e.fee||0,tax=e.tax||0,amt=e.side==='SELL'?(e.sellAmount||0):(e.buyAmount||0);
+      const fee=e.fee||0, tax=e.tax||0, amt=e.side==='SELL'?(e.sellAmount||0):(e.buyAmount||0);
       const tsShow=e.ts?tsPretty(e.ts):(e.tsMs?new Date(e.tsMs).toISOString().slice(0,16).replace('T',' '):'—');
-      tr.innerHTML=`<td>${tsShow}</td><td>${e.side==='BUY'?'買進':(e.side==='SELL'?'賣出':e.side||'—')}</td>
-      <td>${e.price!=null?e.price.toFixed(2):'—'}</td>
-      <td class="right">${fmtInt(e.shares||0)}</td><td class="right">${fmtInt(fee)}</td>
-      <td class="right">${fmtInt(tax)}</td><td class="right">${fmtInt(amt)}</td>`;
+      tr.innerHTML=`<td>${tsShow}</td>
+        <td>${e.side==='BUY'?'買進':(e.side==='SELL'?'賣出':(e.side||'—'))}</td>
+        <td>${e.price!=null?Number(e.price).toFixed(2):'—'}</td>
+        <td class="right">${fmtInt(e.shares||0)}</td>
+        <td class="right">${fmtInt(fee)}</td>
+        <td class="right">${fmtInt(tax)}</td>
+        <td class="right">${fmtInt(amt)}</td>`;
       tb.appendChild(tr);
     }
   }
 
-  // ===== 主程式 =====
+  /* ===== 載入與回測 ===== */
   async function loadAndRender(path){
     try{
       setStatus('下載/解析…');
       const url = /^https?:\/\//i.test(path) ? path : pubUrl(path);
-      const raw = await fetchText(url);
-      const conv = toCanonFrom1031CSV(raw);
-      if(!conv.ok) throw new Error('TXT 內容無可解析的交易行（1031 CSV 轉換失敗）');
+      const raw = await fetchSmart(url);
+      const {canon, ok} = toCanonFrom1031CSV(raw);
+      if(!ok) throw new Error('TXT 內容無可解析的交易行（1031 CSV 轉換失敗）');
 
-      const rows = window.ETF_ENGINE.parseCanon(conv.canon);
+      const rows = window.ETF_ENGINE.parseCanon(canon);
       if(!rows.length) throw new Error('轉換後資料為空');
 
       const start=rows[0].day, end=rows.at(-1).day;
@@ -178,6 +197,7 @@
 
       renderWeeklyChart(bt.execs);
       renderTxTable(bt.execs);
+
       setStatus('完成');
     }catch(err){
       console.error(err);
@@ -185,9 +205,10 @@
     }
   }
 
-  // ===== 啟動 =====
+  /* ===== 啟動 ===== */
   btnLoad.addEventListener('click',()=>{ if(sel.value) loadAndRender(sel.value); });
   btnRefresh.addEventListener('click',()=>refreshList());
+
   (async function boot(){
     await refreshList();
     if(OVERRIDE_FILE){ currentFile.textContent=OVERRIDE_FILE.split('/').pop()||OVERRIDE_FILE; loadAndRender(OVERRIDE_FILE); return; }
