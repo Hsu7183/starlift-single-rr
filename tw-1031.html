@@ -27,8 +27,10 @@
     .pnl-pos{ color:#d0021b; font-weight:600; }
     .pnl-neg{ color:#0f8a00; font-weight:600; }
 
+    /* 週次圖表高度 */
     .chartbox{height:300px;margin-top:6px}
 
+    /* 目前持有（放大字體） */
     #lastBuyBar{ margin:6px 0 12px 0; padding:12px 14px; border:1px dashed #cbd5e1; border-radius:10px; background:#f8fafc; color:#1f2937; font-size:18px; line-height:1.7; white-space:normal; }
     #lastBuyBar b{color:#0d6efd}
     h1{margin:0 0 4px 0;font-size:32px;font-weight:800;}
@@ -61,7 +63,7 @@
       <div id="periodText" class="muted" style="margin-top:6px;"></div>
     </div>
 
-    <!-- 狀態 & 參數 chips -->
+    <!-- 自動流程狀態 & 參數 chips -->
     <div class="card"><span id="autostatus" class="muted">初始化中…</span></div>
     <div class="card row" id="chipsRow" style="gap:8px">
       <span class="chip">手續費率：<span id="feeRateChip">—</span></span>
@@ -78,32 +80,15 @@
       <div class="chartbox"><canvas id="chWeekly"></canvas></div>
     </div>
 
-    <!-- 交易明細（固定 1-1-2；1000股/張，可 ?unit= 調整） -->
-    <div class="card" id="execCard" style="display:none">
-      <h3 style="margin:6px 0">交易明細（固定 1-1-2，預設 1000 股/張）</h3>
-      <div class="scroll-x">
-        <table id="execTable">
-          <thead>
-            <tr>
-              <th>時間</th><th>動作</th><th>成交價</th><th>數量</th>
-              <th>手續費</th><th>交易稅</th><th>金額</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-      </div>
-      <p class="muted" style="margin:6px 0 0">說明：新買/加碼/再加碼＝1/1/2 張（可用 <code>?unit=1000</code> 調整每張股數）。</p>
-    </div>
-
-    <!-- 最佳化交易明細 -->
+    <!-- 最佳化交易明細（只保留這個、KPI全移除） -->
     <div class="card">
       <h3 style="margin:6px 0">最佳化交易明細</h3>
       <div class="scroll-x"><table id="optTable"><thead></thead><tbody></tbody></table></div>
     </div>
   </div>
 
+  <!-- 主程式（先載 engine，再載本頁） -->
   <script src="etf-engine.js?v=fullfee-v1"></script>
-  <!-- 務必更新版本尾碼避免快取 -->
-  <script src="tw-1031.js?v=only-weekly-and-opt-v9"></script>
+  <script src="tw-1031.js?v=only-weekly-and-opt-v1"></script>
 </body>
 </html>
