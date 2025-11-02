@@ -1,6 +1,7 @@
-// tw-1031.js — 台股 1031 策略頁主程式（KPI 全移除；保留差異卡、週次圖、交易明細、最佳化表、持有卡、chips）
-// 新增：交易明細（精簡欄位，放在最佳化交易明細上方）
-// 口徑：費用/稅整數進位 + 最低手續費；最佳化 1-1-2；只做多（CSV 轉 canonical：買進/加碼/再加碼→新買；賣出→平賣）
+// tw-1031.js — 台股 1031 策略頁主程式
+// 需求：保留差異卡、chips、週次圖；在「最佳化交易明細」上方新增「交易明細」
+// 差異：交易明細 = 固定 1-1-2（1000/1000/2000 股）；最佳化交易明細 = 本金 100 萬、資金不足縮量的 1-1-2
+// 口徑：費用/稅整數進位 + 最低手續費；只做多（CSV→canonical：買進/加碼/再加碼→新買；賣出→平賣）
 (function(){
   // ========= 小工具 =========
   const $ = s => document.querySelector(s);
@@ -9,21 +10,25 @@
   const fmtInt = n => Math.round(n || 0).toLocaleString();
   const fmtPct = v => (v==null||!isFinite(v))?'—':(v*100).toFixed(2)+'%';
   const tsPretty = ts14 => `${ts14.slice(0,4)}/${ts14.slice(4,6)}/${ts14.slice(6,8)} ${ts14.slice(8,10)}:${ts14.slice(10,12)}`;
-  const DAY_MS = 24*60*60*1000;
 
   // ========= 參數 =========
   const url = new URL(location.href);
   const CFG = {
-    symbol: '1031', bucket: 'reports', want: /1031/i,
-    // 可用 URL 覆寫：?fee=0.0012&tax=0.001&minfee=20&unit=1000
+    symbol: '1031',
+    bucket: 'reports',
+    // 同時匹配 1031 與 00909（你上傳區顯示「1031 / 00909 / 20231212-20251023」）
+    want: /(1031|00909)/i,
+    // 可用 URL 覆寫：?fee=0.0012&tax=0.001&minfee=20&unit=1000&prefix=1031
     feeRate: +(url.searchParams.get('fee') || 0.001425),
     taxRate: +(url.searchParams.get('tax') || 0.001),
     minFee: +(url.searchParams.get('minfee') || 20),
     unitShares: +(url.searchParams.get('unit') || 1000),
-    rf: 0.00, initialCapital: 1_000_000,
+    rf: 0.00,
+    initialCapital: 1_000_000,
     manifestPath: 'manifests/tw-1031.json'
   };
   const OPT = { capital: 1_000_000, unitShares: CFG.unitShares, ratio: [1,1,2] };
+  const FIXED = { lots: [1,1,2], unitShares: CFG.unitShares }; // 1000/1000/2000
 
   // chips
   $('#feeRateChip').textContent = (CFG.feeRate*100).toFixed(4)+'%';
@@ -45,10 +50,16 @@
     if (error) throw new Error(error.message);
     return (data||[]).map(it => ({ name: it.name, fullPath: p + it.name, updatedAt: it.updated_at ? Date.parse(it.updated_at) : 0, size: it.metadata?.size || 0 }));
   }
-  async function listCandidates(){ const prefix = url.searchParams.get('prefix') || ''; return listOnce(prefix); }
-  const lastDateScore = name => { const m = String(name).match(/\b(20\d{6})\b/g); return m && m.length ? Math.max(...m.map(s=>+s||0)) : 0; };
+  async function listCandidates(){
+    const prefix = url.searchParams.get('prefix') || '';
+    return listOnce(prefix);
+  }
+  const lastDateScore = name => {
+    const m = String(name).match(/\b(20\d{6})\b/g);
+    return m && m.length ? Math.max(...m.map(s=>+s||0)) : 0;
+  };
 
-  // 多編碼下載（參考 00909 版本）
+  // 多編碼下載
   async function fetchText(u){
     const res = await fetch(u, { cache:'no-store' }); if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
     const buf = await res.arrayBuffer();
@@ -69,7 +80,6 @@
 
   // ========= CSV → canonical（只做多） =========
   function toCanonFrom1031CSV(raw){
-    // 全形逗號/數字→半形；只取前四欄：日期,時間,價格,動作
     const toHalf = s => s.replace(/[０-９]/g, d=>String.fromCharCode(d.charCodeAt(0)-0xFEE0)).replace(/，/g,',');
     let txt = toHalf(raw).replace(/\r\n?/g,'\n').replace(/[\x00-\x08\x0B-\x1F\x7F]/g,'').replace(/[\u200B-\u200D]/g,'');
     const out=[];
@@ -87,7 +97,7 @@
       let mapped='';
       if(act.includes('賣出')) mapped='平賣';
       else if(/買進|加碼攤平|再加碼攤平/.test(act)) mapped='新買';
-      else continue; // 只做多 + 賣出
+      else continue;
 
       out.push(`${d8}${t}.000000 ${price.toFixed(6)} ${mapped}`);
     }
@@ -97,7 +107,7 @@
   // ========= 回測 =========
   const backtest = (rows)=> window.ETF_ENGINE.backtest(rows, CFG);
 
-  // ========= 週次圖 =========
+  // ========= 週次圖（沿用最佳化結果） =========
   let chWeekly = null;
   function weekStartDate(ms){
     const d=new Date(ms), dow=(d.getUTCDay()+6)%7;
@@ -135,7 +145,7 @@
     });
   }
 
-  // ========= 券商口徑：費用/稅整數進位 =========
+  // ========= 費用稅（整數進位 + 最低手續費） =========
   function feesInt(price, shares, isSell){
     const gross = price * shares;
     const fee = Math.max(CFG.minFee, Math.ceil(gross * CFG.feeRate));
@@ -143,28 +153,18 @@
     return { gross, fee, tax };
   }
 
-  // ========= 目前持有（卡片，多筆換行） =========
-  function renderLastOpenBuyFromOpt(optExecs){
-    const netShares = optExecs.reduce((acc,e)=> acc + (e.side==='BUY'? e.shares : -e.shares), 0);
-    const bar = $('#lastBuyBar'); if(!bar) return;
-    if (netShares<=0){ bar.style.display='none'; bar.innerHTML=''; return; }
-    let i=optExecs.length-1; while(i>=0 && optExecs[i].side!=='SELL') i--;
-    const openBuys = optExecs.slice(i+1).filter(e=>e.side==='BUY');
-    if (!openBuys.length){ bar.style.display='none'; bar.innerHTML=''; return; }
-    const rows = openBuys.map(b => `買進　<b>${tsPretty(b.ts)}</b>　成交價格 <b>${Number(b.price).toFixed(2)}</b>　成交數量 <b>${fmtInt(b.shares)}</b>　持有數量 <b>${fmtInt(netShares)}</b>`);
-    bar.innerHTML = `目前持有：<br>${rows.join('<br>')}`; bar.style.display='';
-  }
-
-  // ========= 最佳化交易（本金100萬；1/1/2；資金不足縮量；未平倉保留BUY） =========
+  // ========= 分段工具 =========
   function splitSegments(execs){ const segs=[], cur=[]; for(const e of execs){ cur.push(e); if(e.side==='SELL'){ segs.push(cur.splice(0)); } } if (cur.length) segs.push(cur); return segs; }
   function buyCostLots(price, lots){ const shares = lots * CFG.unitShares; const f = feesInt(price, shares, false); return { cost: f.gross + f.fee, shares, f }; }
 
+  // ========= 最佳化（本金 100 萬；資金不足縮量；未平倉保留 BUY） =========
   function buildOptimizedExecs(execs){
     const segs = splitSegments(execs), out=[]; let cumPnlAll=0;
     for(const seg of segs){
       const buys = seg.filter(x=>x.side==='BUY');
       const sell = seg.find(x=>x.side==='SELL');
       if(!buys.length) continue;
+
       const p0 = buys[0].price;
       const one = buyCostLots(p0,1).cost;
       let maxLotsTotal = Math.floor(OPT.capital / one); if (maxLotsTotal<=0) continue;
@@ -175,7 +175,6 @@
 
       let remaining=OPT.capital, sharesHeld=0, cumCost=0;
 
-      // BUYs（以 1/1/2 進場）
       for(let i=0;i<n;i++){
         const b=buys[i];
         let lots=plan[i];
@@ -184,8 +183,8 @@
         if (affordable<=0) break;
         if (lots>affordable) lots=affordable;
         const bc = buyCostLots(b.price, lots);
-        remaining -= bc.cost;  // 現金減少
-        cumCost   += bc.cost;  // 段內累計成本（買端）
+        remaining -= bc.cost;
+        cumCost   += bc.cost;
         sharesHeld+= bc.shares;
         const costAvgDisp = (bc.f.gross + bc.f.fee) / bc.shares;
 
@@ -194,7 +193,6 @@
           cumCost, costAvgDisp, pnlFull:null, retPctUnit:null, cumPnlFull:cumPnlAll });
       }
 
-      // SELL（一次賣出段內持有全部）
       if (sell && sharesHeld>0){
         const st = feesInt(sell.price, sharesHeld, true);
         const pnlFull = st.gross - (st.fee + st.tax) - cumCost;
@@ -202,7 +200,7 @@
 
         const sellCumCostDisp = cumCost + st.fee + st.tax;
         const sellCostAvgDisp = sellCumCostDisp / sharesHeld;
-        const buyCostAvgBase = cumCost / sharesHeld;
+        const buyCostAvgBase  = cumCost / sharesHeld;
         const priceDiff = sellCostAvgDisp - buyCostAvgBase;
 
         out.push({ side:'SELL', ts:sell.ts, tsMs:sell.tsMs, price:sell.price, shares:sharesHeld,
@@ -215,45 +213,76 @@
     return out;
   }
 
-  // ========= 交易明細（精簡版） =========
-  function renderTradeTable(optExecs){
-    const thead=$('#tradeTable thead'), tbody=$('#tradeTable tbody');
-    if(!thead || !tbody) return;
-    thead.innerHTML = `<tr>
-      <th>日期</th><th>種類</th><th>成交價格</th><th>成交數量</th>
-    </tr>`;
-    tbody.innerHTML='';
-    for(const e of optExecs){
-      const tr=document.createElement('tr'); tr.className = (e.side==='SELL') ? 'sell-row' : 'buy-row';
-      tr.innerHTML =
-        `<td>${tsPretty(e.ts)}</td>
-         <td>${e.side==='SELL'?'賣出':'買進'}</td>
-         <td>${Number(e.price).toFixed(2)}</td>
-         <td>${fmtInt(e.shares||0)}</td>`;
-      tbody.appendChild(tr);
+  // ========= 固定 1-1-2（1000/1000/2000 股）交易明細 =========
+  function buildFixed112Execs(execs){
+    const segs = splitSegments(execs), out=[]; let cumPnlAll=0;
+    for(const seg of segs){
+      const buys = seg.filter(x=>x.side==='BUY');
+      const sell = seg.find(x=>x.side==='SELL');
+      if(!buys.length) continue;
+
+      const n = Math.min(3, buys.length);
+      const planLots = FIXED.lots.slice(0, n); // 1,1,2 lots
+      let sharesHeld=0, cumCost=0;
+
+      // BUYs：固定 lots，不考慮資金上限
+      for(let i=0;i<n;i++){
+        const b = buys[i];
+        const lots = planLots[i];
+        const shares = lots * FIXED.unitShares;
+        const f = feesInt(b.price, shares, false);
+        const cost = f.gross + f.fee;
+        sharesHeld += shares;
+        cumCost    += cost;
+        const costAvgDisp = (f.gross + f.fee) / shares;
+
+        out.push({ side:'BUY', ts:b.ts, tsMs:b.tsMs, price:b.price, shares,
+          buyAmount:f.gross, sellAmount:0, fee:f.fee, tax:0, cost,
+          cumCost, costAvgDisp, pnlFull:null, retPctUnit:null, cumPnlFull:cumPnlAll });
+      }
+
+      // SELL：一次賣出全部
+      if(sell && sharesHeld>0){
+        const st = feesInt(sell.price, sharesHeld, true);
+        const pnlFull = st.gross - (st.fee + st.tax) - cumCost;
+        cumPnlAll += pnlFull;
+
+        const sellCumCostDisp = cumCost + st.fee + st.tax;
+        const sellCostAvgDisp = sellCumCostDisp / sharesHeld;
+        const buyCostAvgBase  = cumCost / sharesHeld;
+        const priceDiff = sellCostAvgDisp - buyCostAvgBase;
+
+        out.push({ side:'SELL', ts:sell.ts, tsMs:sell.tsMs, price:sell.price, shares:sharesHeld,
+          buyAmount:0, sellAmount:st.gross, fee:st.fee, tax:st.tax, cost:0,
+          cumCost, cumCostDisp:sellCumCostDisp, costAvgDisp:sellCostAvgDisp, priceDiff,
+          pnlFull, retPctUnit: sellCumCostDisp>0 ? (pnlFull / sellCumCostDisp) : null, cumPnlFull:cumPnlAll });
+      }
     }
+    out.sort((a,b)=>a.tsMs-b.tsMs);
+    return out;
   }
 
-  // ========= 明細表（含「價格差」） =========
-  function renderOptTable(optExecs){
-    const thead=$('#optTable thead'), tbody=$('#optTable tbody');
-    thead.innerHTML=`<tr>
+  // ========= 表格渲染（兩張表共用相同欄位） =========
+  function renderFullTable(execs, tableId){
+    const thead = $(`#${tableId} thead`), tbody = $(`#${tableId} tbody`);
+    if(!thead || !tbody) return;
+    thead.innerHTML = `<tr>
       <th>日期</th><th>種類</th><th>成交價格</th><th>成交數量</th>
       <th>買進金額</th><th>賣出金額</th><th>手續費</th><th>交易稅</th>
       <th>成本</th><th>成本均價</th><th>累計成本</th><th>價格差</th><th>損益</th><th>報酬率</th><th>累計損益</th>
     </tr>`;
     tbody.innerHTML='';
-    for(const e of optExecs){
+    for(const e of execs){
       const isSell = e.side==='SELL';
       const costAvgDisp = e.costAvgDisp!=null ? Number(e.costAvgDisp).toFixed(2) : '—';
       const cumCostDisp = isSell ? (e.cumCostDisp ?? (e.cumCost + (e.fee||0) + (e.tax||0))) : (e.cumCost||0);
-      const priceDiff = isSell ? (e.priceDiff!=null ? e.priceDiff.toFixed(2) : '—') : '—';
-      const retPctShow = (isSell && e.retPctUnit!=null) ? fmtPct(e.retPctUnit) : '—';
-      const pnlCell = e.pnlFull==null ? '—' : (e.pnlFull>0 ? `<span class="pnl-pos">${fmtInt(e.pnlFull)}</span>` : `<span class="pnl-neg">${fmtInt(e.pnlFull)}</span>`);
-      const cumPnlCell = e.cumPnlFull==null ? '—' : (e.cumPnlFull>0 ? `<span class="pnl-pos">${fmtInt(e.cumPnlFull)}</span>` : `<span class="pnl-neg">${fmtInt(e.cumPnlFull)}</span>`);
+      const priceDiff   = isSell ? (e.priceDiff!=null ? e.priceDiff.toFixed(2) : '—') : '—';
+      const retPctShow  = (isSell && e.retPctUnit!=null) ? fmtPct(e.retPctUnit) : '—';
+      const pnlCell     = e.pnlFull==null ? '—' : (e.pnlFull>0 ? `<span class="pnl-pos">${fmtInt(e.pnlFull)}</span>` : `<span class="pnl-neg">${fmtInt(e.pnlFull)}</span>`);
+      const cumPnlCell  = e.cumPnlFull==null ? '—' : (e.cumPnlFull>0 ? `<span class="pnl-pos">${fmtInt(e.cumPnlFull)}</span>` : `<span class="pnl-neg">${fmtInt(e.cumPnlFull)}</span>`);
 
       const tr=document.createElement('tr'); tr.className=isSell?'sell-row':'buy-row';
-      tr.innerHTML=
+      tr.innerHTML =
         `<td>${tsPretty(e.ts)}</td>
          <td>${isSell?'賣出':'買進'}</td>
          <td>${Number(e.price).toFixed(2)}</td>
@@ -282,14 +311,20 @@
       set('從 Supabase 讀取清單…');
       const paramFile=url.searchParams.get('file');
       let latest=null, list=[];
-      if(paramFile){ latest={ name:paramFile.split('/').pop()||'1031.txt', fullPath:paramFile, from:'url' }; }
-      else{
+      if(paramFile){
+        latest={ name:paramFile.split('/').pop()||'1031.txt', fullPath:paramFile, from:'url' };
+      }else{
         list=(await listCandidates()).filter(f=>CFG.want.test(f.name)||CFG.want.test(f.fullPath));
-        list.sort((a,b)=>{ const sa=lastDateScore(a.name), sb=lastDateScore(b.name);
-          if(sa!==sb) return sb-sa; if(a.updatedAt!==b.updatedAt) return b.updatedAt-a.updatedAt; return (b.size||0)-(a.size||0); });
+        // 以檔名中的 YYYYMMDD 打分；同分則用更新時間與檔案大小
+        list.sort((a,b)=>{
+          const sa=lastDateScore(a.name), sb=lastDateScore(b.name);
+          if(sa!==sb) return sb-sa;
+          if(a.updatedAt!==b.updatedAt) return b.updatedAt-a.updatedAt;
+          return (b.size||0)-(a.size||0);
+        });
         latest=list[0];
       }
-      if(!latest){ set('找不到檔名含「1031」的 TXT（可用 ?file= 指定）。', true); return; }
+      if(!latest){ set('找不到檔名含「1031/00909」的 TXT（可用 ?prefix=1031 或 ?file= 指定）。', true); return; }
       $('#latestName').textContent=latest.name;
 
       const manifest=await readManifest();
@@ -317,12 +352,25 @@
       // 回測
       const bt = backtest(rows);
 
-      // 最佳化（1-1-2），目前持有，週次圖，交易明細，最佳化表
-      const optExecs = buildOptimizedExecs(bt.execs);
-      renderLastOpenBuyFromOpt(optExecs);
-      renderWeeklyChartFromOpt(optExecs);
-      renderTradeTable(optExecs);   // << 新增：交易明細（精簡）
-      renderOptTable(optExecs);     // 既有：最佳化交易明細（完整）
+      // 生成兩組 execs：固定 1-1-2（交易明細）與 最佳化（最佳化交易明細）
+      const execsFixed = buildFixed112Execs(bt.execs);
+      const execsOpt   = buildOptimizedExecs(bt.execs);
+
+      // 目前持有、週次圖（沿用最佳化）、兩張表渲染
+      renderWeeklyChartFromOpt(execsOpt);
+      renderFullTable(execsFixed, 'tradeTable'); // 交易明細：固定 1000/1000/2000
+      renderFullTable(execsOpt,   'optTable');   // 最佳化交易明細：本金 100 萬
+      // 目前持有從最佳化序列推導（顯示格式一致）
+      (function renderLastOpenBuyFromExecs(optExecs){
+        const netShares = optExecs.reduce((acc,e)=> acc + (e.side==='BUY'? e.shares : -e.shares), 0);
+        const bar = $('#lastBuyBar'); if(!bar) return;
+        if (netShares<=0){ bar.style.display='none'; bar.innerHTML=''; return; }
+        let i=optExecs.length-1; while(i>=0 && optExecs[i].side!=='SELL') i--;
+        const openBuys = optExecs.slice(i+1).filter(e=>e.side==='BUY');
+        if (!openBuys.length){ bar.style.display='none'; bar.innerHTML=''; return; }
+        const rows = openBuys.map(b => `買進　<b>${tsPretty(b.ts)}</b>　成交價格 <b>${Number(b.price).toFixed(2)}</b>　成交數量 <b>${fmtInt(b.shares)}</b>　持有數量 <b>${fmtInt(netShares)}</b>`);
+        bar.innerHTML = `目前持有：<br>${rows.join('<br>')}`; bar.style.display='';
+      })(execsOpt);
 
       // 本頁不計 KPI；基準按鈕禁用
       const btn=$('#btnSetBaseline'); if(btn) btn.disabled=true;
