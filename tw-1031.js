@@ -1,4 +1,5 @@
-// tw-1031.js — 台股 1031 策略頁主程式（KPI 全移除；保留差異卡、週次圖、最佳化表、持有卡、chips）
+// tw-1031.js — 台股 1031 策略頁主程式（KPI 全移除；保留差異卡、週次圖、交易明細、最佳化表、持有卡、chips）
+// 新增：交易明細（精簡欄位，放在最佳化交易明細上方）
 // 口徑：費用/稅整數進位 + 最低手續費；最佳化 1-1-2；只做多（CSV 轉 canonical：買進/加碼/再加碼→新買；賣出→平賣）
 (function(){
   // ========= 小工具 =========
@@ -214,6 +215,25 @@
     return out;
   }
 
+  // ========= 交易明細（精簡版） =========
+  function renderTradeTable(optExecs){
+    const thead=$('#tradeTable thead'), tbody=$('#tradeTable tbody');
+    if(!thead || !tbody) return;
+    thead.innerHTML = `<tr>
+      <th>日期</th><th>種類</th><th>成交價格</th><th>成交數量</th>
+    </tr>`;
+    tbody.innerHTML='';
+    for(const e of optExecs){
+      const tr=document.createElement('tr'); tr.className = (e.side==='SELL') ? 'sell-row' : 'buy-row';
+      tr.innerHTML =
+        `<td>${tsPretty(e.ts)}</td>
+         <td>${e.side==='SELL'?'賣出':'買進'}</td>
+         <td>${Number(e.price).toFixed(2)}</td>
+         <td>${fmtInt(e.shares||0)}</td>`;
+      tbody.appendChild(tr);
+    }
+  }
+
   // ========= 明細表（含「價格差」） =========
   function renderOptTable(optExecs){
     const thead=$('#optTable thead'), tbody=$('#optTable tbody');
@@ -297,11 +317,12 @@
       // 回測
       const bt = backtest(rows);
 
-      // 最佳化（1-1-2），目前持有，週次圖，最佳化表
+      // 最佳化（1-1-2），目前持有，週次圖，交易明細，最佳化表
       const optExecs = buildOptimizedExecs(bt.execs);
       renderLastOpenBuyFromOpt(optExecs);
       renderWeeklyChartFromOpt(optExecs);
-      renderOptTable(optExecs);
+      renderTradeTable(optExecs);   // << 新增：交易明細（精簡）
+      renderOptTable(optExecs);     // 既有：最佳化交易明細（完整）
 
       // 本頁不計 KPI；基準按鈕禁用
       const btn=$('#btnSetBaseline'); if(btn) btn.disabled=true;
