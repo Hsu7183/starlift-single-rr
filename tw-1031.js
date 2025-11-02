@@ -1,5 +1,5 @@
-// tw-1031.js — 1031策略頁
-// 交易明細＝固定 1-1-2（1000/1000/2000）；最佳化交易明細＝本金100萬、資金不足縮量 1-1-2
+// tw-1031.js — 1031策略頁（修正 CSV→canonical 轉換失敗）
+// 交易明細＝固定 1-1-2（1000/1000/2000）；最佳化＝本金100萬、資金不足縮量 1-1-2
 (function(){
   const $ = s => document.querySelector(s);
   const status = $('#autostatus');
@@ -24,6 +24,7 @@
   const OPT   = { capital: 1_000_000, unitShares: CFG.unitShares, ratio: [1,1,2] };
   const FIXED = { lots: [1,1,2], unitShares: CFG.unitShares }; // 1000/1000/2000
 
+  // chips
   $('#feeRateChip').textContent = (CFG.feeRate*100).toFixed(4)+'%';
   $('#taxRateChip').textContent = (CFG.taxRate*100).toFixed(3)+'%';
   $('#minFeeChip').textContent  = String(CFG.minFee);
@@ -37,7 +38,7 @@
   const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { global:{ fetch:(u,o={})=>fetch(u,{...o,cache:'no-store'}) } });
   const pubUrl = p => { const {data} = sb.storage.from(CFG.bucket).getPublicUrl(p); return data?.publicUrl || '#'; };
 
-  // ===== 遞迴列舉所有子資料夾（抓得到 1031/00909/20231212-20251023.txt） =====
+  // ===== 遞迴列舉（可抓到 1031/00909/20231212-20251023.txt） =====
   async function listAll(prefix=''){
     const p = (prefix && !prefix.endsWith('/')) ? (prefix + '/') : (prefix || '');
     const { data, error } = await sb.storage.from(CFG.bucket).list(p, { limit: 1000, sortBy:{ column:'name', order:'asc' } });
@@ -48,7 +49,6 @@
       if (isFile) {
         out.push({ name: it.name, fullPath: p + it.name, updatedAt: it.updated_at ? Date.parse(it.updated_at) : 0, size: it.metadata.size||0 });
       } else {
-        // folder → 繼續往下
         const sub = await listAll(p + it.name);
         out.push(...sub);
       }
@@ -66,9 +66,10 @@
     for (const enc of trials){
       try{
         let txt = new TextDecoder(enc).decode(buf).replace(/\ufeff/gi,'');
+        // 頭段是否是CSV（日期,時間,價格,動作）
         const head=txt.slice(0,1500);
-        const kw = /日期\s*,\s*時間\s*,\s*價格\s*,\s*動作/.test(head) ? 5 : 0;
-        const lines=(txt.match(/^\s*\d{8}\s*,\s*\d{5,6}\s*,\s*\d+(?:\.\d+)?\s*,/gm)||[]).length;
+        const kw = /日期\s*,\s*時間\s*,\s*價格\s*,\s*動作/i.test(head) ? 5 : 0;
+        const lines=(txt.match(/^\s*\d{8}\s*,\s*\d{5,6}\s*,\s*[-+]?\d+(?:\.\d+)?\s*,/gm)||[]).length;
         const score=kw*100+lines;
         if(score>best.score){ best={score,txt}; }
       }catch{}
@@ -76,25 +77,43 @@
     return best.txt || new TextDecoder('utf-8').decode(buf);
   }
 
-  // ===== CSV→canonical（只做多） =====
+  // ===== CSV → canonical（強化版，僅擷取前四欄） =====
   function toCanonFrom1031CSV(raw){
-    const toHalf = s => s.replace(/[０-９]/g, d=>String.fromCharCode(d.charCodeAt(0)-0xFEE0)).replace(/，/g,',');
-    let txt = toHalf(raw).replace(/\r\n?/g,'\n').replace(/[\x00-\x08\x0B-\x1F\x7F]/g,'').replace(/[\u200B-\u200D]/g,'');
+    const toHalf = s =>
+      s.replace(/[０-９]/g, d=>String.fromCharCode(d.charCodeAt(0)-0xFEE0))
+       .replace(/，/g,',')
+       .replace(/\u3000/g,' ') // 全形空白
+       .replace(/\t/g,',');    // 假如有 tab 就視同逗號
+    let txt = toHalf(raw)
+      .replace(/\r\n?/g,'\n')
+      .replace(/[\x00-\x08\x0B-\x1F\x7F]/g,'')   // 控制字元
+      .replace(/[\u200B-\u200D\uFEFF]/g,'');     // 零寬/BOM
+
+    const headerOK = /日期\s*,\s*時間\s*,\s*價格\s*,\s*動作/i.test(txt.slice(0,2000));
     const out=[];
+    const re = /^\s*(\d{8})\s*,\s*(\d{5,6})\s*,\s*([-+]?\d+(?:\.\d+)?)\s*,\s*([^,\n\r]+)\b.*$/;
+
     for(const line0 of txt.split('\n')){
       if(!line0) continue;
       const line=line0.trim();
-      if(!line || /^日期\s*,\s*時間\s*,\s*價格\s*,\s*動作/i.test(line)) continue;
-      const parts=line.split(','); if(parts.length<4) continue;
+      if(!line) continue;
+      if(headerOK && /^日期\s*,\s*時間\s*,\s*價格\s*,\s*動作/i.test(line)) continue;
 
-      const d8=(parts[0]||'').trim(); if(!/^\d{8}$/.test(d8)) continue;
-      let t=(parts[1]||'').trim(); if(/^\d{5}$/.test(t)) t='0'+t; if(!/^\d{6}$/.test(t)) continue;
-      const price=Number((parts[2]||'').trim()); if(!Number.isFinite(price)) continue;
+      const m = re.exec(line);
+      if(!m) continue;
 
-      const act=(parts[3]||'').trim();
+      const d8 = m[1];
+      let t  = m[2];
+      if (/^\d{5}$/.test(t)) t='0'+t;        // 補 0 成 6 碼
+      if (!/^\d{6}$/.test(t)) continue;
+
+      const price = Number(m[3]);            // 價格
+      if(!Number.isFinite(price)) continue;
+
+      const actRaw = String(m[4]).trim();
       let mapped='';
-      if(act.includes('賣出')) mapped='平賣';
-      else if(/買進|加碼攤平|再加碼攤平/.test(act)) mapped='新買';
+      if (actRaw.includes('賣出')) mapped='平賣';
+      else if (/買進|加碼攤平|再加碼攤平/.test(actRaw)) mapped='新買';
       else continue;
 
       out.push(`${d8}${t}.000000 ${price.toFixed(6)} ${mapped}`);
@@ -144,24 +163,28 @@
     return { gross, fee, tax };
   }
 
-  // ===== 分段工具 =====
+  // ===== 分段 =====
   function splitSegments(execs){ const segs=[], cur=[]; for(const e of execs){ cur.push(e); if(e.side==='SELL'){ segs.push(cur.splice(0)); } } if (cur.length) segs.push(cur); return segs; }
   function buyCostLots(price, lots){ const shares = lots * CFG.unitShares; const f = feesInt(price, shares, false); return { cost: f.gross + f.fee, shares, f }; }
 
-  // ===== 建立兩組 execs =====
+  // ===== 最佳化（本金 100 萬；資金不足縮量；未平倉保留 BUY） =====
   function buildOptimizedExecs(execs){
     const segs = splitSegments(execs), out=[]; let cumPnlAll=0;
     for(const seg of segs){
       const buys = seg.filter(x=>x.side==='BUY');
       const sell = seg.find(x=>x.side==='SELL');
       if(!buys.length) continue;
+
       const p0 = buys[0].price;
       const one = buyCostLots(p0,1).cost;
-      let maxLotsTotal = Math.floor(OPT.capital / one); if (maxLotsTotal<=0) continue;
+      let maxLotsTotal = Math.floor(1_000_000 / one); if (maxLotsTotal<=0) continue; // OPT.capital
+
       let q=Math.floor(maxLotsTotal/4); if(q<=0) q=1;
       const n=Math.min(3,buys.length);
       const plan=[q,q,2*q].slice(0,n);
-      let remaining=OPT.capital, sharesHeld=0, cumCost=0;
+
+      let remaining=1_000_000, sharesHeld=0, cumCost=0;
+
       for(let i=0;i<n;i++){
         const b=buys[i];
         let lots=plan[i];
@@ -172,60 +195,74 @@
         const bc = buyCostLots(b.price, lots);
         remaining -= bc.cost; cumCost += bc.cost; sharesHeld += bc.shares;
         const costAvgDisp = (bc.f.gross + bc.f.fee) / bc.shares;
+
         out.push({ side:'BUY', ts:b.ts, tsMs:b.tsMs, price:b.price, shares:bc.shares,
           buyAmount:bc.f.gross, sellAmount:0, fee:bc.f.fee, tax:0, cost:bc.cost,
           cumCost, costAvgDisp, pnlFull:null, retPctUnit:null, cumPnlFull:cumPnlAll });
       }
+
       if (sell && sharesHeld>0){
         const st = feesInt(sell.price, sharesHeld, true);
         const pnlFull = st.gross - (st.fee + st.tax) - cumCost; cumPnlAll += pnlFull;
+
         const sellCumCostDisp = cumCost + st.fee + st.tax;
         const sellCostAvgDisp = sellCumCostDisp / sharesHeld;
         const buyCostAvgBase  = cumCost / sharesHeld;
         const priceDiff = sellCostAvgDisp - buyCostAvgBase;
+
         out.push({ side:'SELL', ts:sell.ts, tsMs:sell.tsMs, price:sell.price, shares:sharesHeld,
           buyAmount:0, sellAmount:st.gross, fee:st.fee, tax:st.tax, cost:0,
           cumCost, cumCostDisp:sellCumCostDisp, costAvgDisp:sellCostAvgDisp, priceDiff,
           pnlFull, retPctUnit: sellCumCostDisp>0 ? (pnlFull / sellCumCostDisp) : null, cumPnlFull:cumPnlAll });
       }
     }
-    out.sort((a,b)=>a.tsMs-b.tsMs); return out;
+    out.sort((a,b)=>a.tsMs-b.tsMs);
+    return out;
   }
 
+  // ===== 固定 1-1-2（1000/1000/2000） =====
   function buildFixed112Execs(execs){
     const segs = splitSegments(execs), out=[]; let cumPnlAll=0;
     for(const seg of segs){
       const buys = seg.filter(x=>x.side==='BUY');
       const sell = seg.find(x=>x.side==='SELL');
       if(!buys.length) continue;
+
       const n = Math.min(3, buys.length);
-      const planLots = FIXED.lots.slice(0, n); // 1,1,2 lots
+      const planLots = [1,1,2].slice(0, n);
       let sharesHeld=0, cumCost=0;
+
       for(let i=0;i<n;i++){
-        const b = buys[i], lots = planLots[i];
-        const shares = lots * FIXED.unitShares;
+        const b = buys[i];
+        const lots = planLots[i];
+        const shares = lots * CFG.unitShares;
         const f = feesInt(b.price, shares, false);
         const cost = f.gross + f.fee;
         sharesHeld += shares; cumCost += cost;
         const costAvgDisp = (f.gross + f.fee) / shares;
+
         out.push({ side:'BUY', ts:b.ts, tsMs:b.tsMs, price:b.price, shares,
           buyAmount:f.gross, sellAmount:0, fee:f.fee, tax:0, cost,
           cumCost, costAvgDisp, pnlFull:null, retPctUnit:null, cumPnlFull:cumPnlAll });
       }
+
       if(sell && sharesHeld>0){
         const st = feesInt(sell.price, sharesHeld, true);
         const pnlFull = st.gross - (st.fee + st.tax) - cumCost; cumPnlAll += pnlFull;
+
         const sellCumCostDisp = cumCost + st.fee + st.tax;
         const sellCostAvgDisp = sellCumCostDisp / sharesHeld;
         const buyCostAvgBase  = cumCost / sharesHeld;
         const priceDiff = sellCostAvgDisp - buyCostAvgBase;
+
         out.push({ side:'SELL', ts:sell.ts, tsMs:sell.tsMs, price:sell.price, shares:sharesHeld,
           buyAmount:0, sellAmount:st.gross, fee:st.fee, tax:st.tax, cost:0,
           cumCost, cumCostDisp:sellCumCostDisp, costAvgDisp:sellCostAvgDisp, priceDiff,
           pnlFull, retPctUnit: sellCumCostDisp>0 ? (pnlFull / sellCumCostDisp) : null, cumPnlFull:cumPnlAll });
       }
     }
-    out.sort((a,b)=>a.tsMs-b.tsMs); return out;
+    out.sort((a,b)=>a.tsMs-b.tsMs);
+    return out;
   }
 
   // ===== 表格渲染（兩張表同欄位） =====
@@ -279,11 +316,9 @@
       if(paramFile){
         latest={ name:paramFile.split('/').pop()||'1031.txt', fullPath:paramFile, from:'url' };
       }else{
-        const prefix = url.searchParams.get('prefix') || '';  // 可指定 ?prefix=1031
-        list = await listAll(prefix); // << 遞迴列舉
-        // 只要 .txt，且路徑/檔名含 1031 或 00909
+        const prefix = url.searchParams.get('prefix') || '';
+        list = await listAll(prefix);
         list = list.filter(f => /\.txt$/i.test(f.name) && (CFG.want.test(f.name) || CFG.want.test(f.fullPath)));
-        // 依檔名中的 YYYYMMDD 加分，其次 updatedAt/size
         list.sort((a,b)=>{
           const sa=lastDateScore(a.name), sb=lastDateScore(b.name);
           if(sa!==sb) return sb-sa;
@@ -308,7 +343,7 @@
       let rows = window.ETF_ENGINE.parseCanon(raw);
       if(!rows.length){
         const {canon, ok} = toCanonFrom1031CSV(raw);
-        if(!ok){ set('TXT 內容無可解析的交易行（1031 CSV 轉換失敗）', true); return; }
+        if(!ok){ set('TXT 內容無可解析的交易行（強化 CSV 轉換仍無資料）', true); return; }
         rows = window.ETF_ENGINE.parseCanon(canon);
       }
       if(!rows.length){ set('TXT 內無可解析的交易行。', true); return; }
