@@ -27,10 +27,8 @@
     .pnl-pos{ color:#d0021b; font-weight:600; }
     .pnl-neg{ color:#0f8a00; font-weight:600; }
 
-    /* 週次圖表高度 */
     .chartbox{height:300px;margin-top:6px}
 
-    /* 目前持有（放大字體） */
     #lastBuyBar{ margin:6px 0 12px 0; padding:12px 14px; border:1px dashed #cbd5e1; border-radius:10px; background:#f8fafc; color:#1f2937; font-size:18px; line-height:1.7; white-space:normal; }
     #lastBuyBar b{color:#0d6efd}
     h1{margin:0 0 4px 0;font-size:32px;font-weight:800;}
@@ -80,13 +78,13 @@
       <div class="chartbox"><canvas id="chWeekly"></canvas></div>
     </div>
 
-    <!-- 交易明細（精簡版：日期/種類/成交價格/成交數量） -->
+    <!-- 交易明細（與最佳化同欄位；固定 1-1-2＝1000/1000/2000 股） -->
     <div class="card">
       <h3 style="margin:6px 0">交易明細（1-1-2：1000 / 1000 / 2000）</h3>
       <div class="scroll-x"><table id="tradeTable"><thead></thead><tbody></tbody></table></div>
     </div>
 
-    <!-- 最佳化交易明細（只保留這個、KPI全移除） -->
+    <!-- 最佳化交易明細（本金100萬；資金不足縮量） -->
     <div class="card">
       <h3 style="margin:6px 0">最佳化交易明細</h3>
       <div class="scroll-x"><table id="optTable"><thead></thead><tbody></tbody></table></div>
@@ -95,6 +93,6 @@
 
   <!-- 主程式（先載 engine，再載本頁） -->
   <script src="etf-engine.js?v=fullfee-v1"></script>
-  <script src="tw-1031.js?v=only-weekly-and-opt-v2-trade"></script>
+  <script src="tw-1031.js?v=fixed112-and-opt-v1"></script>
 </body>
 </html>
