@@ -1,9 +1,7 @@
 // tw-1031.js — 台股 1031 策略頁主程式
-// 需求：保留差異卡、chips、週次圖；在「最佳化交易明細」上方新增「交易明細」
-// 差異：交易明細 = 固定 1-1-2（1000/1000/2000 股）；最佳化交易明細 = 本金 100 萬、資金不足縮量的 1-1-2
+// 「交易明細」= 固定 1-1-2（1000/1000/2000 股）；「最佳化交易明細」= 本金 100 萬、資金不足縮量 1-1-2
 // 口徑：費用/稅整數進位 + 最低手續費；只做多（CSV→canonical：買進/加碼/再加碼→新買；賣出→平賣）
 (function(){
-  // ========= 小工具 =========
   const $ = s => document.querySelector(s);
   const status = $('#autostatus');
   const set = (m,bad=false)=>{ if(status){ status.textContent=m; status.style.color=bad?'#c62828':'#666'; } };
@@ -11,14 +9,13 @@
   const fmtPct = v => (v==null||!isFinite(v))?'—':(v*100).toFixed(2)+'%';
   const tsPretty = ts14 => `${ts14.slice(0,4)}/${ts14.slice(4,6)}/${ts14.slice(6,8)} ${ts14.slice(8,10)}:${ts14.slice(10,12)}`;
 
-  // ========= 參數 =========
+  // ===== 參數 =====
   const url = new URL(location.href);
   const CFG = {
     symbol: '1031',
     bucket: 'reports',
-    // 同時匹配 1031 與 00909（你上傳區顯示「1031 / 00909 / 20231212-20251023」）
+    // 你上傳頁顯示「1031 / 00909 / 20231212-20251023」→ 同時匹配 1031 與 00909
     want: /(1031|00909)/i,
-    // 可用 URL 覆寫：?fee=0.0012&tax=0.001&minfee=20&unit=1000&prefix=1031
     feeRate: +(url.searchParams.get('fee') || 0.001425),
     taxRate: +(url.searchParams.get('tax') || 0.001),
     minFee: +(url.searchParams.get('minfee') || 20),
@@ -27,18 +24,18 @@
     initialCapital: 1_000_000,
     manifestPath: 'manifests/tw-1031.json'
   };
-  const OPT = { capital: 1_000_000, unitShares: CFG.unitShares, ratio: [1,1,2] };
-  const FIXED = { lots: [1,1,2], unitShares: CFG.unitShares }; // 1000/1000/2000
+  const OPT   = { capital: 1_000_000, unitShares: CFG.unitShares, ratio: [1,1,2] };
+  const FIXED = { lots: [1,1,2], unitShares: CFG.unitShares }; // 固定 1000/1000/2000
 
   // chips
   $('#feeRateChip').textContent = (CFG.feeRate*100).toFixed(4)+'%';
   $('#taxRateChip').textContent = (CFG.taxRate*100).toFixed(3)+'%';
-  $('#minFeeChip').textContent = String(CFG.minFee);
-  $('#unitChip').textContent = String(CFG.unitShares);
-  $('#slipChip').textContent = '0';
-  $('#rfChip').textContent = (CFG.rf*100).toFixed(2)+'%';
+  $('#minFeeChip').textContent  = String(CFG.minFee);
+  $('#unitChip').textContent    = String(CFG.unitShares);
+  $('#slipChip').textContent    = '0';
+  $('#rfChip').textContent      = (CFG.rf*100).toFixed(2)+'%';
 
-  // ========= Supabase =========
+  // ===== Supabase =====
   const SUPABASE_URL = window.SUPABASE_URL || "https://byhbmmnacezzgkwfkozs.supabase.co";
   const SUPABASE_ANON_KEY = window.SUPABASE_ANON_KEY || "sb_publishable_xVe8fGbqQ0XGwi4DsmjPMg_Y2RBOD3t";
   const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { global:{ fetch:(u,o={})=>fetch(u,{...o,cache:'no-store'}) } });
@@ -50,14 +47,8 @@
     if (error) throw new Error(error.message);
     return (data||[]).map(it => ({ name: it.name, fullPath: p + it.name, updatedAt: it.updated_at ? Date.parse(it.updated_at) : 0, size: it.metadata?.size || 0 }));
   }
-  async function listCandidates(){
-    const prefix = url.searchParams.get('prefix') || '';
-    return listOnce(prefix);
-  }
-  const lastDateScore = name => {
-    const m = String(name).match(/\b(20\d{6})\b/g);
-    return m && m.length ? Math.max(...m.map(s=>+s||0)) : 0;
-  };
+  async function listCandidates(){ const prefix = url.searchParams.get('prefix') || ''; return listOnce(prefix); }
+  const lastDateScore = name => { const m = String(name).match(/\b(20\d{6})\b/g); return m && m.length ? Math.max(...m.map(s=>+s||0)) : 0; };
 
   // 多編碼下載
   async function fetchText(u){
@@ -78,7 +69,7 @@
     return best.txt || new TextDecoder('utf-8').decode(buf);
   }
 
-  // ========= CSV → canonical（只做多） =========
+  // ===== CSV → canonical（只做多） =====
   function toCanonFrom1031CSV(raw){
     const toHalf = s => s.replace(/[０-９]/g, d=>String.fromCharCode(d.charCodeAt(0)-0xFEE0)).replace(/，/g,',');
     let txt = toHalf(raw).replace(/\r\n?/g,'\n').replace(/[\x00-\x08\x0B-\x1F\x7F]/g,'').replace(/[\u200B-\u200D]/g,'');
@@ -104,10 +95,10 @@
     return { canon: out.join('\n'), ok: out.length };
   }
 
-  // ========= 回測 =========
+  // ===== 回測 =====
   const backtest = (rows)=> window.ETF_ENGINE.backtest(rows, CFG);
 
-  // ========= 週次圖（沿用最佳化結果） =========
+  // ===== 週次圖（沿用最佳化結果） =====
   let chWeekly = null;
   function weekStartDate(ms){
     const d=new Date(ms), dow=(d.getUTCDay()+6)%7;
@@ -145,7 +136,7 @@
     });
   }
 
-  // ========= 費用稅（整數進位 + 最低手續費） =========
+  // ===== 費用稅（整數進位 + 最低手續費） =====
   function feesInt(price, shares, isSell){
     const gross = price * shares;
     const fee = Math.max(CFG.minFee, Math.ceil(gross * CFG.feeRate));
@@ -153,11 +144,11 @@
     return { gross, fee, tax };
   }
 
-  // ========= 分段工具 =========
+  // ===== 分段工具 =====
   function splitSegments(execs){ const segs=[], cur=[]; for(const e of execs){ cur.push(e); if(e.side==='SELL'){ segs.push(cur.splice(0)); } } if (cur.length) segs.push(cur); return segs; }
   function buyCostLots(price, lots){ const shares = lots * CFG.unitShares; const f = feesInt(price, shares, false); return { cost: f.gross + f.fee, shares, f }; }
 
-  // ========= 最佳化（本金 100 萬；資金不足縮量；未平倉保留 BUY） =========
+  // ===== 最佳化（本金 100 萬；資金不足縮量；未平倉保留 BUY） =====
   function buildOptimizedExecs(execs){
     const segs = splitSegments(execs), out=[]; let cumPnlAll=0;
     for(const seg of segs){
@@ -213,7 +204,7 @@
     return out;
   }
 
-  // ========= 固定 1-1-2（1000/1000/2000 股）交易明細 =========
+  // ===== 固定 1-1-2（1000/1000/2000 股）交易明細 =====
   function buildFixed112Execs(execs){
     const segs = splitSegments(execs), out=[]; let cumPnlAll=0;
     for(const seg of segs){
@@ -225,7 +216,7 @@
       const planLots = FIXED.lots.slice(0, n); // 1,1,2 lots
       let sharesHeld=0, cumCost=0;
 
-      // BUYs：固定 lots，不考慮資金上限
+      // BUYs：固定 lots（不考慮資金上限）
       for(let i=0;i<n;i++){
         const b = buys[i];
         const lots = planLots[i];
@@ -262,7 +253,7 @@
     return out;
   }
 
-  // ========= 表格渲染（兩張表共用相同欄位） =========
+  // ===== 表格渲染（兩張表共用同欄位） =====
   function renderFullTable(execs, tableId){
     const thead = $(`#${tableId} thead`), tbody = $(`#${tableId} tbody`);
     if(!thead || !tbody) return;
@@ -302,26 +293,20 @@
     }
   }
 
-  // ========= 基準：本頁僅顯示名稱（不計 KPI） =========
+  // ===== 基準檔資訊（僅顯示名稱） =====
   async function readManifest(){ try{ const {data}=await sb.storage.from(CFG.bucket).download(CFG.manifestPath); if(!data) return null; return JSON.parse(await data.text()); }catch{ return null; } }
 
-  // ========= 主流程 =========
+  // ===== 主流程 =====
   async function boot(){
     try{
       set('從 Supabase 讀取清單…');
       const paramFile=url.searchParams.get('file');
       let latest=null, list=[];
-      if(paramFile){
-        latest={ name:paramFile.split('/').pop()||'1031.txt', fullPath:paramFile, from:'url' };
-      }else{
+      if(paramFile){ latest={ name:paramFile.split('/').pop()||'1031.txt', fullPath:paramFile, from:'url' }; }
+      else{
         list=(await listCandidates()).filter(f=>CFG.want.test(f.name)||CFG.want.test(f.fullPath));
-        // 以檔名中的 YYYYMMDD 打分；同分則用更新時間與檔案大小
-        list.sort((a,b)=>{
-          const sa=lastDateScore(a.name), sb=lastDateScore(b.name);
-          if(sa!==sb) return sb-sa;
-          if(a.updatedAt!==b.updatedAt) return b.updatedAt-a.updatedAt;
-          return (b.size||0)-(a.size||0);
-        });
+        list.sort((a,b)=>{ const sa=lastDateScore(a.name), sb=lastDateScore(b.name);
+          if(sa!==sb) return sb-sa; if(a.updatedAt!==b.updatedAt) return b.updatedAt-a.updatedAt; return (b.size||0)-(a.size||0); });
         latest=list[0];
       }
       if(!latest){ set('找不到檔名含「1031/00909」的 TXT（可用 ?prefix=1031 或 ?file= 指定）。', true); return; }
@@ -336,7 +321,7 @@
       const latestUrl = latest.from==='url'? latest.fullPath : pubUrl(latest.fullPath);
       const raw = await fetchText(latestUrl);
 
-      // 先嘗試 canonical；若 0 行，再嘗試 CSV 轉換
+      // 解析
       set('解析與回測…');
       let rows = window.ETF_ENGINE.parseCanon(raw);
       if(!rows.length){
@@ -352,15 +337,16 @@
       // 回測
       const bt = backtest(rows);
 
-      // 生成兩組 execs：固定 1-1-2（交易明細）與 最佳化（最佳化交易明細）
+      // 兩組 execs：固定 1-1-2（交易明細）與 最佳化（最佳化交易明細）
       const execsFixed = buildFixed112Execs(bt.execs);
       const execsOpt   = buildOptimizedExecs(bt.execs);
 
-      // 目前持有、週次圖（沿用最佳化）、兩張表渲染
+      // 週圖（用最佳化）、表格、目前持有
       renderWeeklyChartFromOpt(execsOpt);
-      renderFullTable(execsFixed, 'tradeTable'); // 交易明細：固定 1000/1000/2000
-      renderFullTable(execsOpt,   'optTable');   // 最佳化交易明細：本金 100 萬
-      // 目前持有從最佳化序列推導（顯示格式一致）
+      renderFullTable(execsFixed, 'tradeTable');
+      renderFullTable(execsOpt,   'optTable');
+
+      // 目前持有（以最佳化序列計算）
       (function renderLastOpenBuyFromExecs(optExecs){
         const netShares = optExecs.reduce((acc,e)=> acc + (e.side==='BUY'? e.shares : -e.shares), 0);
         const bar = $('#lastBuyBar'); if(!bar) return;
@@ -372,7 +358,7 @@
         bar.innerHTML = `目前持有：<br>${rows.join('<br>')}`; bar.style.display='';
       })(execsOpt);
 
-      // 本頁不計 KPI；基準按鈕禁用
+      // 基準按鈕禁用
       const btn=$('#btnSetBaseline'); if(btn) btn.disabled=true;
 
       set('完成。');
