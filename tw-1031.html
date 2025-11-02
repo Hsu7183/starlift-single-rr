@@ -80,6 +80,12 @@
       <div class="chartbox"><canvas id="chWeekly"></canvas></div>
     </div>
 
+    <!-- 交易明細（精簡版：日期/種類/成交價格/成交數量） -->
+    <div class="card">
+      <h3 style="margin:6px 0">交易明細（1-1-2：1000 / 1000 / 2000）</h3>
+      <div class="scroll-x"><table id="tradeTable"><thead></thead><tbody></tbody></table></div>
+    </div>
+
     <!-- 最佳化交易明細（只保留這個、KPI全移除） -->
     <div class="card">
       <h3 style="margin:6px 0">最佳化交易明細</h3>
@@ -89,6 +95,6 @@
 
   <!-- 主程式（先載 engine，再載本頁） -->
   <script src="etf-engine.js?v=fullfee-v1"></script>
-  <script src="tw-1031.js?v=only-weekly-and-opt-v1"></script>
+  <script src="tw-1031.js?v=only-weekly-and-opt-v2-trade"></script>
 </body>
 </html>
