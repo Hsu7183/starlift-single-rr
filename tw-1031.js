@@ -1,5 +1,5 @@
-// tw-1031.js — 1031策略頁（遞迴列檔 + 強韌 CSV 轉換）
-// 交易明細＝固定 1-1-2（1000/1000/2000）；最佳化＝本金100萬、資金不足縮量 1-1-2
+// tw-1031.js — 1031 策略頁（嚴格路徑過濾 + 強韌 CSV 轉換 + 遞迴列檔）
+// 交易明細＝固定 1-1-2（1000/1000/2000）; 最佳化＝本金100萬、資金不足縮量 1-1-2
 (function(){
   const $ = s => document.querySelector(s);
   const status = $('#autostatus');
@@ -10,10 +10,13 @@
 
   // ===== 設定 =====
   const url = new URL(location.href);
+  // 自訂 need（最多 3 個，用 + 分隔），預設同時需要 1031 與 00909
+  const needTokens = (url.searchParams.get('need') || '1031+00909')
+    .split('+').map(s=>s.trim()).filter(Boolean);
+
   const CFG = {
     bucket: 'reports',
-    // 你的檔名在「1031/00909/20231212-20251023.txt」→ 同時匹配 1031 與 00909
-    want: /(1031|00909)/i,
+    needTokens,                 // 路徑必須同時包含的詞
     feeRate: +(url.searchParams.get('fee') || 0.001425),
     taxRate: +(url.searchParams.get('tax') || 0.001),
     minFee: +(url.searchParams.get('minfee') || 20),
@@ -81,41 +84,25 @@
   function toCanonFrom1031CSV(raw){
     const toHalf = s =>
       s.replace(/[０-９]/g, d=>String.fromCharCode(d.charCodeAt(0)-0xFEE0))
-       .replace(/，/g,',')
-       .replace(/\u3000/g,' ')
-       .replace(/\t/g,',');
-    let txt = toHalf(raw)
-      .replace(/\r\n?/g,'\n')
-      .replace(/[\x00-\x08\x0B-\x1F\x7F]/g,'')
-      .replace(/[\u200B-\u200D\uFEFF]/g,'');
-
+       .replace(/，/g,',').replace(/\u3000/g,' ').replace(/\t/g,',');
+    let txt = toHalf(raw).replace(/\r\n?/g,'\n')
+      .replace(/[\x00-\x08\x0B-\x1F\x7F]/g,'').replace(/[\u200B-\u200D\uFEFF]/g,'');
     const headerOK = /(^|\n)\s*日期\s*,\s*時間\s*,\s*價格\s*,\s*動作/i.test(txt);
     const re = /^\s*(\d{8})\s*,\s*(\d{5,6})\s*,\s*([+-]?\d+(?:\.\d+)?)\s*,\s*([^,\n\r]+?)(?:\s*,|$)/;
-
     const out=[];
     for(const line0 of txt.split('\n')){
       if(!line0) continue;
       const line=line0.trim();
       if(!line) continue;
       if(headerOK && /^日期\s*,\s*時間\s*,\s*價格\s*,\s*動作/i.test(line)) continue;
-
       const m = re.exec(line);
       if(!m) continue;
-
-      const d8=m[1];
-      let t=m[2];
-      if(/^\d{5}$/.test(t)) t='0'+t;      // 90500 -> 090500
-      if(!/^\d{6}$/.test(t)) continue;
-
-      const price=Number(m[3]);
-      if(!Number.isFinite(price)) continue;
-
+      const d8=m[1]; let t=m[2]; if(/^\d{5}$/.test(t)) t='0'+t; if(!/^\d{6}$/.test(t)) continue;
+      const price=Number(m[3]); if(!Number.isFinite(price)) continue;
       const actRaw=String(m[4]).trim();
-      let mapped='';
-      if(actRaw.includes('賣出')) mapped='平賣';
+      let mapped=''; if(actRaw.includes('賣出')) mapped='平賣';
       else if(/買進|加碼攤平|再加碼攤平/.test(actRaw)) mapped='新買';
       else continue;
-
       out.push(`${d8}${t}.000000 ${price.toFixed(6)} ${mapped}`);
     }
     return { canon: out.join('\n'), ok: out.length };
@@ -123,7 +110,10 @@
 
   // ===== 回測 =====
   const backtest = (rows)=> window.ETF_ENGINE.backtest(rows, {
-    feeRate: CFG.feeRate, taxRate: CFG.taxRate, minFee: CFG.minFee, unitShares: CFG.unitShares
+    feeRate: +(url.searchParams.get('fee') || 0.001425),
+    taxRate: +(url.searchParams.get('tax') || 0.001),
+    minFee:  +(url.searchParams.get('minfee') || 20),
+    unitShares: +(url.searchParams.get('unit') || 1000),
   });
 
   // ===== 週次圖（沿用最佳化結果） =====
@@ -171,7 +161,7 @@
   function splitSegments(execs){ const segs=[], cur=[]; for(const e of execs){ cur.push(e); if(e.side==='SELL'){ segs.push(cur.splice(0)); } } if (cur.length) segs.push(cur); return segs; }
   function buyCostLots(price, lots){ const shares = lots * CFG.unitShares; const f = feesInt(price, shares, false); return { cost: f.gross + f.fee, shares, f }; }
 
-  // ===== 最佳化（本金 100 萬；資金不足縮量；未平倉保留 BUY） =====
+  // ===== 最佳化（本金 100 萬；資金不足縮量） =====
   function buildOptimizedExecs(execs){
     const segs = splitSegments(execs), out=[]; let cumPnlAll=0;
     for(const seg of segs){
@@ -189,7 +179,6 @@
 
       let remaining=OPT.capital, sharesHeld=0, cumCost=0;
 
-      // BUYs
       for(let i=0;i<n;i++){
         const b=buys[i];
         let lots=plan[i];
@@ -206,7 +195,6 @@
           cumCost, costAvgDisp, pnlFull:null, retPctUnit:null, cumPnlFull:cumPnlAll });
       }
 
-      // SELL（一次賣出全部）
       if (sell && sharesHeld>0){
         const st = feesInt(sell.price, sharesHeld, true);
         const pnlFull = st.gross - (st.fee + st.tax) - cumCost;  cumPnlAll += pnlFull;
@@ -226,7 +214,7 @@
     return out;
   }
 
-  // ===== 固定 1-1-2（1000/1000/2000）交易明細 =====
+  // ===== 固定 1-1-2（1000/1000/2000） =====
   function buildFixed112Execs(execs){
     const segs = splitSegments(execs), out=[]; let cumPnlAll=0;
     for(const seg of segs){
@@ -235,10 +223,9 @@
       if(!buys.length) continue;
 
       const n = Math.min(3, buys.length);
-      const planLots = FIXED.lots.slice(0, n); // 1,1,2 lots
+      const planLots = FIXED.lots.slice(0, n);
       let sharesHeld=0, cumCost=0;
 
-      // BUYs：固定 lots（不考慮資金上限）
       for(let i=0;i<n;i++){
         const b = buys[i];
         const lots = planLots[i];
@@ -253,7 +240,6 @@
           cumCost, costAvgDisp, pnlFull:null, retPctUnit:null, cumPnlFull:cumPnlAll });
       }
 
-      // SELL：一次賣出全部
       if(sell && sharesHeld>0){
         const st = feesInt(sell.price, sharesHeld, true);
         const pnlFull = st.gross - (st.fee + st.tax) - cumCost;  cumPnlAll += pnlFull;
@@ -326,7 +312,14 @@
       }else{
         const prefix = url.searchParams.get('prefix') || '';     // 可用 ?prefix=1031
         list = await listAll(prefix);                            // 遞迴列舉
-        list = list.filter(f => /\.txt$/i.test(f.name) && (CFG.want.test(f.name) || CFG.want.test(f.fullPath)));
+
+        // 嚴格過濾：路徑必須同時包含 needTokens（預設 1031 與 00909）
+        list = list.filter(f => {
+          const path = (f.fullPath || f.name || '').toLowerCase();
+          return /\.txt$/i.test(f.name) && CFG.needTokens.every(tok => path.includes(tok.toLowerCase()));
+        });
+
+        // 依檔名中的 YYYYMMDD 打分；同分以 updatedAt / size 排序
         list.sort((a,b)=>{
           const sa=lastDateScore(a.name), sb=lastDateScore(b.name);
           if(sa!==sb) return sb-sa;
@@ -335,7 +328,7 @@
         });
         latest = list[0];
       }
-      if(!latest){ set('找不到檔名含「1031/00909」的 TXT（可用 ?prefix=1031 或 ?file= 指定）。', true); return; }
+      if(!latest){ set(`找不到符合 need=${CFG.needTokens.join('+')} 的 TXT（可用 ?prefix= 或 ?file= 指定）。`, true); return; }
       $('#latestName').textContent=latest.fullPath || latest.name;
 
       const manifest=await readManifest();
@@ -351,7 +344,7 @@
       let rows = window.ETF_ENGINE.parseCanon(raw);
       if(!rows.length){
         const {canon, ok} = toCanonFrom1031CSV(raw);
-        if(!ok){ set('TXT 內容無可解析的交易行（強化 CSV 轉換仍無資料）', true); return; }
+        if(!ok){ set('TXT 內容無可解析的交易行（CSV 轉換後仍無資料）', true); return; }
         rows = window.ETF_ENGINE.parseCanon(canon);
       }
       if(!rows.length){ set('TXT 內無可解析的交易行。', true); return; }
@@ -363,13 +356,13 @@
       const bt = backtest(rows);
 
       // 兩組 execs
-      const execsFixed = buildFixed112Execs(bt.execs);
-      const execsOpt   = buildOptimizedExecs(bt.execs);
+      const execsFixed = buildFixed112Execs(bt.execs);  // 交易明細：固定 1000/1000/2000
+      const execsOpt   = buildOptimizedExecs(bt.execs); // 最佳化：本金 100 萬
 
       // 圖表 + 表格 + 目前持有
       renderWeeklyChartFromOpt(execsOpt);
-      renderFullTable(execsFixed, 'tradeTable');  // 固定 1000/1000/2000
-      renderFullTable(execsOpt,   'optTable');    // 本金 100 萬最佳化
+      renderFullTable(execsFixed, 'tradeTable');
+      renderFullTable(execsOpt,   'optTable');
 
       (function renderLastOpenBuyFromExecs(optExecs){
         const netShares = optExecs.reduce((acc,e)=> acc + (e.side==='BUY'? e.shares : -e.shares), 0);
