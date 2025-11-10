@@ -5,6 +5,18 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>內部研究環境｜策略分析系統（僅供研究）</title>
   <meta name="robots" content="noindex,nofollow" />
+
+  <!-- ✅ 內容安全政策（CSP）＋ 反嵌入 -->
+  <meta http-equiv="Content-Security-Policy"
+    content="default-src 'self';
+             script-src 'self' https://unpkg.com https://byhbmmnacezzgkwfkozs.supabase.co 'unsafe-inline';
+             style-src 'self' 'unsafe-inline';
+             img-src 'self' data: https://byhbmmnacezzgkwfkozs.supabase.co;
+             connect-src 'self' https://byhbmmnacezzgkwfkozs.supabase.co https://unpkg.com;
+             frame-ancestors 'none';
+             base-uri 'none';
+             form-action 'self'">
+
   <style>
     :root { --card-r:12px; }
     body{ font-family: Arial,"微軟正黑體",sans-serif; margin:20px; background:#f8f9fa; color:#333; -webkit-font-smoothing:antialiased }
@@ -16,7 +28,7 @@
     .section-title-blue{ max-width:1100px; margin:10px auto 12px; font-size:20px; font-weight:800; color:#0d6efd; letter-spacing:.5px }
     .section-title-black{ max-width:1100px; margin:10px auto 12px; font-size:20px; font-weight:800; color:#111; letter-spacing:.5px }
 
-    /* 👇 改為四欄，以容納新增的「研發中」類別 */
+    /* 👇 四欄佈局 */
     .strategy-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:20px; max-width:1100px; margin:0 auto 28px }
     .strategy-col{ display:flex; flex-direction:column; gap:12px }
     .subcat{ font-weight:700; font-size:16px; color:#c62828; margin:0 0 4px 0; text-align:center }
@@ -68,7 +80,7 @@
 
   <!-- (A) 免責＋密碼門檻 -->
   <div id="gate" class="gate">
-    <!-- ……（你的免責原文保留，略）…… -->
+    <!-- ……免責條款略…… -->
     <div class="row" style="margin-top:12px;max-width:420px">
       <input id="pwd" type="password" placeholder="密碼 / Password" autocomplete="current-password" />
       <button class="btn" id="btnLogin">進入 / Enter</button>
@@ -144,21 +156,31 @@
             <p class="period">期間：<span id="period-00909">—</span></p>
           </div>
         </a>
-        <!-- 依指示：這一欄不再放「台股-1031版本」 -->
       </div>
 
-      <!-- 3) 盤整型（清空） -->
+      <!-- 3) 盤整型（空） -->
       <div class="strategy-col">
         <p class="subcat">盤整型</p>
-        <!-- （空白保留，暫無分頁卡片） -->
       </div>
 
-      <!-- 4) 研發中（黑字；新增 1031 分頁） -->
+      <!-- 4) 研發中（1031 也顯示近期報酬） -->
       <div class="strategy-col">
         <p class="subcat" style="color:#111">研發中</p>
         <a class="card" href="tw-1031.html">
           <p class="card-title red">台股-1031版本</p>
-          <p class="card-desc">僅顯示每週獲利圖與交易明細（不含 KPI）。</p>
+          <div class="lines">
+            <p class="line"><span class="label">近1週報酬率</span><span id="wk1-range-1031" class="range">—</span><span id="wk1-1031" class="val neu">—</span></p>
+            <p class="line"><span class="label">近2週報酬率</span><span id="wk2-range-1031" class="range">—</span><span id="wk2-1031" class="val neu">—</span></p>
+            <p class="line"><span class="label">近1月報酬率</span><span id="m1-range-1031"  class="range">—</span><span id="m1-1031"  class="val neu">—</span></p>
+            <p class="line"><span class="label">近2月報酬率</span><span id="m2-range-1031"  class="range">—</span><span id="m2-1031"  class="val neu">—</span></p>
+            <p class="line"><span class="label">近3月報酬率</span><span id="m3-range-1031"  class="range">—</span><span id="m3-1031"  class="val neu">—</span></p>
+            <p class="line"><span class="label">近6月報酬率</span><span id="m6-range-1031"  class="range">—</span><span id="m6-1031"  class="val neu">—</span></p>
+            <p class="line"><span class="label">近1年報酬率</span><span id="y1-range-1031"  class="range">—</span><span id="y1-1031"  class="val neu">—</span></p>
+            <p class="line"><span class="label">近2年報酬率</span><span id="y2-range-1031"  class="range">—</span><span id="y2-1031"  class="val neu">—</span></p>
+            <p class="line"><span class="label">近3年報酬率</span><span id="y3-range-1031"  class="range">—</span><span id="y3-1031"  class="val neu">—</span></p>
+            <p class="line"><span class="label">近6年報酬率</span><span id="y6-range-1031"  class="range">—</span><span id="y6-1031"  class="val neu">—</span></p>
+            <p class="period">期間：<span id="period-1031">—</span></p>
+          </div>
         </a>
       </div>
     </div>
@@ -185,15 +207,68 @@
     </div>
   </div>
 
-  <!-- ===== JS：密碼門檻 + 動態載入 + 報酬填值 ===== -->
+  <!-- ===== JS：密碼門檻 + 動態載入 + 報酬填值 + 安控補強 + 1031 CSV 解析 ===== -->
   <script>
   (function(){
     'use strict';
+
+    // === 密碼雜湊（沿用） ===
     const PASS_HASH = "0f2b9305e317408510dc9878381e953630ed9fa3d2aadf95f1b8eb47941b18b9";
+
+    // === Key 常數 ===
     const KEY_OK='__auth_ok__';
+    const FAIL_KEY='__auth_fail__';
+    const LOCK_UNTIL_KEY='__auth_lock_until__';
+    const IDLE_MS = 30*60*1000; // 30 分鐘自動登出
+
     const $ = s => document.querySelector(s);
     const shield = $('#shield'), gate = $('#gate'), app = $('#app');
     const pwd = $('#pwd'), btnLogin = $('#btnLogin'), btnClear = $('#btnClear'), err = $('#err');
+
+    // 反嵌入
+    if (window.top !== window.self){
+      try{ window.top.location = window.self.location.href; }catch(_){}
+    }
+
+    // DevTools／可視狀態偵測
+    let _devWarned=false;
+    function devtoolsSuspect(){ if(_devWarned) return; shield && (shield.style.display='flex'); _devWarned=true; }
+    setInterval(()=>{
+      if (Math.abs(window.outerWidth-window.innerWidth)>160 || Math.abs(window.outerHeight-window.innerHeight)>160) devtoolsSuspect();
+    }, 800);
+    (function tick(t0){ const now=performance.now(); if(now-t0>200) devtoolsSuspect(); requestAnimationFrame(()=>tick(performance.now())); })(performance.now());
+    document.addEventListener('visibilitychange', ()=>{ if(document.hidden) shield && (shield.style.display='flex'); });
+
+    // “擋新手”嚇阻
+    window.addEventListener('contextmenu', e=>{ e.preventDefault(); showShield(); }, {capture:true});
+    window.addEventListener('copy', e=>e.preventDefault(), {capture:true});
+    window.addEventListener('cut',  e=>e.preventDefault(), {capture:true});
+    window.addEventListener('selectstart', e=>e.preventDefault(), {capture:true});
+    window.addEventListener('keydown', (e)=>{
+      const K=(e.key||'').toUpperCase();
+      if(e.key==='F12'){ e.preventDefault(); showShield(); }
+      if(e.ctrlKey && ['U','S','P'].includes(K)){ e.preventDefault(); showShield(); }
+      if(e.ctrlKey && e.shiftKey && ['I','J','C','K'].includes(K)){ e.preventDefault(); showShield(); }
+    }, {capture:true});
+    function showShield(){ shield.style.display='flex'; }
+
+    // 登入/鎖定控制
+    function isLocked(){ const until=+(sessionStorage.getItem(LOCK_UNTIL_KEY)||0); return Date.now()<until; }
+    function remainingLockSec(){ const until=+(sessionStorage.getItem(LOCK_UNTIL_KEY)||0); return Math.max(0, Math.ceil((until-Date.now())/1000)); }
+    function setLock(seconds){ sessionStorage.setItem(LOCK_UNTIL_KEY, String(Date.now()+seconds*1000)); }
+    function addFailAndMaybeLock(){
+      const n=(+(sessionStorage.getItem(FAIL_KEY)||0))+1;
+      sessionStorage.setItem(FAIL_KEY,String(n));
+      if(n>=5){ const minutes=Math.min(60, Math.pow(2, n-5)); setLock(minutes*60); }
+    }
+    function resetFails(){ sessionStorage.removeItem(FAIL_KEY); sessionStorage.removeItem(LOCK_UNTIL_KEY); }
+    let idleTimer=null;
+    function startIdleLogout(){
+      const kick=()=>{ sessionStorage.removeItem(KEY_OK); location.reload(); };
+      const bump=()=>{ clearTimeout(idleTimer); idleTimer=setTimeout(kick, IDLE_MS); };
+      ['click','keydown','mousemove','touchstart','scroll','visibilitychange'].forEach(ev=>document.addEventListener(ev, bump, {passive:true}));
+      bump();
+    }
 
     async function sha256Hex(t){
       const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(t));
@@ -201,23 +276,33 @@
     }
     async function enter(){
       err.style.display='none';
+      if(isLocked()){ err.textContent=`嘗試次數過多，請 ${remainingLockSec()} 秒後再試。`; err.style.display=''; return; }
+
       const v=(pwd.value||'').trim();
       if(!v){ err.textContent='請輸入密碼 / Please enter password.'; err.style.display=''; return; }
+
+      const before=Date.now();
       const h=await sha256Hex(v);
       if(h===PASS_HASH){
         sessionStorage.setItem(KEY_OK,'1');
+        resetFails();
         gate.classList.add('hidden'); app.classList.remove('hidden');
+        startIdleLogout();
         loadDepsAndRun();
       }else{
+        // 隨機延遲（1~1.6秒）降低暴力嘗試效率
+        const delay = 1000 + Math.random()*600 - (Date.now()-before);
+        if(delay>0) await new Promise(r=>setTimeout(r, delay));
+        addFailAndMaybeLock();
         err.textContent='密碼錯誤，請再試一次。/ Incorrect password.'; err.style.display='';
       }
     }
     btnLogin.addEventListener('click', enter);
-    btnClear.addEventListener('click', ()=>{ pwd.value=''; err.style.display='none'; pwd.focus(); });
+    btnClear.addEventListener('click', ()=>{ pwd.value=''; err.style.display='none'; resetFails(); sessionStorage.removeItem(KEY_OK); pwd.focus(); });
     pwd.addEventListener('keydown', e=>{ if(e.key==='Enter') enter(); });
 
     (function boot(){
-      if(sessionStorage.getItem(KEY_OK)==='1'){ gate.classList.add('hidden'); app.classList.remove('hidden'); loadDepsAndRun(); }
+      if(sessionStorage.getItem(KEY_OK)==='1'){ gate.classList.add('hidden'); app.classList.remove('hidden'); startIdleLogout(); loadDepsAndRun(); }
     })();
 
     function loadScript(src){ return new Promise((res,rej)=>{ const s=document.createElement('script'); s.src=src; s.onload=res; s.onerror=()=>rej(new Error('load fail: '+src)); document.body.appendChild(s); }); }
@@ -266,28 +351,90 @@
           catch{ return null; }
         }
 
-        const CANON_RE=/^(\d{14})\.0{6}\s+(\d+\.\d{6})\s+(新買|平賣|新賣|平買|強制平倉|強平)\s*$/;
-        const EXTRACT_RE=/.*?(\d{14})(?:\.0{1,6})?\s+(\d+(?:\.\d{1,6})?)\s*(新買|平賣|新賣|平買|強制平倉|強平)\s*$/;
+        // ===== 解析器升級：支援 Canon + CSV =====
+        const CANON_RE=/^(\d{14})\.0{6}\s+(\d+\.\d{6})\s+(新買|平賣|新賣|平買|強制平倉)\s*$/;
+
+        // 允許更多動作別名：買進/加碼/再加碼/加碼攤平 → 新買；賣出 → 平賣；強平 → 強制平倉
+        const EXTRACT_RE=/.*?(\d{14})(?:\.0{1,6})?\s+(\d+(?:\.\d{1,6})?)\s*(新買|平賣|新賣|平買|強制平倉|強平|買進|賣出|加碼|再加碼|加碼攤平)\s*$/;
+
+        function mapAction(act){
+          if(act==='強平') return '強制平倉';
+          if(/^(買進|加碼|再加碼|加碼攤平)$/.test(act)) return '新買';
+          if(act==='賣出') return '平賣';
+          return act;
+        }
 
         function normalizeText(raw){
-          let s=raw.replace(/\ufeff/gi,'').replace(/\u200b|\u200c|\u200d/gi,''); s=s.replace(/[\x00-\x09\x0B-\x1F\x7F]/g,'').replace(/\r\n?/g,'\n').replace(/\u3000/g,' ');
+          let s=raw.replace(/\ufeff/gi,'').replace(/\u200b|\u200c|\u200d/gi,'');
+          s=s.replace(/[\x00-\x09\x0B-\x1F\x7F]/g,'').replace(/\r\n?/g,'\n').replace(/\u3000/g,' ');
           return s.split('\n').map(l=>l.replace(/\s+/g,' ').trim()).filter(Boolean).join('\n');
         }
+
+        // 將 5/6 位時間補零為 6 位
+        function padTime6(t){
+          t = String(t||'').trim();
+          return t.padStart(6,'0').slice(0,6);
+        }
+
+        // 嘗試：先抓 Canon 風格；不行再抓 CSV（日期,時間,價格,動作,說明）
         function canonicalize(txt){
-          const out=[], lines=txt.split('\n'); let ok=0;
-          for(const l of lines){ const m=l.match(EXTRACT_RE); if(m){ const ts=m[1], px=Number(m[2]); const p6=Number.isFinite(px)?px.toFixed(6):m[2]; let act=m[3]; if(act==='強平') act='強制平倉'; out.push(`${ts}.000000 ${p6} ${act}`); ok++; } }
+          const out=[]; let ok=0;
+          const lines = txt.split('\n');
+
+          for(const l of lines){
+            // A) 直接有 14 碼時間戳（舊標準行或混雜行）
+            let m=l.match(EXTRACT_RE);
+            if(m){
+              const ts=m[1], px=Number(m[2]);
+              const p6 = Number.isFinite(px)?px.toFixed(6):m[2];
+              const act = mapAction(m[3]);
+              out.push(`${ts}.000000 ${p6} ${act}`); ok++; continue;
+            }
+            // B) CSV：日期,時間,價格,動作,說明...
+            if(l.includes(',')){
+              const parts=l.split(',').map(x=>x.trim());
+              if(parts.length>=4){
+                const d8=parts[0];               // YYYYMMDD
+                const t = padTime6(parts[1]);    // HHMMSS (補0)
+                const px = Number(parts[2]);     // 價格
+                const act0 = parts[3];           // 動作
+                if(/^\d{8}$/.test(d8) && /^\d{6}$/.test(t) && Number.isFinite(px)){
+                  const act = mapAction(act0);
+                  out.push(`${d8}${t}.000000 ${px.toFixed(6)} ${act}`); ok++; continue;
+                }
+              }
+            }
+          }
           return { canon: out.join('\n'), ok };
         }
+
         async function fetchSmart(url){
           const res=await fetch(url,{cache:'no-store'}); if(!res.ok) throw new Error(`${res.status} ${res.statusText}`);
           const buf=await res.arrayBuffer();
-          for(const enc of ['utf-8','big5','utf-16le','utf-16be']){ try{ const td=new TextDecoder(enc); const norm=normalizeText(td.decode(buf)); const {canon,ok}=canonicalize(norm); if(ok>0) return {canon,ok}; }catch{} }
-          const td=new TextDecoder('utf-8'); const norm=normalizeText(td.decode(buf)); const {canon,ok}=canonicalize(norm); return {canon,ok};
+          for(const enc of ['utf-8','big5','utf-16le','utf-16be']){
+            try{
+              const td=new TextDecoder(enc);
+              const norm=normalizeText(td.decode(buf));
+              const {canon,ok}=canonicalize(norm);
+              if(ok>0) return {canon,ok};
+            }catch{}
+          }
+          const td=new TextDecoder('utf-8');
+          const norm=normalizeText(td.decode(buf));
+          const {canon,ok}=canonicalize(norm);
+          return {canon,ok};
         }
+
         function parseCanon(text){
-          const rows=[]; if(!text) return rows; for(const line of text.split('\n')){ const m=line.match(CANON_RE); if(m) rows.push({ts:m[1], line}); }
-        rows.sort((a,b)=>a.ts.localeCompare(b.ts)); return rows;
+          const rows=[]; if(!text) return rows;
+          for(const line of text.split('\n')){
+            const m=line.match(CANON_RE);
+            if(m) rows.push({ts:m[1], line});
+          }
+          rows.sort((a,b)=>a.ts.localeCompare(b.ts));
+          return rows;
         }
+
         function mergeByBaseline(baseText, latestText){
           const A=parseCanon(baseText), B=parseCanon(latestText);
           const baseMin=A.length?A[0].ts.slice(0,8):(B.length?B[0].ts.slice(0,8):'');
@@ -297,29 +444,44 @@
           const endDay=mergedLines.length?mergedLines[mergedLines.length-1].match(CANON_RE)[1].slice(0,8):baseMin;
           return { combined:mergedLines.join('\n'), start8:baseMin, end8:endDay };
         }
+
         function dailySeriesFromMerged(mergedTxt){
           const parsed=window.SHARED.parseTXT(mergedTxt);
           const report=window.SHARED.buildReport(parsed.rows);
-          const m=new Map(); for(const t of report.trades){ const d=String(t.tsOut).slice(0,8); m.set(d,(m.get(d)||0)+t.gainSlip); }
-          const days=[...m.keys()].sort(); const vals=days.map(d=>m.get(d)); return {days, vals};
+          const m=new Map();
+          for(const t of report.trades){
+            const d=String(t.tsOut).slice(0,8);
+            m.set(d,(m.get(d)||0)+t.gainSlip);
+          }
+          const days=[...m.keys()].sort();
+          const vals=days.map(d=>m.get(d));
+          return {days, vals};
         }
+
         const d8=s=> new Date(`${s.slice(0,4)}-${s.slice(4,6)}-${s.slice(6,8)}T00:00:00`);
         const fmtD8=s=> `${s.slice(0,4)}/${s.slice(4,6)}/${s.slice(6,8)}`;
         function simpleReturnWithRange(days, vals, winDays){
-          if(!days.length) return {ret:null, range:'---'}; const end=days[days.length-1];
-          const thr=new Date(d8(end).getTime()-(winDays-1)*86400000); let i=0; while(i<days.length && d8(days[i])<thr) i++;
-          if(i>=days.length) return {ret:null, range:'---'}; const startDay=days[i];
+          if(!days.length) return {ret:null, range:'---'};
+          const end=days[days.length-1];
+          const thr=new Date(d8(end).getTime()-(winDays-1)*86400000);
+          let i=0; while(i<days.length && d8(days[i])<thr) i++;
+          if(i>=days.length) return {ret:null, range:'---'};
+          const startDay=days[i];
           const pref=[0]; for(const v of vals) pref.push(pref[pref.length-1]+v);
-          const sum=pref[vals.length]-pref[i]; return { ret:sum/1_000_000, range:`${fmtD8(startDay)} - ${fmtD8(end)}` };
+          const sum=pref[vals.length]-pref[i];
+          return { ret:sum/1_000_000, range:`${fmtD8(startDay)} - ${fmtD8(end)}` };
         }
         function simpleReturnYearWindowWithRange(days, vals, winDays){
           if(!days.length) return {ret:null, range:'---'};
           const first=days[0], last=days[days.length-1];
           const cover=Math.max(1, Math.round((d8(last)-d8(first))/86400000)+1);
           if(cover < winDays-60) return {ret:null, range:'---'};
-          const end=last; const thr=new Date(d8(end).getTime()-(winDays-1)*86400000); let i=0; while(i<days.length && d8(days[i])<thr) i++; if(i>=days.length) i=0;
-          const startDay=days[i]; const pref=[0]; for(const v of vals) pref.push(pref[pref.length-1]+v);
-          const sum=pref[vals.length]-pref[i]; return { ret:sum/1_000_000, range:`${fmtD8(startDay)} - ${fmtD8(end)}` };
+          const end=last; const thr=new Date(d8(end).getTime()-(winDays-1)*86400000);
+          let i=0; while(i<days.length && d8(days[i])<thr) i++; if(i>=days.length) i=0;
+          const startDay=days[i];
+          const pref=[0]; for(const v of vals) pref.push(pref[pref.length-1]+v);
+          const sum=pref[vals.length]-pref[i];
+          return { ret:sum/1_000_000, range:`${fmtD8(startDay)} - ${fmtD8(end)}` };
         }
         const setVal=(id,v)=>{ const el=document.getElementById(id); if(!el) return; el.classList.remove('pos','neg','neu'); if(v==null){ el.textContent='---'; el.classList.add('neu'); return; } el.textContent=(v*100).toFixed(2)+'%'; el.classList.add(v>0?'pos':(v<0?'neg':'neu')); };
         const setText=(id,text)=>{ const el=document.getElementById(id); if(el) el.textContent=text||'---'; };
@@ -334,8 +496,14 @@
             const latestText=(await fetchSmart(pubUrl(latest.fullPath))).canon;
             const manifest=await readManifest(key);
             let merged=latestText, start8='', end8='';
-            if(manifest?.baseline_path){ const baseText=(await fetchSmart(pubUrl(manifest.baseline_path))).canon; const m=mergeByBaseline(baseText, latestText); merged=m.combined; start8=m.start8; end8=m.end8; }
-            else{ const rows=parseCanon(latestText); start8=rows.length?rows[0].ts.slice(0,8):''; end8=rows.length?rows[rows.length-1].ts.slice(0,8):''; }
+            if(manifest?.baseline_path){
+              const baseText=(await fetchSmart(pubUrl(manifest.baseline_path))).canon;
+              const m=mergeByBaseline(baseText, latestText);
+              merged=m.combined; start8=m.start8; end8=m.end8;
+            }else{
+              const rows=parseCanon(latestText);
+              start8=rows.length?rows[0].ts.slice(0,8):''; end8=rows.length?rows[rows.length-1].ts.slice(0,8):'';
+            }
             const {days, vals}=dailySeriesFromMerged(merged);
             const W1=simpleReturnWithRange(days, vals, 7),  W2=simpleReturnWithRange(days, vals, 14);
             const M1=simpleReturnWithRange(days, vals, 30), M2=simpleReturnWithRange(days, vals, 60);
@@ -352,26 +520,13 @@
             set('y3',Y3.ret);  setR('y3',Y3.range);
             set('y6',Y6.ret);  setR('y6',Y6.range);
             setPeriod(`${start8||'—'} - ${end8||'—'}`);
-          }catch(e){ ['wk1','wk2','m1','m2','m3','m6','y1','y2','y3','y6'].forEach(x=>{ set(x,null); setR(x,'---'); }); setPeriod('—'); }
+          }catch(e){
+            ['wk1','wk2','m1','m2','m3','m6','y1','y2','y3','y6'].forEach(x=>{ set(x,null); setR(x,'---'); }); setPeriod('—');
+          }
         }
         await Promise.all([fillCard("0807"), fillCard("1001"), fillCard("00909"), fillCard("1031")]);
       })();
     }
-
-    // “擋新手”嚇阻
-    window.addEventListener('contextmenu', e=>{ e.preventDefault(); showShield(); }, {capture:true});
-    window.addEventListener('copy', e=>e.preventDefault(), {capture:true});
-    window.addEventListener('cut',  e=>e.preventDefault(), {capture:true});
-    window.addEventListener('selectstart', e=>e.preventDefault(), {capture:true});
-    window.addEventListener('keydown', (e)=>{
-      const K=(e.key||'').toUpperCase();
-      if(e.key==='F12'){ e.preventDefault(); showShield(); }
-      if(e.ctrlKey && ['U','S','P'].includes(K)){ e.preventDefault(); showShield(); }
-      if(e.ctrlKey && e.shiftKey && ['I','J','C','K'].includes(K)){ e.preventDefault(); showShield(); }
-    }, {capture:true});
-    function checkDev(){ if(window.outerWidth-window.innerWidth>160 || window.outerHeight-window.innerHeight>160) showShield(); }
-    setInterval(checkDev, 800);
-    function showShield(){ shield.style.display='flex'; }
   })();
   </script>
 </body>
