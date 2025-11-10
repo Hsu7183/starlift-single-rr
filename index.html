@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>內部研究環境｜策略分析系統（僅供研究）</title>
   <meta name="robots" content="noindex,nofollow" />
+  <!-- CSP + 反嵌入 -->
   <meta http-equiv="Content-Security-Policy"
     content="default-src 'self';
              script-src 'self' https://unpkg.com https://byhbmmnacezzgkwfkozs.supabase.co 'unsafe-inline';
@@ -194,6 +195,11 @@
   (function(){
     'use strict';
 
+    // ✅ 與 upload.html 一樣的 ANON KEY
+    const SUPABASE_URL      = "https://byhbmmnacezzgkwfkozs.supabase.co";
+    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ5aGJtbW5hY2V6emdrd2Zrb3pzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg1OTE0NzksImV4cCI6MjA3NDE2NzQ3OX0.VCSye3-fKrQphejdJSWAM6iRzv_7gkl8MLe7NeVszR0";
+    const BUCKET = "reports";
+
     const PASS_HASH = "0f2b9305e317408510dc9878381e953630ed9fa3d2aadf95f1b8eb47941b18b9";
     const KEY_OK='__auth_ok__', FAIL_KEY='__auth_fail__', LOCK_UNTIL_KEY='__auth_lock_until__';
     const IDLE_MS = 30*60*1000;
@@ -258,9 +264,6 @@
       await loadScript('shared.js?v=txfee45tax2');
 
       (async function(){
-        const SUPABASE_URL = "https://byhbmmnacezzgkwfkozs.supabase.co";
-        const SUPABASE_ANON_KEY = "sb_publishable_xVe8fGbqQ0XGwi4DsmjPMg_Y2RBOD3t";
-        const BUCKET = "reports";
         const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { global:{ fetch:(u,o={})=>fetch(u,{...o,cache:'no-store'}) } });
 
         const WANT = {
@@ -277,7 +280,7 @@
           return (data || []).map(it => ({ ...it, fullPath: p + it.name }));
         }
 
-        // 與 upload.html 相同：(!it.id && !it.metadata) => folder
+        // (!it.id && !it.metadata) => folder
         async function listDeepN(prefix, depth, maxDepth, out){
           if(depth>maxDepth) return;
           const entries = await listDir(prefix);
@@ -290,13 +293,22 @@
           }
         }
 
-        // 依 fullPath **或 name** 比對；深度 5；排序看路徑內日期 > 更新時間 > 檔案大小
+        async function readManifest(name){
+          const tries=[name, `tw-${name}`];
+          for(const n of tries){
+            try{
+              const { data } = await sb.storage.from(BUCKET).download(`manifests/${n}.json`);
+              if(data) return JSON.parse(await data.text());
+            }catch{}
+          }
+          return null;
+        }
+
         async function latestFileByRegex(keyRegex){
-          const all=[]; await listDeepN('', 0, 5, all);
+          const all=[]; await listDeepN('', 0, 8, all);
           const files = all.filter(it=>{
-            const n = (it.name||'');
-            const p = (it.fullPath||'');
-            return (keyRegex.test(p) || keyRegex.test(n));
+            const n=(it.name||''), p=(it.fullPath||'');
+            return keyRegex.test(p) || keyRegex.test(n);
           });
           if(!files.length) return null;
           const scoreByPath = p => {
@@ -313,13 +325,12 @@
           return files[0];
         }
 
-        // 只有 1031 找不到時才啟動內容驗證後援（最近 300 份）
+        // 內容快讀後援（最近 500 份，不限副檔名）
         async function latestFileContentFallback(){
-          const all=[]; await listDeepN('', 0, 5, all);
+          const all=[]; await listDeepN('', 0, 8, all);
           const cand = all
-            .filter(it => /\.(txt|csv|log)$/i.test(it.fullPath||it.name||''))
             .sort((a,b)=> (Date.parse(b.updated_at||0)||0) - (Date.parse(a.updated_at||0)||0))
-            .slice(0,300);
+            .slice(0,500);
           for(const it of cand){
             try{
               const url = pubUrl(it.fullPath);
@@ -330,7 +341,7 @@
           return null;
         }
 
-        // ===== 解析：Canon + 你的 CSV(日期,時間,價格,動作,說明...) =====
+        // ===== 解析：Canon + CSV(日期,時間,價格,動作,說明...) =====
         const CANON_RE=/^(\d{14})\.0{6}\s+(\d+\.\d{6})\s+(新買|平賣|新賣|平買|強制平倉)\s*$/;
         const EXTRACT_RE=/.*?(\d{14})(?:\.0{1,6})?\s+(\d+(?:\.\d{1,6})?)\s*(新買|平賣|新賣|平買|強制平倉)\s*$/;
 
@@ -388,16 +399,6 @@
           return rows;
         }
 
-        function mergeByBaseline(baseText, latestText){
-          const A=parseCanon(baseText), B=parseCanon(latestText);
-          const baseMin=A.length?A[0].ts.slice(0,8):(B.length?B[0].ts.slice(0,8):'');
-          const baseMax=A.length?A[A.length-1].ts:'';
-          const added=baseMax?B.filter(x=>x.ts>baseMax).map(x=>x.line):B.map(x=>x.line);
-          const mergedLines=[...A.map(x=>x.line), ...added];
-          const endDay=mergedLines.length?mergedLines[mergedLines.length-1].match(CANON_RE)[1].slice(0,8):baseMin;
-          return { combined:mergedLines.join('\n'), start8:baseMin, end8:endDay };
-        }
-
         function dailySeriesFromMerged(mergedTxt){
           const parsed=window.SHARED.parseTXT(mergedTxt);
           const report=window.SHARED.buildReport(parsed.rows);
@@ -439,12 +440,25 @@
         const setVal=(id,v)=>{ const el=document.getElementById(id); if(!el) return; el.classList.remove('pos','neg','neu'); if(v==null){ el.textContent='---'; el.classList.add('neu'); return; } el.textContent=(v*100).toFixed(2)+'%'; el.classList.add(v>0?'pos':(v<0?'neg':'neu')); };
         const setText=(id,text)=>{ const el=document.getElementById(id); if(el) el.textContent=text||'---'; };
 
-        async function resolveLatestKey(key){
-          // 先走正規比對（name 或 fullPath）
+        async function resolveLatest(key){
+          // 1) manifest 優先（若存在）
+          const mf = await readManifest(key);
+          if(mf){
+            if(mf.latest_path) return { fullPath: mf.latest_path };
+            if(mf.prefix){
+              const all=[]; await listDeepN(mf.prefix, 0, 5, all);
+              const files = all.filter(it=>it.metadata);
+              if(files.length){
+                files.sort((a,b)=> (Date.parse(b.updated_at||0)||0) - (Date.parse(a.updated_at||0)||0));
+                return files[0];
+              }
+            }
+          }
+          // 2) 正規比對（name 或 fullPath）
           const byRegex = await latestFileByRegex(WANT[key]);
           if(byRegex) return byRegex;
-          // 只有 1031 啟用內容快讀後援
-          if(key === '1031'){
+          // 3) 僅 1031 啟用內容快讀後援
+          if(key==='1031'){
             const byProbe = await latestFileContentFallback();
             if(byProbe) return byProbe;
           }
@@ -455,22 +469,24 @@
           const set=(suf,v)=>setVal(`${suf}-${key}`,v);
           const setR=(suf,r)=>setText(`${suf}-range-${key}`,r);
           const setPeriod=text=>{ const el=document.getElementById(`period-${key}`); if(el) el.textContent=text; };
+
           try{
-            const latest=await resolveLatestKey(key);
+            const latest=await resolveLatest(key);
             if(!latest){ ['wk1','wk2','m1','m2','m3','m6','y1','y2','y3','y6'].forEach(x=>{ set(x,null); setR(x,'---'); }); setPeriod('—'); return; }
 
             const latestText=(await fetchSmart(pubUrl(latest.fullPath))).canon;
 
-            // 無 baseline 預設
-            let merged=latestText, start8='', end8='';
+            // 直接以 latest 計算（無 baseline）
             const rows=parseCanon(latestText);
-            start8=rows.length?rows[0].ts.slice(0,8):''; end8=rows.length?rows[rows.length-1].ts.slice(0,8):'';
+            const start8=rows.length?rows[0].ts.slice(0,8):'';
+            const end8  =rows.length?rows[rows.length-1].ts.slice(0,8):'';
 
-            const {days, vals}=dailySeriesFromMerged(merged);
+            const {days, vals}=dailySeriesFromMerged(latestText);
             const W1=simpleReturnWithRange(days, vals, 7),  W2=simpleReturnWithRange(days, vals, 14);
             const M1=simpleReturnWithRange(days, vals, 30), M2=simpleReturnWithRange(days, vals, 60);
             const M3=simpleReturnWithRange(days, vals, 90), M6=simpleReturnWithRange(days, vals, 180);
             const Y1=simpleReturnYearWindowWithRange(days, vals, 365), Y2=simpleReturnYearWindowWithRange(days, vals, 730), Y3=simpleReturnYearWindowWithRange(days, vals, 1095), Y6=simpleReturnYearWindowWithRange(days, vals, 2190);
+
             set('wk1',W1.ret); setR('wk1',W1.range);
             set('wk2',W2.ret); setR('wk2',W2.range);
             set('m1',M1.ret);  setR('m1',M1.range);
