@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>內部研究環境｜策略分析系統（僅供研究）</title>
   <meta name="robots" content="noindex,nofollow" />
-  <!-- CSP + 反嵌入 -->
   <meta http-equiv="Content-Security-Policy"
     content="default-src 'self';
              script-src 'self' https://unpkg.com https://byhbmmnacezzgkwfkozs.supabase.co 'unsafe-inline';
@@ -21,6 +20,7 @@
     h1{ text-align:center; margin:0 0 6px 0; font-weight:800; letter-spacing:.5px }
     .subtitle{ text-align:center; color:#666; margin:0 0 18px 0; font-size:14px }
     hr{ border:none; border-top:1px solid #ddd; margin:20px auto; max-width:1100px }
+
     .section-title-red{ max-width:1100px; margin:10px auto 12px; font-size:20px; font-weight:800; color:#d32f2f; letter-spacing:.5px }
     .section-title-blue{ max-width:1100px; margin:10px auto 12px; font-size:20px; font-weight:800; color:#0d6efd; letter-spacing:.5px }
     .section-title-black{ max-width:1100px; margin:10px auto 12px; font-size:20px; font-weight:800; color:#111; letter-spacing:.5px }
@@ -143,9 +143,7 @@
       </div>
 
       <!-- 3) 盤整型（空） -->
-      <div class="strategy-col">
-        <p class="subcat">盤整型</p>
-      </div>
+      <div class="strategy-col"><p class="subcat">盤整型</p></div>
 
       <!-- 4) 研發中（1031 顯示近期報酬） -->
       <div class="strategy-col">
@@ -265,7 +263,6 @@
         const BUCKET = "reports";
         const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { global:{ fetch:(u,o={})=>fetch(u,{...o,cache:'no-store'}) } });
 
-        // 別名組（避免只用單一關鍵字找不到）
         const WANT = {
           "0807": /(0807)/i,
           "1001": /(1001)/i,
@@ -280,100 +277,60 @@
           return (data || []).map(it => ({ ...it, fullPath: p + it.name }));
         }
 
-        // 與 upload.html 同口徑：(!it.id && !it.metadata) 視為資料夾
+        // 與 upload.html 相同：(!it.id && !it.metadata) => folder
         async function listDeepN(prefix, depth, maxDepth, out){
           if(depth>maxDepth) return;
           const entries = await listDir(prefix);
           for(const it of entries){
             if(!it.id && !it.metadata){
-              await listDeepN(it.fullPath, depth+1, maxDepth, out);   // folder
+              await listDeepN(it.fullPath, depth+1, maxDepth, out);
             }else{
-              out.push(it);                                           // file
+              out.push(it);
             }
           }
         }
 
-        // ---- 讀 manifest（支援 latest_path / prefix）----
-        async function readManifestLike(key){
-          const names = [key, `etf-${key}`, `${key}-latest`, `index-${key}`];
-          for(const n of names){
+        // 依 fullPath **或 name** 比對；深度 5；排序看路徑內日期 > 更新時間 > 檔案大小
+        async function latestFileByRegex(keyRegex){
+          const all=[]; await listDeepN('', 0, 5, all);
+          const files = all.filter(it=>{
+            const n = (it.name||'');
+            const p = (it.fullPath||'');
+            return (keyRegex.test(p) || keyRegex.test(n));
+          });
+          if(!files.length) return null;
+          const scoreByPath = p => {
+            const m = (p||'').match(/\b(20\d{6})\b/g);
+            return m ? Math.max(...m.map(s=>+s)) : 0;
+          };
+          files.sort((a,b)=>{
+            const sa=scoreByPath(a.fullPath), sb=scoreByPath(b.fullPath);
+            if(sa!==sb) return sb-sa;
+            const ta=Date.parse(a.updated_at||0)||0, tb=Date.parse(b.updated_at||0)||0;
+            if(ta!==tb) return tb-ta;
+            return (b.metadata?.size||0)-(a.metadata?.size||0);
+          });
+          return files[0];
+        }
+
+        // 只有 1031 找不到時才啟動內容驗證後援（最近 300 份）
+        async function latestFileContentFallback(){
+          const all=[]; await listDeepN('', 0, 5, all);
+          const cand = all
+            .filter(it => /\.(txt|csv|log)$/i.test(it.fullPath||it.name||''))
+            .sort((a,b)=> (Date.parse(b.updated_at||0)||0) - (Date.parse(a.updated_at||0)||0))
+            .slice(0,300);
+          for(const it of cand){
             try{
-              const { data } = await sb.storage.from(BUCKET).download(`manifests/${n}.json`);
-              if(data){
-                const j = JSON.parse(await data.text());
-                return j;
-              }
+              const url = pubUrl(it.fullPath);
+              const test = await fetchSmart(url);
+              if(test.ok>0) return it;
             }catch{}
           }
           return null;
         }
 
-        // ---- 核心：找最新檔（多重管道 + 內容驗證）----
-        async function latestFileSmart(keyRegex){
-          const all=[]; await listDeepN('', 0, 7, all);
-
-          // 先用 regex 過濾（比對 fullPath）
-          let cand = all.filter(it => /\.(txt|csv|log)$/i.test(it.fullPath) && keyRegex.test(it.fullPath));
-
-          // 若為空，改抓全 bucket 最近更新的 300 份做內容測試
-          if(cand.length===0){
-            const top = [...all]
-              .filter(it => /\.(txt|csv|log)$/i.test(it.fullPath))
-              .sort((a,b)=> (Date.parse(b.updated_at||0)||0) - (Date.parse(a.updated_at||0)||0))
-              .slice(0,300);
-            // 逐一抓內容，能被解析出交易行就當候選
-            const tested = [];
-            for(const it of top){
-              try{
-                const { publicUrl } = sb.storage.from(BUCKET).getPublicUrl(it.fullPath).data;
-                const test = await fetchSmart(publicUrl);
-                if(test.ok>0) tested.push({ item:it, ok:test.ok });
-                if(tested.length>=20) break; // 足夠了
-              }catch{}
-            }
-            cand = tested.map(x=>x.item);
-          }
-
-          if(cand.length===0) return null;
-
-          // 排序規則：路徑內最大 8 位日期 > updated_at > 檔案大小
-          const scoreByPath = p => {
-            const m = (p||'').match(/\b(20\d{6})\b/g);
-            return m ? Math.max(...m.map(s=>+s)) : 0;
-          };
-          cand.sort((a,b)=>{
-            const sa=scoreByPath(a.fullPath), sb=scoreByPath(b.fullPath);
-            if(sa!==sb) return sb-sa;
-            const ta=a.updated_at? Date.parse(a.updated_at):0, tb=b.updated_at? Date.parse(b.updated_at):0;
-            if(ta!==tb) return tb-ta;
-            return (b.metadata?.size||0)-(a.metadata?.size||0);
-          });
-          return cand[0];
-        }
-
-        // 高層封裝：manifest 優先，其次 smart 掃描
-        async function resolveLatest(key){
-          const manifest = await readManifestLike(key);
-          if(manifest){
-            // latest_path 直接用
-            if(manifest.latest_path){
-              return { fullPath: manifest.latest_path };
-            }
-            // prefix 指定資料夾，從裡面取最新
-            if(manifest.prefix){
-              const all=[]; await listDeepN(manifest.prefix, 0, 3, all);
-              const cand = all.filter(it => it.metadata && /\.(txt|csv|log)$/i.test(it.fullPath));
-              if(cand.length){
-                cand.sort((a,b)=> (Date.parse(b.updated_at||0)||0) - (Date.parse(a.updated_at||0)||0));
-                return cand[0];
-              }
-            }
-          }
-          // 沒 manifest，走智能掃描
-          return await latestFileSmart(WANT[key]);
-        }
-
-        // ===== 解析：Canon + 你提供的 CSV(日期,時間,價格,動作,說明...) =====
+        // ===== 解析：Canon + 你的 CSV(日期,時間,價格,動作,說明...) =====
         const CANON_RE=/^(\d{14})\.0{6}\s+(\d+\.\d{6})\s+(新買|平賣|新賣|平買|強制平倉)\s*$/;
         const EXTRACT_RE=/.*?(\d{14})(?:\.0{1,6})?\s+(\d+(?:\.\d{1,6})?)\s*(新買|平賣|新賣|平買|強制平倉)\s*$/;
 
@@ -389,7 +346,6 @@
           return s.split('\n').map(l=>l.replace(/\s+/g,' ').trim()).filter(Boolean).join('\n');
         }
         const CSV_LINE_RE=/^(\d{8}),(\d{5,6}),(\d+(?:\.\d+)?),([^,]+?),/;
-
         function padTime6(t){ t=String(t||'').trim(); return t.padStart(6,'0').slice(0,6); }
 
         function canonicalize(txt){
@@ -483,26 +439,32 @@
         const setVal=(id,v)=>{ const el=document.getElementById(id); if(!el) return; el.classList.remove('pos','neg','neu'); if(v==null){ el.textContent='---'; el.classList.add('neu'); return; } el.textContent=(v*100).toFixed(2)+'%'; el.classList.add(v>0?'pos':(v<0?'neg':'neu')); };
         const setText=(id,text)=>{ const el=document.getElementById(id); if(el) el.textContent=text||'---'; };
 
+        async function resolveLatestKey(key){
+          // 先走正規比對（name 或 fullPath）
+          const byRegex = await latestFileByRegex(WANT[key]);
+          if(byRegex) return byRegex;
+          // 只有 1031 啟用內容快讀後援
+          if(key === '1031'){
+            const byProbe = await latestFileContentFallback();
+            if(byProbe) return byProbe;
+          }
+          return null;
+        }
+
         async function fillCard(key){
           const set=(suf,v)=>setVal(`${suf}-${key}`,v);
           const setR=(suf,r)=>setText(`${suf}-range-${key}`,r);
           const setPeriod=text=>{ const el=document.getElementById(`period-${key}`); if(el) el.textContent=text; };
           try{
-            const latest = await resolveLatest(key);
+            const latest=await resolveLatestKey(key);
             if(!latest){ ['wk1','wk2','m1','m2','m3','m6','y1','y2','y3','y6'].forEach(x=>{ set(x,null); setR(x,'---'); }); setPeriod('—'); return; }
+
             const latestText=(await fetchSmart(pubUrl(latest.fullPath))).canon;
 
-            // 可選 baseline（若 manifest 提供）
-            const manifest=await readManifestLike(key);
+            // 無 baseline 預設
             let merged=latestText, start8='', end8='';
-            if(manifest?.baseline_path){
-              const baseText=(await fetchSmart(pubUrl(manifest.baseline_path))).canon;
-              const m=mergeByBaseline(baseText, latestText);
-              merged=m.combined; start8=m.start8; end8=m.end8;
-            }else{
-              const rows=parseCanon(latestText);
-              start8=rows.length?rows[0].ts.slice(0,8):''; end8=rows.length?rows[rows.length-1].ts.slice(0,8):'';
-            }
+            const rows=parseCanon(latestText);
+            start8=rows.length?rows[0].ts.slice(0,8):''; end8=rows.length?rows[rows.length-1].ts.slice(0,8):'';
 
             const {days, vals}=dailySeriesFromMerged(merged);
             const W1=simpleReturnWithRange(days, vals, 7),  W2=simpleReturnWithRange(days, vals, 14);
