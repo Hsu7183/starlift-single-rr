@@ -24,10 +24,12 @@
     .section-title-red{ max-width:1100px; margin:10px auto 12px; font-size:20px; font-weight:800; color:#d32f2f; letter-spacing:.5px }
     .section-title-blue{ max-width:1100px; margin:10px auto 12px; font-size:20px; font-weight:800; color:#0d6efd; letter-spacing:.5px }
     .section-title-black{ max-width:1100px; margin:10px auto 12px; font-size:20px; font-weight:800; color:#111; letter-spacing:.5px }
+
     .strategy-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:20px; max-width:1100px; margin:0 auto 28px }
     .strategy-col{ display:flex; flex-direction:column; gap:12px }
     .subcat{ font-weight:700; font-size:16px; color:#c62828; margin:0 0 4px 0; text-align:center }
     .nav{ display:grid; grid-template-columns:repeat(3,1fr); gap:20px; max-width:1100px; margin:0 auto 28px }
+
     a.card{ display:block; background:#fff; padding:18px 16px; border-radius:12px; box-shadow:0 2px 8px rgba(0,0,0,.08); text-decoration:none; color:inherit; transition:transform .15s, box-shadow .15s; border:1px solid #e5e7eb }
     a.card:hover{ transform:translateY(-4px); box-shadow:0 10px 22px rgba(0,0,0,.12) }
     .card-title{ font-weight:700; font-size:18px; margin:0 0 8px 0; text-align:center }
@@ -42,6 +44,7 @@
     .period{ margin-top:6px; color:#666; font-size:12px; text-align:center }
     .strategy-col .card-desc{ display:none }
     .tag{ display:inline-block; font-size:12px; background:#eef4ff; color:#0d6efd; border-radius:999px; padding:3px 8px; margin-left:8px; vertical-align:middle }
+
     .gate{ max-width:960px; margin:20px auto; background:#fff; border:1px solid #e5e7eb; border-radius:12px; box-shadow:0 2px 10px rgba(0,0,0,.05); padding:16px }
     .row{ display:flex; gap:12px; align-items:center; flex-wrap:wrap }
     .btn{ background:#0d6efd; color:#fff; border:0; border-radius:10px; padding:10px 14px; cursor:pointer }
@@ -49,7 +52,9 @@
     input[type="password"]{ width:100%; padding:10px; border:1px solid #e5e7eb; border-radius:8px }
     .error{ color:#c62828; font-size:12px; margin-top:6px; display:none }
     .hidden{ display:none }
+
     .restrict{ position:sticky; top:-20px; margin:-20px -20px 12px -20px; padding:6px 10px; background:#111; color:#fff; text-align:center; font-size:12px; letter-spacing:.5px; z-index:9999 }
+
     html,body{ -webkit-user-select:none; -moz-user-select:none; user-select:none; -webkit-touch-callout:none }
     a,button,input{ -webkit-user-select:auto; user-select:auto }
     #shield{ position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(3,7,18,.96); color:#fff; z-index:2147483647; text-align:center; padding:24px }
@@ -260,7 +265,13 @@
         const BUCKET = "reports";
         const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { global:{ fetch:(u,o={})=>fetch(u,{...o,cache:'no-store'}) } });
 
-        const WANT = { "0807": /0807/i, "1001": /1001/i, "00909": /00909/i, "1031": /1031/i };
+        // 別名組（避免只用單一關鍵字找不到）
+        const WANT = {
+          "0807": /(0807)/i,
+          "1001": /(1001)/i,
+          "00909": /(00909|etf[-_]?00909)/i,
+          "1031": /(1031|tw[-_]?1031|台股[-_]?1031)/i
+        };
         const pubUrl = (path) => sb.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
 
         async function listDir(prefix){
@@ -269,7 +280,7 @@
           return (data || []).map(it => ({ ...it, fullPath: p + it.name }));
         }
 
-        // ✅ 改為和你 upload.html 相同的判斷：(!it.id && !it.metadata) 視為資料夾
+        // 與 upload.html 同口徑：(!it.id && !it.metadata) 視為資料夾
         async function listDeepN(prefix, depth, maxDepth, out){
           if(depth>maxDepth) return;
           const entries = await listDir(prefix);
@@ -282,31 +293,87 @@
           }
         }
 
-        // 用 fullPath 過濾，深度 5
-        async function latestFileDeep(regex){
-          const all=[]; await listDeepN('', 0, 5, all);
-          const files = all.filter(it => regex.test(it.fullPath));
-          if (!files.length) return null;
+        // ---- 讀 manifest（支援 latest_path / prefix）----
+        async function readManifestLike(key){
+          const names = [key, `etf-${key}`, `${key}-latest`, `index-${key}`];
+          for(const n of names){
+            try{
+              const { data } = await sb.storage.from(BUCKET).download(`manifests/${n}.json`);
+              if(data){
+                const j = JSON.parse(await data.text());
+                return j;
+              }
+            }catch{}
+          }
+          return null;
+        }
+
+        // ---- 核心：找最新檔（多重管道 + 內容驗證）----
+        async function latestFileSmart(keyRegex){
+          const all=[]; await listDeepN('', 0, 7, all);
+
+          // 先用 regex 過濾（比對 fullPath）
+          let cand = all.filter(it => /\.(txt|csv|log)$/i.test(it.fullPath) && keyRegex.test(it.fullPath));
+
+          // 若為空，改抓全 bucket 最近更新的 300 份做內容測試
+          if(cand.length===0){
+            const top = [...all]
+              .filter(it => /\.(txt|csv|log)$/i.test(it.fullPath))
+              .sort((a,b)=> (Date.parse(b.updated_at||0)||0) - (Date.parse(a.updated_at||0)||0))
+              .slice(0,300);
+            // 逐一抓內容，能被解析出交易行就當候選
+            const tested = [];
+            for(const it of top){
+              try{
+                const { publicUrl } = sb.storage.from(BUCKET).getPublicUrl(it.fullPath).data;
+                const test = await fetchSmart(publicUrl);
+                if(test.ok>0) tested.push({ item:it, ok:test.ok });
+                if(tested.length>=20) break; // 足夠了
+              }catch{}
+            }
+            cand = tested.map(x=>x.item);
+          }
+
+          if(cand.length===0) return null;
+
+          // 排序規則：路徑內最大 8 位日期 > updated_at > 檔案大小
           const scoreByPath = p => {
             const m = (p||'').match(/\b(20\d{6})\b/g);
             return m ? Math.max(...m.map(s=>+s)) : 0;
           };
-          files.sort((a,b)=>{
+          cand.sort((a,b)=>{
             const sa=scoreByPath(a.fullPath), sb=scoreByPath(b.fullPath);
             if(sa!==sb) return sb-sa;
             const ta=a.updated_at? Date.parse(a.updated_at):0, tb=b.updated_at? Date.parse(b.updated_at):0;
             if(ta!==tb) return tb-ta;
             return (b.metadata?.size||0)-(a.metadata?.size||0);
           });
-          return files[0];
+          return cand[0];
         }
 
-        async function readManifest(name){
-          try{ const { data } = await sb.storage.from(BUCKET).download(`manifests/${name}.json`); if(!data) return null; return JSON.parse(await data.text()); }
-          catch{ return null; }
+        // 高層封裝：manifest 優先，其次 smart 掃描
+        async function resolveLatest(key){
+          const manifest = await readManifestLike(key);
+          if(manifest){
+            // latest_path 直接用
+            if(manifest.latest_path){
+              return { fullPath: manifest.latest_path };
+            }
+            // prefix 指定資料夾，從裡面取最新
+            if(manifest.prefix){
+              const all=[]; await listDeepN(manifest.prefix, 0, 3, all);
+              const cand = all.filter(it => it.metadata && /\.(txt|csv|log)$/i.test(it.fullPath));
+              if(cand.length){
+                cand.sort((a,b)=> (Date.parse(b.updated_at||0)||0) - (Date.parse(a.updated_at||0)||0));
+                return cand[0];
+              }
+            }
+          }
+          // 沒 manifest，走智能掃描
+          return await latestFileSmart(WANT[key]);
         }
 
-        /* ===== 解析：Canon + 你提供的 CSV(日期,時間,價格,動作,說明...) ===== */
+        // ===== 解析：Canon + 你提供的 CSV(日期,時間,價格,動作,說明...) =====
         const CANON_RE=/^(\d{14})\.0{6}\s+(\d+\.\d{6})\s+(新買|平賣|新賣|平買|強制平倉)\s*$/;
         const EXTRACT_RE=/.*?(\d{14})(?:\.0{1,6})?\s+(\d+(?:\.\d{1,6})?)\s*(新買|平賣|新賣|平買|強制平倉)\s*$/;
 
@@ -421,10 +488,12 @@
           const setR=(suf,r)=>setText(`${suf}-range-${key}`,r);
           const setPeriod=text=>{ const el=document.getElementById(`period-${key}`); if(el) el.textContent=text; };
           try{
-            const latest=await latestFileDeep(WANT[key]);
+            const latest = await resolveLatest(key);
             if(!latest){ ['wk1','wk2','m1','m2','m3','m6','y1','y2','y3','y6'].forEach(x=>{ set(x,null); setR(x,'---'); }); setPeriod('—'); return; }
             const latestText=(await fetchSmart(pubUrl(latest.fullPath))).canon;
-            const manifest=await readManifest(key);
+
+            // 可選 baseline（若 manifest 提供）
+            const manifest=await readManifestLike(key);
             let merged=latestText, start8='', end8='';
             if(manifest?.baseline_path){
               const baseText=(await fetchSmart(pubUrl(manifest.baseline_path))).canon;
@@ -434,6 +503,7 @@
               const rows=parseCanon(latestText);
               start8=rows.length?rows[0].ts.slice(0,8):''; end8=rows.length?rows[rows.length-1].ts.slice(0,8):'';
             }
+
             const {days, vals}=dailySeriesFromMerged(merged);
             const W1=simpleReturnWithRange(days, vals, 7),  W2=simpleReturnWithRange(days, vals, 14);
             const M1=simpleReturnWithRange(days, vals, 30), M2=simpleReturnWithRange(days, vals, 60);
@@ -454,6 +524,7 @@
             ['wk1','wk2','m1','m2','m3','m6','y1','y2','y3','y6'].forEach(x=>{ set(x,null); setR(x,'---'); }); setPeriod('—');
           }
         }
+
         await Promise.all([fillCard("0807"), fillCard("1001"), fillCard("00909"), fillCard("1031")]);
       })();
     }
