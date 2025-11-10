@@ -15,23 +15,19 @@
              frame-ancestors 'none';
              base-uri 'none';
              form-action 'self'">
-
   <style>
     :root { --card-r:12px; }
     body{ font-family: Arial,"微軟正黑體",sans-serif; margin:20px; background:#f8f9fa; color:#333; -webkit-font-smoothing:antialiased }
     h1{ text-align:center; margin:0 0 6px 0; font-weight:800; letter-spacing:.5px }
     .subtitle{ text-align:center; color:#666; margin:0 0 18px 0; font-size:14px }
     hr{ border:none; border-top:1px solid #ddd; margin:20px auto; max-width:1100px }
-
     .section-title-red{ max-width:1100px; margin:10px auto 12px; font-size:20px; font-weight:800; color:#d32f2f; letter-spacing:.5px }
     .section-title-blue{ max-width:1100px; margin:10px auto 12px; font-size:20px; font-weight:800; color:#0d6efd; letter-spacing:.5px }
     .section-title-black{ max-width:1100px; margin:10px auto 12px; font-size:20px; font-weight:800; color:#111; letter-spacing:.5px }
-
     .strategy-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:20px; max-width:1100px; margin:0 auto 28px }
     .strategy-col{ display:flex; flex-direction:column; gap:12px }
     .subcat{ font-weight:700; font-size:16px; color:#c62828; margin:0 0 4px 0; text-align:center }
     .nav{ display:grid; grid-template-columns:repeat(3,1fr); gap:20px; max-width:1100px; margin:0 auto 28px }
-
     a.card{ display:block; background:#fff; padding:18px 16px; border-radius:12px; box-shadow:0 2px 8px rgba(0,0,0,.08); text-decoration:none; color:inherit; transition:transform .15s, box-shadow .15s; border:1px solid #e5e7eb }
     a.card:hover{ transform:translateY(-4px); box-shadow:0 10px 22px rgba(0,0,0,.12) }
     .card-title{ font-weight:700; font-size:18px; margin:0 0 8px 0; text-align:center }
@@ -46,7 +42,6 @@
     .period{ margin-top:6px; color:#666; font-size:12px; text-align:center }
     .strategy-col .card-desc{ display:none }
     .tag{ display:inline-block; font-size:12px; background:#eef4ff; color:#0d6efd; border-radius:999px; padding:3px 8px; margin-left:8px; vertical-align:middle }
-
     .gate{ max-width:960px; margin:20px auto; background:#fff; border:1px solid #e5e7eb; border-radius:12px; box-shadow:0 2px 10px rgba(0,0,0,.05); padding:16px }
     .row{ display:flex; gap:12px; align-items:center; flex-wrap:wrap }
     .btn{ background:#0d6efd; color:#fff; border:0; border-radius:10px; padding:10px 14px; cursor:pointer }
@@ -54,9 +49,7 @@
     input[type="password"]{ width:100%; padding:10px; border:1px solid #e5e7eb; border-radius:8px }
     .error{ color:#c62828; font-size:12px; margin-top:6px; display:none }
     .hidden{ display:none }
-
     .restrict{ position:sticky; top:-20px; margin:-20px -20px 12px -20px; padding:6px 10px; background:#111; color:#fff; text-align:center; font-size:12px; letter-spacing:.5px; z-index:9999 }
-
     html,body{ -webkit-user-select:none; -moz-user-select:none; user-select:none; -webkit-touch-callout:none }
     a,button,input{ -webkit-user-select:auto; user-select:auto }
     #shield{ position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(3,7,18,.96); color:#fff; z-index:2147483647; text-align:center; padding:24px }
@@ -209,7 +202,7 @@
     // 反嵌入
     if (window.top !== window.self){ try{ window.top.location = window.self.location.href; }catch(_){} }
 
-    // 基本阻擋（顯示遮罩由熱鍵觸發）
+    // 基本阻擋（遮罩由熱鍵觸發）
     window.addEventListener('contextmenu', e=>{ e.preventDefault(); }, {capture:true});
     window.addEventListener('copy', e=>e.preventDefault(), {capture:true});
     window.addEventListener('cut',  e=>e.preventDefault(), {capture:true});
@@ -275,21 +268,24 @@
           const { data } = await sb.storage.from(BUCKET).list(p, { limit:1000, sortBy:{ column:'name', order:'asc' }});
           return (data || []).map(it => ({ ...it, fullPath: p + it.name }));
         }
+
+        // ✅ 改為和你 upload.html 相同的判斷：(!it.id && !it.metadata) 視為資料夾
         async function listDeepN(prefix, depth, maxDepth, out){
           if(depth>maxDepth) return;
           const entries = await listDir(prefix);
           for(const it of entries){
-            const isFile = !!it.metadata;     // ✅ v2：有 metadata 視為檔案
-            if(!isFile){
-              await listDeepN(it.fullPath, depth+1, maxDepth, out); // 資料夾
+            if(!it.id && !it.metadata){
+              await listDeepN(it.fullPath, depth+1, maxDepth, out);   // folder
             }else{
-              out.push(it); // 檔案
+              out.push(it);                                           // file
             }
           }
         }
+
+        // 用 fullPath 過濾，深度 5
         async function latestFileDeep(regex){
-          const all=[]; await listDeepN('', 0, 5, all);            // ✅ 深度 5
-          const files = all.filter(it => regex.test(it.fullPath)); // ✅ 用 fullPath 比對
+          const all=[]; await listDeepN('', 0, 5, all);
+          const files = all.filter(it => regex.test(it.fullPath));
           if (!files.length) return null;
           const scoreByPath = p => {
             const m = (p||'').match(/\b(20\d{6})\b/g);
@@ -310,7 +306,7 @@
           catch{ return null; }
         }
 
-        // ===== 解析器：Canon + 你提供的 CSV(日期,時間,價格,動作,說明...) =====
+        /* ===== 解析：Canon + 你提供的 CSV(日期,時間,價格,動作,說明...) ===== */
         const CANON_RE=/^(\d{14})\.0{6}\s+(\d+\.\d{6})\s+(新買|平賣|新賣|平買|強制平倉)\s*$/;
         const EXTRACT_RE=/.*?(\d{14})(?:\.0{1,6})?\s+(\d+(?:\.\d{1,6})?)\s*(新買|平賣|新賣|平買|強制平倉)\s*$/;
 
@@ -325,7 +321,7 @@
           s=s.replace(/[\x00-\x09\x0B-\x1F\x7F]/g,'').replace(/\r\n?/g,'\n').replace(/\u3000/g,' ');
           return s.split('\n').map(l=>l.replace(/\s+/g,' ').trim()).filter(Boolean).join('\n');
         }
-        const CSV_LINE_RE=/^(\d{8}),(\d{5,6}),(\d+(?:\.\d+)?),([^,]+?),/; // 日期,時間,價格,動作,...
+        const CSV_LINE_RE=/^(\d{8}),(\d{5,6}),(\d+(?:\.\d+)?),([^,]+?),/;
 
         function padTime6(t){ t=String(t||'').trim(); return t.padStart(6,'0').slice(0,6); }
 
