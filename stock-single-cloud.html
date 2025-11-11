@@ -30,7 +30,9 @@
     .improve-row{background:#fff5f5}
     .buy-row{background:#ffecec}
     .sell-row{background:#ecffec}
+    .input{padding:8px;border:1px solid #ddd;border-radius:8px}
   </style>
+  <!-- 相依：Chart.js + Supabase（僅此兩個） -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 </head>
@@ -40,9 +42,19 @@
     <h1>股票-雲端單檔分析（KPI49）</h1>
     <div class="subtitle muted sm">來源：canonical 或 1031-CSV（自動轉換）｜本頁僅供內部研究</div>
 
+    <!-- 控制列 + 參數 chips -->
     <div class="card row">
       <button id="btn-clip" class="btn gray">從剪貼簿貼上 TXT</button>
       <input id="file" type="file" accept=".txt" />
+      <!-- 稅率方案 -->
+      <label class="muted sm">稅率方案：</label>
+      <select id="taxScheme" class="input" style="min-width:140px">
+        <option value="ETF">ETF（0.1%）</option>
+        <option value="STOCK">個股（0.3%）</option>
+        <option value="CUSTOM">自訂</option>
+      </select>
+      <input id="taxCustom" class="input" type="number" step="0.0001" min="0" placeholder="自訂稅率(如0.0010)" style="width:150px" disabled />
+      <!-- 參數 chips -->
       <span class="chip">手續費率：<span id="feeRateChip">—</span></span>
       <span class="chip">交易稅率：<span id="taxRateChip">—</span></span>
       <span class="chip">最低手續費：<span id="minFeeChip">—</span></span>
@@ -51,12 +63,13 @@
       <span class="chip">Rf：<span id="rfChip">—</span></span>
     </div>
 
+    <!-- 雲端選檔 -->
     <div class="card">
       <h3 class="section-title">從 Supabase（reports）選檔</h3>
       <div class="row">
-        <input id="cloudPrefix" class="muted" placeholder="篩選資料夾（例：2025-11-01/）" style="padding:8px;border:1px solid #ddd;border-radius:8px" />
+        <input id="cloudPrefix" class="input muted" placeholder="篩選資料夾（例：2025-11-01/）" />
         <button id="btnCloudList" class="btn">載入清單</button>
-        <select id="cloudSelect" style="min-width:320px;padding:8px;border:1px solid #ddd;border-radius:8px">
+        <select id="cloudSelect" class="input" style="min-width:320px">
           <option value="">（請先載入清單）</option>
         </select>
         <button id="btnCloudPreview" class="btn gray">預覽</button>
@@ -66,11 +79,13 @@
       <pre id="cloudPreview" class="muted" style="margin-top:8px;max-height:260px;overflow:auto;background:#f8f9fa;padding:10px;border:1px solid #eee;border-radius:8px;white-space:pre-wrap"></pre>
     </div>
 
+    <!-- 週次盈虧圖 -->
     <div class="card">
       <h3 class="section-title">每週獲利（浮動長條）＋累積獲利（折線）</h3>
       <div class="chartbox"><canvas id="chWeekly"></canvas></div>
     </div>
 
+    <!-- 建議優先指標 -->
     <div class="card">
       <h3 class="section-title">建議優先指標</h3>
       <div class="scroll-x">
@@ -78,6 +93,7 @@
       </div>
     </div>
 
+    <!-- KPI（49 項分組） -->
     <div class="card"><h3 class="section-title">一、報酬（Return）</h3><div class="scroll-x"><table id="kpiReturn"><thead></thead><tbody></tbody></table></div></div>
     <div class="card"><h3 class="section-title">二、風險（Risk）</h3><div class="scroll-x"><table id="kpiRisk"><thead></thead><tbody></tbody></table></div></div>
     <div class="card"><h3 class="section-title">三、效率（Efficiency）</h3><div class="scroll-x"><table id="kpiEff"><thead></thead><tbody></tbody></table></div></div>
@@ -85,12 +101,13 @@
     <div class="card"><h3 class="section-title">五、成本 / 交易活性（Cost / Activity）</h3><div class="scroll-x"><table id="kpiCost"><thead></thead><tbody></tbody></table></div></div>
     <div class="card"><h3 class="section-title">六、分布（Distribution）</h3><div class="scroll-x"><table id="kpiDist"><thead></thead><tbody></tbody></table></div></div>
 
+    <!-- 交易明細（tw-1031 欄位） -->
     <div class="card">
       <h3 class="section-title">交易明細（BUY/SELL 以實際費稅計）</h3>
       <div class="scroll-x"><table id="tradeTable"><thead></thead><tbody></tbody></table></div>
     </div>
   </div>
 
-  <script src="stock-single-cloud.js?v=kpi49-table-fixed-pd"></script>
+  <script src="stock-single-cloud.js?v=kpi49-taxscheme-v1"></script>
 </body>
 </html>
