@@ -1,7 +1,8 @@
 // 股票｜雲端單檔分析（KPI49）
 // - 稅率方案（ETF/個股/自訂）＋自動偵測（00909/00910/0050→ETF；2603/長榮→個股）＋切換即重算
-// - 價格差改為 (賣方手續費+交易稅)/股數（與 1031 明細一致）
-// - CSV 容錯：逗號左右有空白也能解析
+// - CSV 容錯：逗號左右空白也能解析；normalize 會將 " , " 收斂成 ","
+// - 價格差 = (賣方手續費 + 交易稅) / 股數（與 1031 明細一致）
+// - mapAct 強化：首買/加碼/再加碼/（再）加碼攤平 皆視為 BUY；賣出/平賣/強制平倉/強平 視為 SELL
 (function(){
   'use strict';
 
@@ -171,25 +172,30 @@
 
   // ===== 解析：canonical + 1031-CSV =====
   var CANON_RE=/^(\d{14})\.0{6}\s+(\d+\.\d{6})\s+(新買|平賣|新賣|平買|強制平倉)\s*$/;
-  // ★ 放寬：允許逗號前後空白（normalize 後仍保險）
+  // 放寬：允許逗號前後空白
   var CSV_RE  = /^\s*(\d{8})\s*,\s*(\d{5,6})\s*,\s*(\d+(?:\.\d+)?)\s*,\s*([^,]+)\s*,/;
 
+  // ★★★ 強化動作對應：BUY/SELL 正確分類
   function mapAct(s){
-    s=String(s||'').trim();
-    if(/^賣出$/i.test(s)) return '平賣';
-    if(/^(買進|加碼|再加碼|加碼攤平)$/i.test(s)) return '新買';
-    if(/^強平$/i.test(s)) return '強制平倉';
+    s = String(s||'').trim();
+    // 賣與強平
+    if (/^(平賣|賣出)$/i.test(s)) return '平賣';
+    if (/^(強制平倉|強平)$/i.test(s)) return '強制平倉';
+    // 全部視為 BUY 的字樣（含空白容忍）
+    if (/^(新買|買進|首買|加碼|再加碼|加碼攤平|再加碼攤平|加碼\s*攤平|再加碼\s*攤平)$/i.test(s)) return '新買';
+    // 其他維持原字
     return s;
   }
+
   function pad6(t){ t=String(t||''); if(t.length===5) t='0'+t; return t.slice(0,6); }
 
   function normalize(txt){
     return (txt||'')
-      .replace(/\ufeff/gi,'')                       // 移除 BOM
-      .replace(/[\u200B-\u200D\uFEFF]/g,'')         // 零寬字元
-      .replace(/[\x00-\x09\x0B-\x1F\x7F]/g,'')      // 控制碼
-      .replace(/\r\n?/g,'\n')                       // 統一換行
-      .replace(/\s*,\s*/g, ',')                     // ★ 關鍵：去掉逗號左右空白
+      .replace(/\ufeff/gi,'')
+      .replace(/[\u200B-\u200D\uFEFF]/g,'')
+      .replace(/[\x00-\x09\x0B-\x1F\x7F]/g,'')
+      .replace(/\r\n?/g,'\n')
+      .replace(/\s*,\s*/g, ',') // 把逗號左右空白收斂
       .split('\n').map(function(s){ return s.trim(); })
       .filter(function(x){ return !!x; });
   }
@@ -226,7 +232,6 @@
     }else if(isStock && !isETF){
       taxScheme.value='STOCK'; CFG.taxRate=0.003; taxCustom.disabled=true;
     }else{
-      // 保持目前設定（可能來自 URL ?tax=）
       if(CFG.taxRate===0.001){ taxScheme.value='ETF'; taxCustom.disabled=true; }
       else if(CFG.taxRate===0.003){ taxScheme.value='STOCK'; taxCustom.disabled=true; }
       else{ taxScheme.value='CUSTOM'; taxCustom.disabled=false; taxCustom.value=CFG.taxRate.toFixed(4); }
@@ -234,7 +239,7 @@
     refreshChips();
   }
 
-  // ===== 回測（股票口徑｜與 tw-1031 對齊） =====
+  // ===== 回測（股票口徑｜與 1031 明細一致） =====
   function backtest(rows){
     var shares=0, cash=CFG.capital, cumCost=0, pnlCum=0;
     var trades=[], weeks=new Map(), dayPnL=new Map();
@@ -268,16 +273,15 @@
         var tt  = tax(sam);
         cash   += (sam - ff - tt);
 
-        var sellCumCostDisp = cumCost + ff + tt;        // SELL 顯示「累計成本」
+        var sellCumCostDisp = cumCost + ff + tt;     // SELL 顯示「累計成本」
         var sellCostAvgDisp = sellCumCostDisp / shares;
 
-        // 價格差 = (賣方費+稅)/股數（固定兩位小數）
+        // 價格差 = (賣方費+稅)/股數
         var priceDiff       = ((ff + tt) / shares);
 
         var pnlFull         = (sam - ff - tt) - cumCost; // 稅後損益
         pnlCum += pnlFull;
 
-        // 歸檔至日/週
         var day = r.ts.slice(0,8);
         dayPnL.set(day,(dayPnL.get(day)||0)+pnlFull);
         var wkKey = weekKey(day);
@@ -332,7 +336,7 @@
     for(i=0;i<eq.length;i++){
       v=eq[i];
       if(v>=peak){ peak=v; if(cur>0){ totalTU+=cur; cur=0; } }
-      else{ cur++; if(cur>maxTU) maxTU=maxTU=cur; }
+      else{ cur++; if(cur>maxTU) maxTU=cur; }
     }
     if(cur>0) totalTU+=cur;
     return { maxTU:maxTU, totalTU:totalTU };
@@ -386,7 +390,9 @@
 
     var TU=timeUnderwater(eq), ST=streaks(tradePnl);
 
-    var grossBuy=bt.trades.filter(function(t){return t.kind==='BUY';}).reduce(function(a,b){return a+b.price*b.shares;},0);
+    var grossBuy=bt.trades.filter(function(t){return t.kind==='BUY';}).reduce(function(a,b){return a+b.price+b.shares;},0);
+    // ↑ 這行不影響頁面（僅 KPI），若要嚴謹可改：a + b.price * b.shares（當然我們下方已採用正確版本）
+    grossBuy = bt.trades.filter(function(t){return t.kind==='BUY';}).reduce(function(a,b){return a+b.price*b.shares;},0);
     var grossSell=bt.trades.filter(function(t){return t.kind==='SELL';}).reduce(function(a,b){return a+b.price*b.shares;},0);
     var feeSum=bt.trades.reduce(function(a,b){return a+(b.fee||0);},0);
     var taxSum=bt.trades.reduce(function(a,b){return a+(b.tax||0);},0);
@@ -396,17 +402,11 @@
     var medTrade=(function(){ var s=[].concat(tradePnl).sort(function(a,b){return a-b;}); if(!s.length) return 0; var m=Math.floor(s.length/2); return s.length%2? s[m] : (s[m-1]+s[m])/2; })();
 
     return {
-      // Return
       total:total,totalReturn:totalReturn,annRet:annRet,bestWeek:bestWeek,worstWeek:worstWeek,avgTrade:avgTrade,medTrade:medTrade,payoff:payoff,
-      // Risk
       mdd:mdd,annVol:annVol,dStd:dStd,ui:ui,mart:mart,volWeekly:volWeekly,min:R.min,max:R.max,std:R.std,
-      // Efficiency
       sr:sr,so:so,cal:cal,mar:mar,pf:pf,expectancy:expectancy,hitRate:hitRate,avgWin:avgWin,avgLoss:avgLoss,
-      // Stability
       maxTU:TU.maxTU,totalTU:TU.totalTU,maxWinStreak:ST.maxWinStreak,maxLossStreak:ST.maxLossStreak,skew:R.skew,kurt:R.kurt,days:days.length,
-      // Cost/Activity
       grossBuy:grossBuy,grossSell:grossSell,feeSum:feeSum,taxSum:taxSum,turnover:turnover,costRatio:costRatio,totalExecs:bt.trades.length,unitShares:CFG.unit,
-      // Distribution
       tradeCount:sells.length,
       posCount:tradePnl.filter(function(x){return x>0;}).length,
       zeroCount:tradePnl.filter(function(x){return x===0;}).length,
@@ -443,7 +443,7 @@
     });
   }
 
-  // ===== KPI 表（0807 風格） =====
+  // ===== KPI（0807 風格） =====
   function theadHTML(){ return '<thead><tr><th>指標</th><th>數值</th><th>建議</th><th>機構評語</th><th>參考區間</th></tr></thead>'; }
   function bandTxt(score){ return score===0?'Strong（強）':(score===1?'Adequate（可接受）':'Improve（優化）'); }
   function scoreMetric(key,raw){
@@ -573,17 +573,14 @@
         +   '<td>'+ (isSell?'賣出':'買進') +'</td>'
         +   '<td>'+ Number(e.price).toFixed(2) +'</td>'
         +   '<td>'+ fmtInt(e.shares || 0) +'</td>'
-
         +   '<td>'+ buyAmtCell +'</td>'
         +   '<td>'+ sellAmtCell +'</td>'
         +   '<td>'+ fmtInt(e.fee || 0) +'</td>'
         +   '<td>'+ fmtInt(e.tax || 0) +'</td>'
-
         +   '<td>'+ costCell +'</td>'
         +   '<td>'+ costAvgCell +'</td>'
         +   '<td>'+ cumCostCell +'</td>'
         +   '<td>'+ priceDiffCell +'</td>'
-
         +   '<td>'+ pnlCell +'</td>'
         +   '<td>'+ retCell +'</td>'
         +   '<td>'+ cumCell +'</td>'
