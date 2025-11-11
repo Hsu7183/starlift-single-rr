@@ -3,90 +3,100 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>股票｜雲端單檔分析（49 KPI）</title>
+  <title>股票-雲端單檔分析（KPI49）</title>
   <style>
     body{font-family:ui-sans-serif,system-ui;-webkit-font-smoothing:antialiased;margin:0;padding:16px;background:#f7f7fb;color:#222}
     .wrap{max-width:1440px;margin:0 auto}
-    .row{display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+    .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
     .chip{display:inline-block;background:#eef;padding:6px 10px;border-radius:999px;font-size:12px}
+    .btn{background:#0d6efd;color:#fff;border:0;border-radius:10px;padding:8px 12px;cursor:pointer}
+    .btn.gray{background:#6c757d}
+    .btn:disabled{opacity:.5;cursor:not-allowed}
     .card{background:#fff;border:1px solid #e5e7eb;border-radius:12px;box-shadow:0 2px 10px rgba(0,0,0,.03);padding:12px;margin-bottom:20px}
-    .btn{padding:8px 12px;border:0;border-radius:8px;cursor:pointer}
-    .btn-primary{background:#0d6efd;color:#fff}
-    .btn-gray{background:#6c757d;color:#fff}
-    .sel{min-width:320px;padding:8px;border:1px solid #ddd;border-radius:8px}
-    .ipt{padding:8px;border:1px solid #ddd;border-radius:8px}
-    .tiny{font-size:12px;color:#666}
+    .muted{color:#666;font-size:13px}
+    .muted.sm{font-size:12px;color:#777}
     .scroll-x{overflow-x:auto}
-    pre.preview{margin-top:10px;max-height:280px;overflow:auto;background:#f8f9fa;padding:10px;border:1px solid #eee;border-radius:8px;white-space:pre-wrap}
     table{width:100%;border-collapse:collapse}
-    th,td{padding:6px 8px;border-bottom:1px solid #eee;white-space:nowrap;font-size:13px}
+    th,td{border-bottom:1px solid #eee;padding:6px 8px;font-size:13px;white-space:nowrap}
     th{background:#fafafa;text-align:left}
+    .buy-row{background:#ffecec}
+    .sell-row{background:#ecffec}
     .pnl-pos{color:#d0021b;font-weight:600}
     .pnl-neg{color:#0f8a00;font-weight:600}
-    #chartBox{height:520px}
+    .chartbox{height:300px;margin-top:6px}
+    h1{margin:0 0 4px 0;font-size:32px;font-weight:800}
+    .subtitle{margin:2px 0 10px 0}
     .kpi-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
-    @media (max-width: 1024px){ .kpi-grid{grid-template-columns:1fr} }
+    @media (max-width:1024px){ .kpi-grid{grid-template-columns:1fr} }
+    .kv{display:grid;grid-template-columns:220px 1fr;gap:8px}
+    .kv .k{color:#111}
+    .kv .v{color:#333}
   </style>
-  <!-- 相依：Chart.js + Supabase（完全獨立，不相依 single.js/shared.js） -->
+
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 </head>
 <body>
   <div class="wrap">
-    <a class="btn btn-gray" href="index.html">← 返回首頁</a>
-    <h1 style="margin:12px 0 18px">股票｜雲端單檔分析（49 KPI）</h1>
+    <h1>股票-雲端單檔分析（KPI49）</h1>
+    <div class="subtitle muted sm">版權所有：<b>三劍客量化科技</b>（共同創辦人：<b>許夏睿、何冠緯、張宸</b>）　|　此頁僅供內部研究</div>
 
     <!-- 控制列 -->
-    <div class="row card">
-      <div class="row">
-        <button id="btn-clip" class="btn btn-gray">從剪貼簿貼上 TXT</button>
-        <input id="file" type="file" accept=".txt" />
-      </div>
-      <div class="chip">參數：
-        fee=<span id="p-fee">0.001425</span>、
-        minFee=<span id="p-min">20</span>、
-        tax=<span id="p-tax">0.003</span>、
-        unit=<span id="p-unit">1000</span>、
-        slip=<span id="p-slip">0</span>、
-        rf=<span id="p-rf">0</span>
-      </div>
+    <div class="card row">
+      <button id="btn-clip" class="btn gray">從剪貼簿貼上 TXT</button>
+      <input id="file" type="file" accept=".txt" />
+      <span class="muted sm">來源：canonical 或 1031-CSV（自動轉換）</span>
     </div>
 
-    <!-- 雲端讀檔 -->
+    <!-- 參數 chips -->
+    <div class="card row" id="chipsRow" style="gap:8px">
+      <span class="chip">手續費率：<span id="feeRateChip">—</span></span>
+      <span class="chip">交易稅率：<span id="taxRateChip">—</span></span>
+      <span class="chip">最低手續費：<span id="minFeeChip">—</span></span>
+      <span class="chip">單位股數：<span id="unitChip">—</span></span>
+      <span class="chip">滑價(每股)：<span id="slipChip">—</span></span>
+      <span class="chip">Rf：<span id="rfChip">—</span></span>
+    </div>
+
+    <!-- 雲端選檔 -->
     <div class="card" id="cloudPanel">
-      <h3 style="margin:0 0 8px 0;">從 Supabase（reports）選檔</h3>
+      <h3 style="margin:6px 0">從 Supabase（reports）選檔</h3>
       <div class="row">
-        <input id="cloudPrefix" class="ipt" placeholder="篩選資料夾（例：2025-11-01/）" />
-        <button id="btnCloudList" class="btn btn-primary">載入清單</button>
-        <select id="cloudSelect" class="sel"><option value="">（請先載入清單）</option></select>
-        <button id="btnCloudPreview" class="btn btn-gray">預覽</button>
-        <button id="btnCloudImport" class="btn btn-primary">載入到分析</button>
+        <input id="cloudPrefix" class="muted" placeholder="篩選資料夾（例：2025-11-01/）" style="padding:8px;border:1px solid #ddd;border-radius:8px" />
+        <button id="btnCloudList" class="btn">載入清單</button>
+        <select id="cloudSelect" style="min-width:320px;padding:8px;border:1px solid #ddd;border-radius:8px">
+          <option value="">（請先載入清單）</option>
+        </select>
+        <button id="btnCloudPreview" class="btn gray">預覽</button>
+        <button id="btnCloudImport" class="btn">載入到分析</button>
       </div>
-      <div id="cloudMeta" class="tiny" style="margin-top:6px;"></div>
-      <pre id="cloudPreview" class="preview"></pre>
-      <textarea id="cloudTxt" style="display:none"></textarea>
+      <div id="cloudMeta" class="muted sm" style="margin-top:6px;"></div>
+      <pre id="cloudPreview" class="muted" style="margin-top:8px;max-height:260px;overflow:auto;background:#f8f9fa;padding:10px;border:1px solid #eee;border-radius:8px;white-space:pre-wrap"></pre>
     </div>
 
-    <!-- 週次盈虧圖 -->
-    <div id="chartBox" class="card"><canvas id="chart"></canvas></div>
+    <!-- 週次盈虧圖（浮動長條 + 累積線） -->
+    <div class="card" id="weeklyCard">
+      <h3 style="margin:6px 0">每週獲利（浮動長條）＋累積獲利（折線）</h3>
+      <div class="chartbox"><canvas id="chWeekly"></canvas></div>
+    </div>
 
-    <!-- 49 KPI（分組表） -->
+    <!-- KPI（49 項，六組卡片） -->
     <div class="kpi-grid">
-      <div class="card scroll-x"><h3 style="margin:6px 0">Return</h3><div id="kpiReturn"></div></div>
-      <div class="card scroll-x"><h3 style="margin:6px 0">Risk</h3><div id="kpiRisk"></div></div>
-      <div class="card scroll-x"><h3 style="margin:6px 0">Efficiency</h3><div id="kpiEff"></div></div>
-      <div class="card scroll-x"><h3 style="margin:6px 0">Stability</h3><div id="kpiStab"></div></div>
-      <div class="card scroll-x"><h3 style="margin:6px 0">Cost / Activity</h3><div id="kpiCost"></div></div>
-      <div class="card scroll-x"><h3 style="margin:6px 0">Distribution</h3><div id="kpiDist"></div></div>
+      <div class="card"><h3 style="margin:6px 0">Return</h3><div id="kpiReturn" class="kv"></div></div>
+      <div class="card"><h3 style="margin:6px 0">Risk</h3><div id="kpiRisk" class="kv"></div></div>
+      <div class="card"><h3 style="margin:6px 0">Efficiency</h3><div id="kpiEff" class="kv"></div></div>
+      <div class="card"><h3 style="margin:6px 0">Stability</h3><div id="kpiStab" class="kv"></div></div>
+      <div class="card"><h3 style="margin:6px 0">Cost / Activity</h3><div id="kpiCost" class="kv"></div></div>
+      <div class="card"><h3 style="margin:6px 0">Distribution</h3><div id="kpiDist" class="kv"></div></div>
     </div>
 
     <!-- 交易明細 -->
-    <div class="card scroll-x">
+    <div class="card">
       <h3 style="margin:6px 0">交易明細（BUY/SELL 以實際費稅計）</h3>
-      <table id="tradeTable"><thead></thead><tbody></tbody></table>
+      <div class="scroll-x"><table id="tradeTable"><thead></thead><tbody></tbody></table></div>
     </div>
   </div>
 
-  <script src="stock-single-cloud.js?v=stock-kpi49-v1"></script>
+  <script src="stock-single-cloud.js?v=kpi49-tw1031-skin-v2"></script>
 </body>
 </html>
