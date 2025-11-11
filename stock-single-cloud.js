@@ -1,4 +1,5 @@
-// 股票｜雲端單檔分析（KPI49，0807表格樣式，ES5安全版）
+// 股票｜雲端單檔分析（KPI49，0807表格樣式，tw-1031 明細口徑，ES5 安全版）
+// 用法：stock-single-cloud.html 直接引入本檔（建議附 ?v=kpi49-table-v7 清快取）
 (function(){
   'use strict';
 
@@ -165,38 +166,66 @@
     return out;
   }
 
-  // ---------- 回測（股票口徑） ----------
-  var d8=function(ts){ return ts.slice(0,8); };
-  var fee=function(amount){ return Math.max(CFG.minFee, Math.ceil(amount*CFG.feeRate)); };
-  var tax=function(amount){ return Math.max(0, Math.ceil(amount*CFG.taxRate)); };
-  function weekKey(day){
-    var dt=new Date(day.slice(0,4)+'-'+day.slice(4,6)+'-'+day.slice(6,8)+'T00:00:00');
-    var y=dt.getFullYear(), oneJan=new Date(y,0,1);
-    var week=Math.ceil((((dt-oneJan)/86400000)+oneJan.getDay()+1)/7);
-    return y+'-W'+(week<10?('0'+week):week);
-  }
+  // ===== 回測（股票口徑｜輸出欄位與 tw-1031 一致） =====
   function backtest(rows){
     var shares=0, cash=CFG.capital, cumCost=0, pnlCum=0;
     var trades=[], weeks=new Map(), dayPnL=new Map();
+
     for(var i=0;i<rows.length;i++){
       var r=rows[i];
+
       if(r.act==='新買'){
-        var px=r.px+CFG.slip, amt=px*CFG.unit, f=fee(amt);
-        if(cash>=amt+f){
-          cash-=(amt+f); shares+=CFG.unit; cumCost+=(amt+f);
-          trades.push({ts:r.ts, kind:'BUY', px:px, shares:CFG.unit, fee:f, tax:0, cash:cash, pnl:null, pnlCum:pnlCum, d8:d8(r.ts)});
+        var px  = r.px + CFG.slip;
+        var amt = px * CFG.unit;                 // 買進金額(不含手續費)
+        var f   = fee(amt);                      // 手續費(買)
+        var cost= amt + f;                       // 成本(本筆)
+        if(cash >= cost){
+          cash    -= cost;
+          shares  += CFG.unit;
+          cumCost += cost;                       // 累計成本(僅買方手續費)
+          var costAvgDisp = cumCost / shares;    // 成本均價(顯示用)
+
+          trades.push({
+            ts:r.ts, kind:'BUY', price:px, shares:CFG.unit,
+            buyAmount:amt, sellAmount:0, fee:f, tax:0,
+            cost:cost, costAvgDisp:costAvgDisp, cumCost:cumCost,
+            cumCostDisp:null, priceDiff:null, pnlFull:null, retPctUnit:null, cumPnlFull:pnlCum
+          });
         }
+
       }else if(r.act==='平賣' && shares>0){
-        var sp=r.px-CFG.slip, sam=sp*shares, ff=fee(sam), tt=tax(sam);
-        cash += (sam-ff-tt);
-        var avg=cumCost/shares, pnl=(sam-ff-tt) - avg*shares; pnlCum+=pnl;
-        var day=d8(r.ts);
-        dayPnL.set(day,(dayPnL.get(day)||0)+pnl);
-        var wk=weekKey(day); weeks.set(wk,(weeks.get(wk)||0)+pnl);
-        trades.push({ts:r.ts, kind:'SELL', px:sp, shares:shares, fee:ff, tax:tt, cash:cash, pnl:pnl, pnlCum:pnlCum, d8:day});
+        var spx = r.px - CFG.slip;
+        var sam = spx * shares;                 // 賣出金額(不含費稅)
+        var ff  = fee(sam);                      // 手續費(賣)
+        var tt  = tax(sam);                      // 交易稅(賣)
+        cash   += (sam - ff - tt);
+
+        var sellCumCostDisp = cumCost + ff + tt; // 顯示「累計成本」= 買進累計成本 + 賣方手續費+稅
+        var sellCostAvgDisp = sellCumCostDisp / shares;
+        var buyCostAvgBase  = cumCost / shares;
+        var priceDiff       = sellCostAvgDisp - buyCostAvgBase;
+        var pnlFull         = (sam - ff - tt) - cumCost;
+        pnlCum += pnlFull;
+
+        // 週次/日損益入帳（以賣出時點）
+        var day = d8(r.ts);
+        dayPnL.set(day,(dayPnL.get(day)||0)+pnlFull);
+        var wk = weekKey(day);
+        weeks.set(wk,(weeks.get(wk)||0)+pnlFull);
+
+        trades.push({
+          ts:r.ts, kind:'SELL', price:spx, shares:shares,
+          buyAmount:0, sellAmount:sam, fee:ff, tax:tt,
+          cost:0, costAvgDisp:sellCostAvgDisp, cumCost:cumCost,
+          cumCostDisp:sellCumCostDisp, priceDiff:priceDiff,
+          pnlFull:pnlFull, retPctUnit: sellCumCostDisp>0 ? (pnlFull/sellCumCostDisp) : null, cumPnlFull:pnlCum
+        });
+
+        // 歸零
         shares=0; cumCost=0;
       }
     }
+
     return { trades:trades, weeks:weeks, dayPnL:dayPnL, endingCash:cash, openShares:shares, pnlCum:pnlCum };
   }
 
@@ -231,44 +260,24 @@
     if(cur>0) totalTU+=cur;
     return { maxTU:maxTU, totalTU:totalTU };
   }
-  function ulcerIndex(eq){
-    var peak=eq[0]||0, sum=0, i;
-    for(i=0;i<eq.length;i++){ if(eq[i]>peak) peak=eq[i]; var d=eq[i]-peak; sum+=d*d; }
-    return Math.sqrt(sum/Math.max(1,eq.length));
-  }
+  function ulcerIndex(eq){ var peak=eq[0]||0,sum=0,i; for(i=0;i<eq.length;i++){ if(eq[i]>peak) peak=eq[i]; var d=eq[i]-peak; sum+=d*d; } return Math.sqrt(sum/Math.max(1,eq.length)); }
   function martin(eq){ var ui=ulcerIndex(eq); var last=eq.length?eq[eq.length-1]:0; return ui>0? last/ui : 0; }
   function downsideStd(rets){
-    var n=rets.length,i,neg=new Array(n);
-    for(i=0;i<n;i++) neg[i]=Math.min(0,rets[i]);
+    var n=rets.length,i,neg=new Array(n); for(i=0;i<n;i++) neg[i]=Math.min(0,rets[i]);
     var mean=0; for(i=0;i<n;i++) mean+=neg[i]; mean/=n;
-    var varD=0; for(i=0;i<n;i++) varD+=Math.pow(Math.min(0,rets[i])-mean,2); varD/=n;
-    return Math.sqrt(varD);
+    var varD=0; for(i=0;i<n;i++) varD+=Math.pow(Math.min(0,rets[i])-mean,2); varD/=n; return Math.sqrt(varD);
   }
   function sharpe(annRet, annVol, rf){ return annVol>0 ? (annRet-rf)/annVol : 0; }
   function sortino(annRet, annDown, rf){ return annDown>0 ? (annRet-rf)/annDown : 0; }
   function calmar(annRet, mdd){ return mdd<0 ? (annRet/Math.abs(mdd)) : 0; }
-  function omega(rets, thr){
-    if(thr===void 0) thr=0;
-    var pos=0,neg=0,i,r;
-    for(i=0;i<rets.length;i++){ r=rets[i]; if(r>thr) pos+=r-thr; else neg+=thr-r; }
-    return neg>0? pos/neg : Infinity;
-  }
-  function streaks(arr){
-    var win=0,loss=0,maxW=0,maxL=0,i,x;
-    for(i=0;i<arr.length;i++){
-      x=arr[i];
-      if(x>0){ win++; loss=0; if(win>maxW) maxW=win; }
-      else if(x<0){ loss++; win=0; if(loss>maxL) maxL=loss; }
-      else{ win=0; loss=0; }
-    }
-    return { maxWinStreak:maxW, maxLossStreak:maxL };
-  }
+  function omega(rets,thr){ if(thr===void 0) thr=0; var pos=0,neg=0,i,r; for(i=0;i<rets.length;i++){ r=rets[i]; if(r>thr) pos+=r-thr; else neg+=thr-r; } return neg>0? pos/neg : Infinity; }
+  function streaks(arr){ var win=0,loss=0,maxW=0,maxL=0,i,x; for(i=0;i<arr.length;i++){ x=arr[i]; if(x>0){ win++; loss=0; if(win>maxW) maxW=win; } else if(x<0){ loss++; win=0; if(loss>maxL) maxL=loss; } else { win=0; loss=0; } } return {maxWinStreak:maxW,maxLossStreak:maxL}; }
 
   function computeKPI(bt){
     var sells=bt.trades.filter(function(x){return x.kind==='SELL';});
-    var tradePnl=sells.map(function(x){return x.pnl||0;});
-    var S=seriesFromDayPnL(bt.dayPnL), days=S.days, eqIncr=S.pnl, eq=S.eq;
+    var tradePnl=sells.map(function(x){return x.pnlFull||x.pnl||0;});
 
+    var S=seriesFromDayPnL(bt.dayPnL), days=S.days, eqIncr=S.pnl, eq=S.eq;
     var annualFactor=252;
     var total = eq.length? eq[eq.length-1] : 0;
     var totalReturn = CFG.capital? total/CFG.capital : 0;
@@ -283,10 +292,10 @@
     var sr=sharpe(annRet,annVol,CFG.rf), so=sortino(annRet,dStd,CFG.rf);
     var cal=calmar(annRet,mdd), mar=annRet/Math.max(1,Math.abs(mdd)), mart=martin(eq), omg=omega(dailyRet,0);
 
-    var nTrades=sells.length, hits=sells.filter(function(s){return s.pnl>0;}).length;
+    var nTrades=sells.length, hits=sells.filter(function(s){return (s.pnlFull||s.pnl||0)>0;}).length;
     var hitRate=nTrades? hits/nTrades : 0;
-    var grossWin=sells.filter(function(s){return s.pnl>0;}).reduce(function(a,b){return a+b.pnl;},0);
-    var grossLoss=sells.filter(function(s){return s.pnl<0;}).reduce(function(a,b){return a+b.pnl;},0);
+    var grossWin=sells.filter(function(s){return (s.pnlFull||s.pnl||0)>0;}).reduce(function(a,b){return a+(b.pnlFull||b.pnl||0);},0);
+    var grossLoss=sells.filter(function(s){return (s.pnlFull||s.pnl||0)<0;}).reduce(function(a,b){return a+(b.pnlFull||b.pnl||0);},0);
     var pf=grossLoss<0? (grossWin/Math.abs(grossLoss)) : (grossWin>0?Infinity:0);
     var avgWin=hits? grossWin/hits : 0;
     var avgLoss=(nTrades-hits)? Math.abs(grossLoss)/(nTrades-hits) : 0;
@@ -300,19 +309,14 @@
 
     var TU=timeUnderwater(eq), ST=streaks(tradePnl);
 
-    var grossBuy=bt.trades.filter(function(t){return t.kind==='BUY';}).reduce(function(a,b){return a+b.px*b.shares;},0);
-    var grossSell=bt.trades.filter(function(t){return t.kind==='SELL';}).reduce(function(a,b){return a+b.px*b.shares;},0);
+    var grossBuy=bt.trades.filter(function(t){return t.kind==='BUY';}).reduce(function(a,b){return a+b.price*b.shares;},0);
+    var grossSell=bt.trades.filter(function(t){return t.kind==='SELL';}).reduce(function(a,b){return a+b.price*b.shares;},0);
     var feeSum=bt.trades.reduce(function(a,b){return a+(b.fee||0);},0);
     var taxSum=bt.trades.reduce(function(a,b){return a+(b.tax||0);},0);
     var turnover=CFG.capital? (grossBuy+grossSell)/CFG.capital : 0;
     var costRatio=(grossBuy+grossSell)>0? (feeSum+taxSum)/(grossBuy+grossSell) : 0;
     var avgTrade=nTrades? tradePnl.reduce(function(a,b){return a+b;},0)/nTrades : 0;
-    var medTrade=(function(){
-      var s=[].concat(tradePnl).sort(function(a,b){return a-b;});
-      if(!s.length) return 0;
-      var m=Math.floor(s.length/2);
-      return s.length%2? s[m] : (s[m-1]+s[m])/2;
-    })();
+    var medTrade=(function(){ var s=[].concat(tradePnl).sort(function(a,b){return a-b;}); if(!s.length) return 0; var m=Math.floor(s.length/2); return s.length%2? s[m] : (s[m-1]+s[m])/2; })();
 
     return {
       // Return (8)
@@ -466,19 +470,61 @@
     ]);
   }
 
-  // ---------- 交易明細 ----------
-  function renderTrades(t){
-    var th=$('#tradeTable thead'), tb=$('#tradeTable tbody');
-    th.innerHTML='<tr><th>時間</th><th>種類</th><th>價格</th><th>股數</th><th>手續費</th><th>交易稅</th><th>現金餘額</th><th>單筆損益</th><th>累積損益</th></tr>';
-    var i,r,rows='';
-    for(i=0;i<t.length;i++){
-      r=t[i];
-      rows+='<tr><td>'+r.ts+'</td><td>'+r.kind+'</td><td>'+r.px.toFixed(3)+'</td><td>'+r.shares+'</td>'
-           +'<td>'+(r.fee||0)+'</td><td>'+(r.tax||0)+'</td><td>'+fmtInt(r.cash)+'</td>'
-           +'<td>'+(r.pnl==null?'—':(r.pnl>0?'<span class="pnl-pos">'+fmtInt(r.pnl)+'</span>':'<span class="pnl-neg">'+fmtInt(r.pnl)+'</span>'))+'</td>'
-           +'<td>'+(r.pnlCum==null?'—':(r.pnlCum>0?'<span class="pnl-pos">'+fmtInt(r.pnlCum)+'</span>':'<span class="pnl-neg">'+fmtInt(r.pnlCum)+'</span>'))+'</td></tr>';
+  // ===== 交易明細（同圖1：tw-1031 風格） =====
+  function renderTrades(list){
+    var th = document.querySelector('#tradeTable thead');
+    var tb = document.querySelector('#tradeTable tbody');
+    if(!th || !tb) return;
+
+    th.innerHTML = ''
+      + '<tr>'
+      +   '<th>日期</th><th>種類</th><th>成交價格</th><th>成交數量</th>'
+      +   '<th>買進金額</th><th>賣出金額</th><th>手續費</th><th>交易稅</th>'
+      +   '<th>成本</th><th>成本均價</th><th>累計成本</th><th>價格差</th>'
+      +   '<th>損益</th><th>報酬率</th><th>累計損益</th>'
+      + '</tr>';
+
+    var html='', i, e, isSell, pnlCell, cumCell, retCell, priceDiffCell, costAvgCell, cumCostCell, costCell,
+        buyAmtCell, sellAmtCell, ts;
+
+    for(i=0;i<list.length;i++){
+      e = list[i];
+      isSell = e.kind === 'SELL';
+      ts = e.ts;
+
+      buyAmtCell   = fmtInt(e.buyAmount || 0);
+      sellAmtCell  = fmtInt(e.sellAmount || 0);
+      costCell     = fmtInt(e.cost || 0);
+      costAvgCell  = (e.costAvgDisp!=null) ? Number(e.costAvgDisp).toFixed(2) : '—';
+      cumCostCell  = isSell ? fmtInt(e.cumCostDisp!=null?e.cumCostDisp:(e.cumCost + (e.fee||0) + (e.tax||0))) : fmtInt(e.cumCost || 0);
+      priceDiffCell= isSell && e.priceDiff!=null ? e.priceDiff.toFixed(2) : '—';
+      pnlCell      = (isSell && e.pnlFull!=null) ? (e.pnlFull>0 ? '<span class="pnl-pos">'+fmtInt(e.pnlFull)+'</span>' : '<span class="pnl-neg">'+fmtInt(e.pnlFull)+'</span>') : '—';
+      retCell      = (isSell && e.retPctUnit!=null) ? (e.retPctUnit*100).toFixed(2)+'%' : '—';
+      cumCell      = (isSell && e.cumPnlFull!=null) ? (e.cumPnlFull>0 ? '<span class="pnl-pos">'+fmtInt(e.cumPnlFull)+'</span>' : '<span class="pnl-neg">'+fmtInt(e.cumPnlFull)+'</span>') : '—';
+
+      html += ''
+        + '<tr class="'+(isSell?'sell-row':'buy-row')+'">'
+        +   '<td>'+ ts.slice(0,4)+'/'+ts.slice(4,6)+'/'+ts.slice(6,8)+' '+ts.slice(8,10)+':'+ts.slice(10,12) +'</td>'
+        +   '<td>'+ (isSell?'賣出':'買進') +'</td>'
+        +   '<td>'+ Number(e.price).toFixed(2) +'</td>'
+        +   '<td>'+ fmtInt(e.shares || 0) +'</td>'
+
+        +   '<td>'+ buyAmtCell +'</td>'
+        +   '<td>'+ sellAmtCell +'</td>'
+        +   '<td>'+ fmtInt(e.fee || 0) +'</td>'
+        +   '<td>'+ fmtInt(e.tax || 0) +'</td>'
+
+        +   '<td>'+ costCell +'</td>'
+        +   '<td>'+ costAvgCell +'</td>'
+        +   '<td>'+ cumCostCell +'</td>'
+        +   '<td>'+ priceDiffCell +'</td>'
+
+        +   '<td>'+ pnlCell +'</td>'
+        +   '<td>'+ retCell +'</td>'
+        +   '<td>'+ cumCell +'</td>'
+        + '</tr>';
     }
-    tb.innerHTML=rows;
+    tb.innerHTML = html;
   }
 
   // ---------- 主流程 ----------
