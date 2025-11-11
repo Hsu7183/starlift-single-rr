@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>股票｜雲端單檔分析</title>
+  <title>股票｜雲端單檔分析（49 KPI）</title>
   <style>
     body{font-family:ui-sans-serif,system-ui;-webkit-font-smoothing:antialiased;margin:0;padding:16px;background:#f7f7fb;color:#222}
     .wrap{max-width:1440px;margin:0 auto}
@@ -16,20 +16,25 @@
     .sel{min-width:320px;padding:8px;border:1px solid #ddd;border-radius:8px}
     .ipt{padding:8px;border:1px solid #ddd;border-radius:8px}
     .tiny{font-size:12px;color:#666}
-    pre.preview{margin-top:10px;max-height:280px;overflow:auto;background:#f8f9fa;padding:10px;border:1px solid #eee;border-radius:8px;white-space:pre-wrap}
     .scroll-x{overflow-x:auto}
+    pre.preview{margin-top:10px;max-height:280px;overflow:auto;background:#f8f9fa;padding:10px;border:1px solid #eee;border-radius:8px;white-space:pre-wrap}
     table{width:100%;border-collapse:collapse}
-    th,td{padding:6px 8px;border-bottom:1px solid #eee;white-space:nowrap}
+    th,td{padding:6px 8px;border-bottom:1px solid #eee;white-space:nowrap;font-size:13px}
+    th{background:#fafafa;text-align:left}
+    .pnl-pos{color:#d0021b;font-weight:600}
+    .pnl-neg{color:#0f8a00;font-weight:600}
     #chartBox{height:520px}
+    .kpi-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+    @media (max-width: 1024px){ .kpi-grid{grid-template-columns:1fr} }
   </style>
-  <!-- 相依：僅 Chart.js + Supabase（不相依 single.js/shared.js） -->
+  <!-- 相依：Chart.js + Supabase（完全獨立，不相依 single.js/shared.js） -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 </head>
 <body>
   <div class="wrap">
     <a class="btn btn-gray" href="index.html">← 返回首頁</a>
-    <h1 style="margin:12px 0 18px">股票｜雲端單檔分析</h1>
+    <h1 style="margin:12px 0 18px">股票｜雲端單檔分析（49 KPI）</h1>
 
     <!-- 控制列 -->
     <div class="row card">
@@ -42,7 +47,8 @@
         minFee=<span id="p-min">20</span>、
         tax=<span id="p-tax">0.003</span>、
         unit=<span id="p-unit">1000</span>、
-        slip=<span id="p-slip">0</span>
+        slip=<span id="p-slip">0</span>、
+        rf=<span id="p-rf">0</span>
       </div>
     </div>
 
@@ -64,17 +70,23 @@
     <!-- 週次盈虧圖 -->
     <div id="chartBox" class="card"><canvas id="chart"></canvas></div>
 
-    <!-- KPI -->
-    <div id="kpi" class="card scroll-x"></div>
+    <!-- 49 KPI（分組表） -->
+    <div class="kpi-grid">
+      <div class="card scroll-x"><h3 style="margin:6px 0">Return</h3><div id="kpiReturn"></div></div>
+      <div class="card scroll-x"><h3 style="margin:6px 0">Risk</h3><div id="kpiRisk"></div></div>
+      <div class="card scroll-x"><h3 style="margin:6px 0">Efficiency</h3><div id="kpiEff"></div></div>
+      <div class="card scroll-x"><h3 style="margin:6px 0">Stability</h3><div id="kpiStab"></div></div>
+      <div class="card scroll-x"><h3 style="margin:6px 0">Cost / Activity</h3><div id="kpiCost"></div></div>
+      <div class="card scroll-x"><h3 style="margin:6px 0">Distribution</h3><div id="kpiDist"></div></div>
+    </div>
 
     <!-- 交易明細 -->
     <div class="card scroll-x">
-      <table id="tradeTable">
-        <thead></thead><tbody></tbody>
-      </table>
+      <h3 style="margin:6px 0">交易明細（BUY/SELL 以實際費稅計）</h3>
+      <table id="tradeTable"><thead></thead><tbody></tbody></table>
     </div>
   </div>
 
-  <script src="stock-single-cloud.js?v=stock-v1"></script>
+  <script src="stock-single-cloud.js?v=stock-kpi49-v1"></script>
 </body>
 </html>
