@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>股票-雲端單檔分析（KPI49）</title>
   <style>
-    body{font-family:ui-sans-serif,system-ui;-webkit-font-smoothing:antialiased;margin:0;padding:16px;background:#f7f7fb;color:#222}
+    body{font-family:ui-sans-serif,system-ui;-webkit-font-smoothing:antialiased;margin:0;padding:16px;background:#f7f7fb}
     .wrap{max-width:1440px;margin:0 auto}
     .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
     .chip{display:inline-block;background:#eef;padding:6px 10px;border-radius:999px;font-size:12px}
@@ -19,37 +19,31 @@
     table{width:100%;border-collapse:collapse}
     th,td{border-bottom:1px solid #eee;padding:6px 8px;font-size:13px;white-space:nowrap}
     th{background:#fafafa;text-align:left}
-    .buy-row{background:#ffecec}
-    .sell-row{background:#ecffec}
-    .pnl-pos{color:#d0021b;font-weight:600}
-    .pnl-neg{color:#0f8a00;font-weight:600}
-    .chartbox{height:300px;margin-top:6px}
     h1{margin:0 0 4px 0;font-size:32px;font-weight:800}
     .subtitle{margin:2px 0 10px 0}
-    .kpi-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
-    @media (max-width:1024px){ .kpi-grid{grid-template-columns:1fr} }
+    .chartbox{height:300px;margin-top:6px}
+    .back{margin-bottom:12px;display:inline-block}
+    .pnl-pos{color:#d0021b;font-weight:600}
+    .pnl-neg{color:#0f8a00;font-weight:600}
+    .section-title{font-weight:800;margin:6px 0}
     .kv{display:grid;grid-template-columns:220px 1fr;gap:8px}
-    .kv .k{color:#111}
-    .kv .v{color:#333}
+    .hl-red{background:#ffecec}
+    .ok-row{background:#f4fff8}
+    .improve-row{background:#fff5f5}
   </style>
-
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 </head>
 <body>
   <div class="wrap">
+    <a class="back" href="index.html">← 返回首頁</a>
     <h1>股票-雲端單檔分析（KPI49）</h1>
-    <div class="subtitle muted sm">版權所有：<b>三劍客量化科技</b>（共同創辦人：<b>許夏睿、何冠緯、張宸</b>）　|　此頁僅供內部研究</div>
+    <div class="subtitle muted sm">來源：canonical 或 1031-CSV（自動轉換）｜本頁僅供內部研究</div>
 
     <!-- 控制列 -->
     <div class="card row">
       <button id="btn-clip" class="btn gray">從剪貼簿貼上 TXT</button>
       <input id="file" type="file" accept=".txt" />
-      <span class="muted sm">來源：canonical 或 1031-CSV（自動轉換）</span>
-    </div>
-
-    <!-- 參數 chips -->
-    <div class="card row" id="chipsRow" style="gap:8px">
       <span class="chip">手續費率：<span id="feeRateChip">—</span></span>
       <span class="chip">交易稅率：<span id="taxRateChip">—</span></span>
       <span class="chip">最低手續費：<span id="minFeeChip">—</span></span>
@@ -59,8 +53,8 @@
     </div>
 
     <!-- 雲端選檔 -->
-    <div class="card" id="cloudPanel">
-      <h3 style="margin:6px 0">從 Supabase（reports）選檔</h3>
+    <div class="card">
+      <h3 class="section-title">從 Supabase（reports）選檔</h3>
       <div class="row">
         <input id="cloudPrefix" class="muted" placeholder="篩選資料夾（例：2025-11-01/）" style="padding:8px;border:1px solid #ddd;border-radius:8px" />
         <button id="btnCloudList" class="btn">載入清單</button>
@@ -74,29 +68,58 @@
       <pre id="cloudPreview" class="muted" style="margin-top:8px;max-height:260px;overflow:auto;background:#f8f9fa;padding:10px;border:1px solid #eee;border-radius:8px;white-space:pre-wrap"></pre>
     </div>
 
-    <!-- 週次盈虧圖（浮動長條 + 累積線） -->
-    <div class="card" id="weeklyCard">
-      <h3 style="margin:6px 0">每週獲利（浮動長條）＋累積獲利（折線）</h3>
+    <!-- 週次盈虧圖 -->
+    <div class="card">
+      <h3 class="section-title">每週獲利（浮動長條）＋累積獲利（折線）</h3>
       <div class="chartbox"><canvas id="chWeekly"></canvas></div>
     </div>
 
-    <!-- KPI（49 項，六組卡片） -->
-    <div class="kpi-grid">
-      <div class="card"><h3 style="margin:6px 0">Return</h3><div id="kpiReturn" class="kv"></div></div>
-      <div class="card"><h3 style="margin:6px 0">Risk</h3><div id="kpiRisk" class="kv"></div></div>
-      <div class="card"><h3 style="margin:6px 0">Efficiency</h3><div id="kpiEff" class="kv"></div></div>
-      <div class="card"><h3 style="margin:6px 0">Stability</h3><div id="kpiStab" class="kv"></div></div>
-      <div class="card"><h3 style="margin:6px 0">Cost / Activity</h3><div id="kpiCost" class="kv"></div></div>
-      <div class="card"><h3 style="margin:6px 0">Distribution</h3><div id="kpiDist" class="kv"></div></div>
+    <!-- 建議優先指標 -->
+    <div class="card">
+      <h3 class="section-title">建議優先指標</h3>
+      <div class="scroll-x">
+        <table id="kpiTop">
+          <thead>
+            <tr><th>指標</th><th>數值</th><th>建議</th><th>機構評語</th><th>參考區間</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- KPI 表（49 項分組） -->
+    <div class="card">
+      <h3 class="section-title">一、報酬（Return）</h3>
+      <div class="scroll-x"><table id="kpiReturn"><thead></thead><tbody></tbody></table></div>
+    </div>
+    <div class="card">
+      <h3 class="section-title">二、風險（Risk）</h3>
+      <div class="scroll-x"><table id="kpiRisk"><thead></thead><tbody></tbody></table></div>
+    </div>
+    <div class="card">
+      <h3 class="section-title">三、效率（Efficiency）</h3>
+      <div class="scroll-x"><table id="kpiEff"><thead></thead><tbody></tbody></table></div>
+    </div>
+    <div class="card">
+      <h3 class="section-title">四、穩定度（Stability）</h3>
+      <div class="scroll-x"><table id="kpiStab"><thead></thead><tbody></tbody></table></div>
+    </div>
+    <div class="card">
+      <h3 class="section-title">五、成本 / 交易活性（Cost / Activity）</h3>
+      <div class="scroll-x"><table id="kpiCost"><thead></thead><tbody></tbody></table></div>
+    </div>
+    <div class="card">
+      <h3 class="section-title">六、分布（Distribution）</h3>
+      <div class="scroll-x"><table id="kpiDist"><thead></thead><tbody></tbody></table></div>
     </div>
 
     <!-- 交易明細 -->
     <div class="card">
-      <h3 style="margin:6px 0">交易明細（BUY/SELL 以實際費稅計）</h3>
+      <h3 class="section-title">交易明細（BUY/SELL 以實際費稅計）</h3>
       <div class="scroll-x"><table id="tradeTable"><thead></thead><tbody></tbody></table></div>
     </div>
   </div>
 
-  <script src="stock-single-cloud.js?v=kpi49-tw1031-skin-v2"></script>
+  <script src="stock-single-cloud.js?v=kpi49-table-v5"></script>
 </body>
 </html>
