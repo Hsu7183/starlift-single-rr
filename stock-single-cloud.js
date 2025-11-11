@@ -1,4 +1,4 @@
-// 股票｜雲端單檔分析（KPI49，0807 表格樣式，tw-1031 明細口徑，ES5 相容）
+// 股票｜雲端單檔分析（KPI49，對齊 tw-1031 明細口徑；修正價格差與進位誤差）
 (function(){
   'use strict';
 
@@ -161,7 +161,7 @@
     return out;
   }
 
-  // ===== 手續費/稅（先定義，避免未定義錯誤） =====
+  // ===== 手續費/稅（整數進位 + 最低手續費） =====
   function fee(amount){ return Math.max(CFG.minFee, Math.ceil(amount*CFG.feeRate)); }
   function tax(amount){ return Math.max(0, Math.ceil(amount*CFG.taxRate)); }
 
@@ -174,15 +174,15 @@
       var r=rows[i];
 
       if(r.act==='新買'){
-        var px  = r.px + CFG.slip;
-        var amt = px * CFG.unit;               // 買進金額(不含手續費)
-        var f   = fee(amt);                    // 手續費(買)
-        var cost= amt + f;                     // 成本(本筆)
+        var px  = r.px + CFG.slip;                  // 滑價加在成交價（買）
+        var amt = px * CFG.unit;                    // 買進金額(不含手續費)
+        var f   = fee(amt);                         // 手續費(買)
+        var cost= amt + f;                          // 成本(本筆)
         if(cash >= cost){
           cash    -= cost;
           shares  += CFG.unit;
-          cumCost += cost;                     // 累計成本(僅買方手續費)
-          var costAvgDisp = cumCost / shares;  // 成本均價(顯示用)
+          cumCost += cost;                          // 累計成本(僅買方手續費)
+          var costAvgDisp = cumCost / shares;       // 成本均價(顯示用)
 
           trades.push({
             ts:r.ts, kind:'BUY', price:px, shares:CFG.unit,
@@ -193,20 +193,24 @@
         }
 
       }else if(r.act==='平賣' && shares>0){
-        var spx = r.px - CFG.slip;
-        var sam = spx * shares;               // 賣出金額(不含費稅)
-        var ff  = fee(sam);                    // 手續費(賣)
-        var tt  = tax(sam);                    // 交易稅(賣)
+        var spx = r.px - CFG.slip;                  // 滑價減在成交價（賣）
+        var sam = spx * shares;                     // 賣出金額(不含費稅)
+        var ff  = fee(sam);                         // 手續費(賣)
+        var tt  = tax(sam);                         // 交易稅(賣)
         cash   += (sam - ff - tt);
 
-        var sellCumCostDisp = cumCost + ff + tt; // 顯示「累計成本」= 買進累計成本 + 賣方費+稅
+        // 顯示口徑（對齊 1031）
+        var sellCumCostDisp = cumCost + ff + tt;    // SELL 顯示「累計成本」
         var sellCostAvgDisp = sellCumCostDisp / shares;
         var buyCostAvgBase  = cumCost / shares;
-        var priceDiff       = sellCostAvgDisp - buyCostAvgBase;
-        var pnlFull         = (sam - ff - tt) - cumCost;
+
+        // === 修正：價格差 = (賣方費+稅)/股數（避免四捨五入序造成誤差） ===
+        var priceDiff       = ((ff + tt) / shares);
+
+        var pnlFull         = (sam - ff - tt) - cumCost;  // 稅後損益（對齊 1031）
         pnlCum += pnlFull;
 
-        // 週次/日損益（以賣出時點入帳）
+        // 週次/日損益入帳在賣出日
         var day = r.ts.slice(0,8);
         dayPnL.set(day,(dayPnL.get(day)||0)+pnlFull);
         var wkKey = weekKey(day);
@@ -397,13 +401,11 @@
   }
 
   function renderKPI(k){
-    // Top 建議 3 指標
     var tbTop=$('#kpiTop tbody');
     tbTop.innerHTML = trHTML('波動率（Volatility, ann.）', {disp:pct(k.annVol),raw:k.annVol}, 'annVol', '愈低愈好 ≤15%')
                    + trHTML('PF（獲利因子）', {disp:(isFinite(k.pf)?k.pf.toFixed(2):'∞'),raw:k.pf}, 'pf', '愈高愈好 ≥1.5')
                    + trHTML('最大回撤（MaxDD）', {disp:fmtInt(k.mdd),raw:Math.abs(k.mdd)/CFG.capital}, 'mdd', '相對資本 ≤15%');
 
-    // Return（8）
     fillTable('#kpiReturn', [
       ['總報酬（Total Return）', {disp:pct(k.totalReturn), raw:k.totalReturn}, 'totalReturn', '—'],
       ['CAGR（年化報酬）',       {disp:pct(k.annRet),      raw:k.annRet},      'annRet',      '≥10%'],
@@ -414,8 +416,6 @@
       ['最差週損益',             {disp:fmtInt(k.worstWeek),raw:k.worstWeek},   'worstWeek',   '—'],
       ['Payoff（AvgWin/AvgLoss）',{disp:(isFinite(k.payoff)?k.payoff.toFixed(2):'∞'), raw:k.payoff}, 'payoff', '≥1.2']
     ]);
-
-    // Risk（9）
     fillTable('#kpiRisk', [
       ['最大回撤（MaxDD）',           {disp:fmtInt(k.mdd),    raw:Math.abs(k.mdd)/CFG.capital}, 'mdd',        '≤15%資本'],
       ['水下時間 MaxTU（天）',        {disp:k.maxTU,          raw:k.maxTU},                      'maxTU',      '愈低愈好'],
@@ -427,8 +427,6 @@
       ['每日最差報酬',               {disp:pct(k.min),       raw:k.min},                       'min',        '—'],
       ['每日最佳報酬',               {disp:pct(k.max),       raw:k.max},                       'max',        '—']
     ]);
-
-    // Efficiency（9）
     fillTable('#kpiEff', [
       ['Sharpe',    {disp:k.sr.toFixed(2),  raw:k.sr},  'sr',  '≥1.5'],
       ['Sortino',   {disp:k.so.toFixed(2),  raw:k.so},  'so',  '≥1.5'],
@@ -440,8 +438,6 @@
       ['Avg Win',   {disp:fmtInt(k.avgWin), raw:k.avgWin}, 'avgWin', '—'],
       ['Avg Loss',  {disp:fmtInt(-k.avgLoss), raw:-k.avgLoss}, 'avgLoss', '—']
     ]);
-
-    // Stability（7）
     fillTable('#kpiStab', [
       ['Max Win Streak',  {disp:k.maxWinStreak, raw:k.maxWinStreak}, 'maxWinStreak',  '愈高愈好'],
       ['Max Loss Streak', {disp:k.maxLossStreak,raw:k.maxLossStreak}, 'maxLossStreak', '愈低愈好'],
@@ -451,8 +447,6 @@
       ['Weekly PnL Vol',  {disp:fmtInt(k.volWeekly), raw:k.volWeekly},'volWeekly',     '愈低愈好'],
       ['Daily Std',       {disp:pct(k.std), raw:k.std},               'std',           '愈低愈好']
     ]);
-
-    // Cost / Activity（8）
     fillTable('#kpiCost', [
       ['Gross Buy',   {disp:fmtInt(k.grossBuy),  raw:k.grossBuy},  'grossBuy',  '—'],
       ['Gross Sell',  {disp:fmtInt(k.grossSell), raw:k.grossSell}, 'grossSell', '—'],
@@ -463,8 +457,6 @@
       ['Total Exec Rows', {disp:k.totalExecs, raw:k.totalExecs},   'totalExecs','—'],
       ['Unit Shares', {disp:k.unitShares, raw:k.unitShares},       'unitShares','—']
     ]);
-
-    // Distribution（8）
     fillTable('#kpiDist', [
       ['#Trades (SELL)', {disp:k.tradeCount, raw:k.tradeCount}, 'tradeCount', '—'],
       ['Wins / Zeros / Losses', {disp:(k.posCount+' / '+k.zeroCount+' / '+k.negCount), raw:k.posCount}, 'posCount', '—'],
@@ -502,7 +494,10 @@
       costCell     = fmtInt(e.cost || 0);
       costAvgCell  = (e.costAvgDisp!=null) ? Number(e.costAvgDisp).toFixed(2) : '—';
       cumCostCell  = isSell ? fmtInt(e.cumCostDisp!=null?e.cumCostDisp:(e.cumCost + (e.fee||0) + (e.tax||0))) : fmtInt(e.cumCost || 0);
-      priceDiffCell= isSell && e.priceDiff!=null ? e.priceDiff.toFixed(2) : '—';
+
+      // === 修正：直接用 (fee+tax)/shares 計算兩位小數 ===
+      priceDiffCell= isSell ? (( (e.fee||0)+(e.tax||0) ) / (e.shares||1)).toFixed(2) : '—';
+
       pnlCell      = (isSell && e.pnlFull!=null) ? (e.pnlFull>0 ? '<span class="pnl-pos">'+fmtInt(e.pnlFull)+'</span>' : '<span class="pnl-neg">'+fmtInt(e.pnlFull)+'</span>') : '—';
       retCell      = (isSell && e.retPctUnit!=null) ? (e.retPctUnit*100).toFixed(2)+'%' : '—';
       cumCell      = (isSell && e.cumPnlFull!=null) ? (e.cumPnlFull>0 ? '<span class="pnl-pos">'+fmtInt(e.cumPnlFull)+'</span>' : '<span class="pnl-neg">'+fmtInt(e.cumPnlFull)+'</span>') : '—';
