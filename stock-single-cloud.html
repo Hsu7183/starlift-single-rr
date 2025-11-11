@@ -32,7 +32,6 @@
     .sell-row{background:#ecffec}
     .input{padding:8px;border:1px solid #ddd;border-radius:8px}
   </style>
-  <!-- 相依：Chart.js + Supabase -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 </head>
@@ -46,7 +45,6 @@
     <div class="card row">
       <button id="btn-clip" class="btn gray">從剪貼簿貼上 TXT</button>
       <input id="file" type="file" accept=".txt" />
-      <!-- 稅率方案 -->
       <label class="muted sm">稅率方案：</label>
       <select id="taxScheme" class="input" style="min-width:140px">
         <option value="ETF">ETF（0.1%）</option>
@@ -54,7 +52,6 @@
         <option value="CUSTOM">自訂</option>
       </select>
       <input id="taxCustom" class="input" type="number" step="0.0001" min="0" placeholder="自訂稅率(如0.0010)" style="width:150px" disabled />
-      <!-- 參數 chips -->
       <span class="chip">手續費率：<span id="feeRateChip">—</span></span>
       <span class="chip">交易稅率：<span id="taxRateChip">—</span></span>
       <span class="chip">最低手續費：<span id="minFeeChip">—</span></span>
@@ -101,13 +98,13 @@
     <div class="card"><h3 class="section-title">五、成本 / 交易活性（Cost / Activity）</h3><div class="scroll-x"><table id="kpiCost"><thead></thead><tbody></tbody></table></div></div>
     <div class="card"><h3 class="section-title">六、分布（Distribution）</h3><div class="scroll-x"><table id="kpiDist"><thead></thead><tbody></tbody></table></div></div>
 
-    <!-- 交易明細（tw-1031 欄位） -->
+    <!-- 交易明細 -->
     <div class="card">
       <h3 class="section-title">交易明細（BUY/SELL 以實際費稅計）</h3>
       <div class="scroll-x"><table id="tradeTable"><thead></thead><tbody></tbody></table></div>
     </div>
   </div>
 
-  <script src="stock-single-cloud.js?v=kpi49-taxscheme-spacefix-v1"></script>
+  <script src="stock-single-cloud.js?v=kpi49-taxscheme-mapact-v2"></script>
 </body>
 </html>
