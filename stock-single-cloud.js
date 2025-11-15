@@ -3,8 +3,8 @@
 // - CSV 容錯：逗號左右空白也能解析；normalize 會將 " , " 收斂成 ","
 // - 價格差 = (賣方手續費 + 交易稅) / 股數（與 1031 明細一致）
 // - mapAct 強化：首買/加碼/再加碼/（再）加碼攤平 皆視為 BUY；賣出/平賣/強制平倉/強平 視為 SELL
-// - ★ 支援 1031 指標 TXT 的 unitsThis：1→1→2 會正確反映在成交數量與金額
-// - ★ 新增：支援 lotShares=XXXX，自動對應每單位股數（如 5000 股）
+// - 支援 1031 指標 TXT 的 unitsThis：1→1→2 會正確反映在成交數量與金額
+// - 新增：支援 lotShares=XXXX，自動對應每單位股數（如 5000 股）
 (function(){
   'use strict';
 
@@ -21,7 +21,7 @@
     feeRate: +(url.searchParams.get('fee') || 0.001425),
     minFee : +(url.searchParams.get('min') || 20),
     taxRate: +(url.searchParams.get('tax') || 0.003), // 預設個股 0.3%
-    unit   : +(url.searchParams.get('unit')|| 1000),  // 每單位股數（與 XS lotShares 對應；會被 TXT 的 lotShares 覆蓋）
+    unit   : +(url.searchParams.get('unit')|| 1000),  // 每單位股數（與 XS lotShares 對應；可被 TXT 覆蓋）
     slip   : +(url.searchParams.get('slip')|| 0),
     capital: +(url.searchParams.get('cap') || 1000000),
     rf     : +(url.searchParams.get('rf')  || 0.00)
@@ -275,7 +275,7 @@
       var r=rows[i];
 
       if(r.act==='新買'){
-        // ★ 每筆依 unitsThis 放大股數：lotUnits=1/2/...；總股數=CFG.unit * lotUnits
+        // 每筆依 unitsThis 放大股數：lotUnits=1/2/...；總股數=CFG.unit * lotUnits
         var lotUnits  = r.units || 1;
         var sharesInc = CFG.unit * lotUnits;
 
@@ -395,6 +395,7 @@
     var total = eq.length? eq[eq.length-1] : 0;
     var totalReturn = CFG.capital? total/CFG.capital : 0;
 
+    // ★ CAGR / 年化：以 CFG.capital（預設 100 萬）為基準，把每日損益除以 100 萬再年化
     var dailyRet = eqIncr.map(function(v){ return v/CFG.capital; });
     var R = statsBasic(dailyRet);
     var annRet = R.mean*annualFactor;
@@ -495,12 +496,42 @@
     for(i=0;i<rows.length;i++){ html+=trHTML(rows[i][0], rows[i][1], rows[i][2], rows[i][3]); }
     tb.innerHTML=html; el.appendChild(tb);
   }
+
   function renderKPI(k){
     var tbTop=$('#kpiTop tbody');
-    tbTop.innerHTML = trHTML('波動率（Volatility, ann.）', {disp:pct(k.annVol),raw:k.annVol}, 'annVol', '愈低愈好 ≤15%')
-                   + trHTML('PF（獲利因子）', {disp:(isFinite(k.pf)?k.pf.toFixed(2):'∞'),raw:k.pf}, 'pf', '愈高愈好 ≥1.5')
-                   + trHTML('最大回撤（MaxDD）', {disp:fmtInt(k.mdd),raw:Math.abs(k.mdd)/CFG.capital}, 'mdd', '相對資本 ≤15%');
 
+    // ★ 建議優先指標：只列出「需要優化（Improve）」的指標
+    var candidates = [
+      ['CAGR（年化報酬）',          {disp:pct(k.annRet),      raw:k.annRet},                         'annRet',     '≥10%'],
+      ['總報酬（Total Return）',    {disp:pct(k.totalReturn), raw:k.totalReturn},                    'totalReturn','—'],
+      ['波動率（Volatility, ann.）',{disp:pct(k.annVol),      raw:k.annVol},                         'annVol',     '愈低愈好 ≤15%'],
+      ['下行波動（Downside, ann.）',{disp:pct(k.dStd),        raw:k.dStd},                           'dStd',       '≤10%'],
+      ['最大回撤（MaxDD）',         {disp:fmtInt(k.mdd),      raw:Math.abs(k.mdd)/CFG.capital},      'mdd',        '相對資本 ≤15%'],
+      ['PF（獲利因子）',            {disp:(isFinite(k.pf)?k.pf.toFixed(2):'∞'), raw:k.pf},            'pf',         '愈高愈好 ≥1.5'],
+      ['勝率（Hit Ratio）',         {disp:pct(k.hitRate),     raw:k.hitRate},                        'hitRate',    '≥50%'],
+      ['Cost Ratio',                {disp:pct(k.costRatio),   raw:k.costRatio},                      'costRatio',  '≤0.3%'],
+      ['水下時間 MaxTU（天）',      {disp:k.maxTU,            raw:k.maxTU},                          'maxTU',      '愈低愈好'],
+      ['水下時間 TotalTU（天）',    {disp:k.totalTU,          raw:k.totalTU},                        'totalTU',    '愈低愈好']
+    ];
+
+    var htmlTop = '';
+    var bad = [];
+    candidates.forEach(function(c){
+      var sc = scoreMetric(c[2], c[1].raw);
+      if(sc===2) bad.push(c);
+    });
+
+    // 保留原順序，只列出需要優化的項目；若都不需要優化，顯示一句話
+    if(bad.length===0){
+      htmlTop = '<tr><td colspan="5">目前無急需優化的指標（皆在 Strong / Adequate 範圍內）。</td></tr>';
+    }else{
+      bad.forEach(function(c){
+        htmlTop += trHTML(c[0], c[1], c[2], c[3]);
+      });
+    }
+    tbTop.innerHTML = htmlTop;
+
+    // 其他六組 KPI 表維持原本邏輯
     fillTable('#kpiReturn', [
       ['總報酬（Total Return）', {disp:pct(k.totalReturn), raw:k.totalReturn}, 'totalReturn', '—'],
       ['CAGR（年化報酬）',       {disp:pct(k.annRet),      raw:k.annRet},      'annRet',      '≥10%'],
@@ -623,7 +654,7 @@
   function runAll(rawText){
     var canon = toCanon(normalize(rawText));
 
-    // ★ 從 1031 指標 TXT 裡自動偵測 lotShares（每單位股數），覆蓋 CFG.unit
+    // 從 TXT 中找 lotShares（每單位股數），自動覆蓋 CFG.unit
     var autoUnit = null, i;
     for(i=0;i<canon.length;i++){
       if(canon[i].lotShares && canon[i].lotShares>0){
@@ -633,7 +664,7 @@
     }
     if(autoUnit!=null){
       CFG.unit = autoUnit;
-      refreshChips();  // 更新「單位股數」chip 顯示 5000 / 10000 ...
+      refreshChips();
     }
 
     var bt=backtest(canon);
