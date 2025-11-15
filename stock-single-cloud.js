@@ -49,8 +49,8 @@
   var sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON, { global:{ fetch:function(u,o){ o=o||{}; o.cache='no-store'; return fetch(u,o); } } });
 
   // ===== 狀態 =====
-  var currentRaw = null;        // 最新原始文字（切換稅率時重跑）
-  var userForcedScheme = false; // 使用者是否手動改過稅率方案
+  var currentRaw = null;
+  var userForcedScheme = false;
 
   // ===== UI 綁定 =====
   var fileInput=$('#file'), btnClip=$('#btn-clip'), prefix=$('#cloudPrefix');
@@ -197,7 +197,6 @@
       .filter(function(x){ return !!x; });
   }
 
-  // 解析 1031 / canonical → rows：含 ts / px / act / units / lotShares
   function toCanon(lines){
     var out=[], i, l, m, d8, t6, px, act, row, um, lm;
     for(i=0;i<lines.length;i++){
@@ -257,7 +256,7 @@
     refreshChips();
   }
 
-  // ===== 回測（股票口徑｜支援 unitsThis） =====
+  // ===== 回測 =====
   function backtest(rows){
     var shares=0, cash=CFG.capital, cumCost=0, pnlCum=0;
     var trades=[], weeks=new Map(), dayPnL=new Map();
@@ -484,7 +483,7 @@
   }
 
   function renderKPI(k){
-    // 六組表的 rows（49 個 KPI）
+    // 一、到六的分組 rows（49 指標）
     var rowsReturn = [
       ['總報酬（Total Return）', {disp:pct(k.totalReturn), raw:k.totalReturn}, 'totalReturn', '—'],
       ['CAGR（年化報酬）',       {disp:pct(k.annRet),      raw:k.annRet},      'annRet',      '≥10%'],
@@ -547,39 +546,34 @@
       ['—', {disp:'—',raw:0}, 'na','—']
     ];
 
-    // 1) 上方「建議優先指標」：49 個全部放進來，依 score 排序（Improve > Adequate > Strong）
+    // 1) 建議優先指標：只列出「score=2 (Improve)」的 KPI（從 49 個裡挑出來）
     var allRows = []
       .concat(rowsReturn, rowsRisk, rowsEff, rowsStab, rowsCost, rowsDist);
 
-    var enriched = allRows.map(function(r, idx){
-      return {
-        idx: idx,
-        name: r[0],
-        val : r[1],
-        key : r[2],
-        ref : r[3],
-        score: scoreMetric(r[2], r[1].raw)
-      };
-    });
-
-    enriched.sort(function(a,b){
-      if(a.score !== b.score) return b.score - a.score; // 2 > 1 > 0
-      return a.idx - b.idx;                             // 同分維持原順序
-    });
+    var bad = [];
+    for(var i=0;i<allRows.length;i++){
+      var r = allRows[i];
+      var sc = scoreMetric(r[2], r[1].raw);
+      if(sc===2) bad.push(r);
+    }
 
     var elTop = $('#kpiTop');
     if(elTop){
       elTop.innerHTML = theadHTML();
-      var tb = document.createElement('tbody'), html='';
-      for(var i=0;i<enriched.length;i++){
-        var e = enriched[i];
-        html += trHTML(e.name, e.val, e.key, e.ref);
+      var tbTop=document.createElement('tbody'), htmlTop='';
+      if(bad.length===0){
+        htmlTop = '<tr><td colspan="5">目前無急需優化的指標（皆在 Strong / Adequate 範圍內）。</td></tr>';
+      }else{
+        for(var j=0;j<bad.length;j++){
+          var rr = bad[j];
+          htmlTop += trHTML(rr[0], rr[1], rr[2], rr[3]);
+        }
       }
-      tb.innerHTML = html;
-      elTop.appendChild(tb);
+      tbTop.innerHTML = htmlTop;
+      elTop.appendChild(tbTop);
     }
 
-    // 2) 六組分表：照原本區塊顯示
+    // 2) 六組分表：照原本區塊顯示全部 KPI
     fillTable('#kpiReturn', rowsReturn);
     fillTable('#kpiRisk',   rowsRisk);
     fillTable('#kpiEff',    rowsEff);
@@ -646,7 +640,7 @@
   function runAll(rawText){
     var canon = toCanon(normalize(rawText));
 
-    // 從 lotShares 自動抓每單位股數
+    // lotShares → 覆蓋 CFG.unit
     var autoUnit = null, i;
     for(i=0;i<canon.length;i++){
       if(canon[i].lotShares && canon[i].lotShares>0){
