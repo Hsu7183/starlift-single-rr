@@ -3,6 +3,7 @@
 // - CSV 容錯：逗號左右空白也能解析；normalize 會將 " , " 收斂成 ","
 // - 價格差 = (賣方手續費 + 交易稅) / 股數（與 1031 明細一致）
 // - mapAct 強化：首買/加碼/再加碼/（再）加碼攤平 皆視為 BUY；賣出/平賣/強制平倉/強平 視為 SELL
+// - ★ 支援 1031 指標 TXT 的 unitsThis：1→1→2 會正確反映在成交數量與金額
 (function(){
   'use strict';
 
@@ -19,7 +20,7 @@
     feeRate: +(url.searchParams.get('fee') || 0.001425),
     minFee : +(url.searchParams.get('min') || 20),
     taxRate: +(url.searchParams.get('tax') || 0.003), // 預設個股 0.3%
-    unit   : +(url.searchParams.get('unit')|| 1000),
+    unit   : +(url.searchParams.get('unit')|| 1000),  // 每單位股數（與 XS lotShares 對應）
     slip   : +(url.searchParams.get('slip')|| 0),
     capital: +(url.searchParams.get('cap') || 1000000),
     rf     : +(url.searchParams.get('rf')  || 0.00)
@@ -200,17 +201,35 @@
       .filter(function(x){ return !!x; });
   }
 
+  // ★★★ toCanon：從 1031 指標 TXT 裡抓 unitsThis= 1/2
   function toCanon(lines){
-    var out=[], i, l, m, d8, t6, px, act;
+    var out=[], i, l, m, d8, t6, px, act, row, um;
     for(i=0;i<lines.length;i++){
       l=lines[i];
+
+      // 1) 原生 canonical 格式
       m=l.match(CANON_RE);
-      if(m){ out.push({ts:m[1], px:+m[2], act:m[3]}); continue; }
-      m=l.match(CSV_RE);
       if(m){
+        row = { ts:m[1], px:+m[2], act:m[3] };
+      }else{
+        // 2) 1031-CSV 格式（前四欄：日期,時間,價格,動作,說明...）
+        m=l.match(CSV_RE);
+        if(!m) continue;
         d8=m[1]; t6=pad6(m[2]); px=+m[3]; act=mapAct(m[4]);
-        if(isFinite(px) && /^\d{6}$/.test(t6)) out.push({ts:d8+t6, px:px, act:act});
+        if(!isFinite(px) || !/^\d{6}$/.test(t6)) continue;
+        row = { ts:d8+t6, px:px, act:act };
       }
+
+      // 從整行說明抓 unitsThis（若沒有就當 1 單位）
+      um = l.match(/unitsThis\s*=\s*(\d+)/);
+      if(um){
+        row.units = parseInt(um[1],10);
+        if(!(row.units>0)) row.units = 1;
+      }else{
+        row.units = 1;
+      }
+
+      out.push(row);
     }
     out.sort(function(a,b){ return a.ts.localeCompare(b.ts); });
     return out;
@@ -239,7 +258,7 @@
     refreshChips();
   }
 
-  // ===== 回測（股票口徑｜與 1031 明細一致） =====
+  // ===== 回測（股票口徑｜與 1031 明細一致，支援 unitsThis） =====
   function backtest(rows){
     var shares=0, cash=CFG.capital, cumCost=0, pnlCum=0;
     var trades=[], weeks=new Map(), dayPnL=new Map();
@@ -248,18 +267,23 @@
       var r=rows[i];
 
       if(r.act==='新買'){
+        // ★ 每筆依 unitsThis 放大股數：lotUnits=1/2/...；總股數=CFG.unit * lotUnits
+        var lotUnits  = r.units || 1;
+        var sharesInc = CFG.unit * lotUnits;
+
         var px  = r.px + CFG.slip;          // 買入滑價+
-        var amt = px * CFG.unit;
+        var amt = px * sharesInc;
         var f   = fee(amt);
         var cost= amt + f;
+
         if(cash >= cost){
           cash    -= cost;
-          shares  += CFG.unit;
+          shares  += sharesInc;
           cumCost += cost;                  // 僅買方手續費
           var costAvgDisp = cumCost / shares;
 
           trades.push({
-            ts:r.ts, kind:'BUY', price:px, shares:CFG.unit,
+            ts:r.ts, kind:'BUY', price:px, shares:sharesInc,
             buyAmount:amt, sellAmount:0, fee:f, tax:0,
             cost:cost, costAvgDisp:costAvgDisp, cumCost:cumCost,
             cumCostDisp:null, priceDiff:null, pnlFull:null, retPctUnit:null, cumPnlFull:pnlCum
@@ -390,9 +414,7 @@
 
     var TU=timeUnderwater(eq), ST=streaks(tradePnl);
 
-    var grossBuy=bt.trades.filter(function(t){return t.kind==='BUY';}).reduce(function(a,b){return a+b.price+b.shares;},0);
-    // ↑ 這行不影響頁面（僅 KPI），若要嚴謹可改：a + b.price * b.shares（當然我們下方已採用正確版本）
-    grossBuy = bt.trades.filter(function(t){return t.kind==='BUY';}).reduce(function(a,b){return a+b.price*b.shares;},0);
+    var grossBuy=bt.trades.filter(function(t){return t.kind==='BUY';}).reduce(function(a,b){return a+b.price*b.shares;},0);
     var grossSell=bt.trades.filter(function(t){return t.kind==='SELL';}).reduce(function(a,b){return a+b.price*b.shares;},0);
     var feeSum=bt.trades.reduce(function(a,b){return a+(b.fee||0);},0);
     var taxSum=bt.trades.reduce(function(a,b){return a+(b.tax||0);},0);
@@ -443,7 +465,7 @@
     });
   }
 
-  // ===== KPI（0807 風格） =====
+  // ===== KPI 表格產生 =====
   function theadHTML(){ return '<thead><tr><th>指標</th><th>數值</th><th>建議</th><th>機構評語</th><th>參考區間</th></tr></thead>'; }
   function bandTxt(score){ return score===0?'Strong（強）':(score===1?'Adequate（可接受）':'Improve（優化）'); }
   function scoreMetric(key,raw){
