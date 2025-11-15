@@ -4,7 +4,7 @@
 // - 價格差 = (賣方手續費 + 交易稅) / 股數（與 1031 明細一致）
 // - mapAct 強化：首買/加碼/再加碼/（再）加碼攤平 皆視為 BUY；賣出/平賣/強制平倉/強平 視為 SELL
 // - 支援 1031 指標 TXT 的 unitsThis：1→1→2 會正確反映在成交數量與金額
-// - 新增：支援 lotShares=XXXX，自動對應每單位股數（如 5000 股）
+// - 支援 lotShares=XXXX，自動對應每單位股數（如 5000 股）
 (function(){
   'use strict';
 
@@ -174,18 +174,13 @@
 
   // ===== 解析：canonical + 1031-CSV =====
   var CANON_RE=/^(\d{14})\.0{6}\s+(\d+\.\d{6})\s+(新買|平賣|新賣|平買|強制平倉)\s*$/;
-  // 放寬：允許逗號前後空白
   var CSV_RE  = /^\s*(\d{8})\s*,\s*(\d{5,6})\s*,\s*(\d+(?:\.\d+)?)\s*,\s*([^,]+)\s*,/;
 
-  // ★★★ 強化動作對應：BUY/SELL 正確分類
   function mapAct(s){
     s = String(s||'').trim();
-    // 賣與強平
     if (/^(平賣|賣出)$/i.test(s)) return '平賣';
     if (/^(強制平倉|強平)$/i.test(s)) return '強制平倉';
-    // 全部視為 BUY 的字樣（含空白容忍）
     if (/^(新買|買進|首買|加碼|再加碼|加碼攤平|再加碼攤平|加碼\s*攤平|再加碼\s*攤平)$/i.test(s)) return '新買';
-    // 其他維持原字
     return s;
   }
 
@@ -197,23 +192,21 @@
       .replace(/[\u200B-\u200D\uFEFF]/g,'')
       .replace(/[\x00-\x09\x0B-\x1F\x7F]/g,'')
       .replace(/\r\n?/g,'\n')
-      .replace(/\s*,\s*/g, ',') // 把逗號左右空白收斂
+      .replace(/\s*,\s*/g, ',')
       .split('\n').map(function(s){ return s.trim(); })
       .filter(function(x){ return !!x; });
   }
 
-  // ★★★ toCanon：從 1031 指標 TXT 裡抓 unitsThis=1/2 和 lotShares=XXXX
+  // 解析 1031 / canonical → rows：含 ts / px / act / units / lotShares
   function toCanon(lines){
     var out=[], i, l, m, d8, t6, px, act, row, um, lm;
     for(i=0;i<lines.length;i++){
       l=lines[i];
 
-      // 1) 原生 canonical 格式
       m=l.match(CANON_RE);
       if(m){
         row = { ts:m[1], px:+m[2], act:m[3] };
       }else{
-        // 2) 1031-CSV 格式（前四欄：日期,時間,價格,動作,說明...）
         m=l.match(CSV_RE);
         if(!m) continue;
         d8=m[1]; t6=pad6(m[2]); px=+m[3]; act=mapAct(m[4]);
@@ -221,7 +214,6 @@
         row = { ts:d8+t6, px:px, act:act };
       }
 
-      // 從整行說明抓 unitsThis（若沒有就當 1 單位）
       um = l.match(/unitsThis\s*=\s*(\d+)/);
       if(um){
         row.units = parseInt(um[1],10);
@@ -230,7 +222,6 @@
         row.units = 1;
       }
 
-      // 從整行說明抓 lotShares=XXXX（每單位股數）
       lm = l.match(/lotShares\s*=\s*(\d+)/);
       if(lm){
         row.lotShares = parseInt(lm[1],10);
@@ -243,13 +234,13 @@
     return out;
   }
 
-  // ===== 手續費/稅（整數進位 + 最低手續費） =====
+  // ===== 手續費/稅 =====
   function fee(amount){ return Math.max(CFG.minFee, Math.ceil(amount*CFG.feeRate)); }
   function tax(amount){ return Math.max(0, Math.ceil(amount*CFG.taxRate)); }
 
   // ===== 自動偵測稅率方案 =====
   function autoPickSchemeByContent(sourceName, txt){
-    if(userForcedScheme) return; // 使用者已手動選過就不干預
+    if(userForcedScheme) return;
     var s=(sourceName||'')+' '+(txt||'');
     var isETF = /(?:^|[^0-9])(?:00909|00910|0050)(?:[^0-9]|$)/.test(s);
     var isStock = /(?:^|[^0-9])(?:2603)(?:[^0-9]|$)|長榮/.test(s);
@@ -266,7 +257,7 @@
     refreshChips();
   }
 
-  // ===== 回測（股票口徑｜與 1031 明細一致，支援 unitsThis） =====
+  // ===== 回測（股票口徑｜支援 unitsThis） =====
   function backtest(rows){
     var shares=0, cash=CFG.capital, cumCost=0, pnlCum=0;
     var trades=[], weeks=new Map(), dayPnL=new Map();
@@ -275,11 +266,10 @@
       var r=rows[i];
 
       if(r.act==='新買'){
-        // 每筆依 unitsThis 放大股數：lotUnits=1/2/...；總股數=CFG.unit * lotUnits
         var lotUnits  = r.units || 1;
         var sharesInc = CFG.unit * lotUnits;
 
-        var px  = r.px + CFG.slip;          // 買入滑價+
+        var px  = r.px + CFG.slip;
         var amt = px * sharesInc;
         var f   = fee(amt);
         var cost= amt + f;
@@ -287,7 +277,7 @@
         if(cash >= cost){
           cash    -= cost;
           shares  += sharesInc;
-          cumCost += cost;                  // 僅買方手續費
+          cumCost += cost;
           var costAvgDisp = cumCost / shares;
 
           trades.push({
@@ -299,19 +289,16 @@
         }
 
       }else if(r.act==='平賣' && shares>0){
-        var spx = r.px - CFG.slip;          // 賣出滑價-
+        var spx = r.px - CFG.slip;
         var sam = spx * shares;
         var ff  = fee(sam);
         var tt  = tax(sam);
         cash   += (sam - ff - tt);
 
-        var sellCumCostDisp = cumCost + ff + tt;     // SELL 顯示「累計成本」
+        var sellCumCostDisp = cumCost + ff + tt;
         var sellCostAvgDisp = sellCumCostDisp / shares;
-
-        // 價格差 = (賣方費+稅)/股數
         var priceDiff       = ((ff + tt) / shares);
-
-        var pnlFull         = (sam - ff - tt) - cumCost; // 稅後損益
+        var pnlFull         = (sam - ff - tt) - cumCost;
         pnlCum += pnlFull;
 
         var day = r.ts.slice(0,8);
@@ -334,7 +321,7 @@
     return { trades:trades, weeks:weeks, dayPnL:dayPnL, endingCash:cash, openShares:shares, pnlCum:pnlCum };
   }
 
-  // ===== 週次鍵（近似 ISO 週） =====
+  // ===== 週次鍵 =====
   function weekKey(day){
     var dt=new Date(day.slice(0,4)+'-'+day.slice(4,6)+'-'+day.slice(6,8)+'T00:00:00');
     var y=dt.getFullYear(), oneJan=new Date(y,0,1);
@@ -395,7 +382,6 @@
     var total = eq.length? eq[eq.length-1] : 0;
     var totalReturn = CFG.capital? total/CFG.capital : 0;
 
-    // ★ CAGR / 年化：以 CFG.capital（預設 100 萬）為基準，把每日損益除以 100 萬再年化
     var dailyRet = eqIncr.map(function(v){ return v/CFG.capital; });
     var R = statsBasic(dailyRet);
     var annRet = R.mean*annualFactor;
@@ -449,7 +435,7 @@
     };
   }
 
-  // ===== 週次圖（浮動長條 + 折線） =====
+  // ===== 週次圖 =====
   var chWeekly=null;
   function renderWeeklyChart(weeks){
     var labels=Array.from(weeks.keys());
@@ -498,41 +484,8 @@
   }
 
   function renderKPI(k){
-    var tbTop=$('#kpiTop tbody');
-
-    // ★ 建議優先指標：只列出「需要優化（Improve）」的指標
-    var candidates = [
-      ['CAGR（年化報酬）',          {disp:pct(k.annRet),      raw:k.annRet},                         'annRet',     '≥10%'],
-      ['總報酬（Total Return）',    {disp:pct(k.totalReturn), raw:k.totalReturn},                    'totalReturn','—'],
-      ['波動率（Volatility, ann.）',{disp:pct(k.annVol),      raw:k.annVol},                         'annVol',     '愈低愈好 ≤15%'],
-      ['下行波動（Downside, ann.）',{disp:pct(k.dStd),        raw:k.dStd},                           'dStd',       '≤10%'],
-      ['最大回撤（MaxDD）',         {disp:fmtInt(k.mdd),      raw:Math.abs(k.mdd)/CFG.capital},      'mdd',        '相對資本 ≤15%'],
-      ['PF（獲利因子）',            {disp:(isFinite(k.pf)?k.pf.toFixed(2):'∞'), raw:k.pf},            'pf',         '愈高愈好 ≥1.5'],
-      ['勝率（Hit Ratio）',         {disp:pct(k.hitRate),     raw:k.hitRate},                        'hitRate',    '≥50%'],
-      ['Cost Ratio',                {disp:pct(k.costRatio),   raw:k.costRatio},                      'costRatio',  '≤0.3%'],
-      ['水下時間 MaxTU（天）',      {disp:k.maxTU,            raw:k.maxTU},                          'maxTU',      '愈低愈好'],
-      ['水下時間 TotalTU（天）',    {disp:k.totalTU,          raw:k.totalTU},                        'totalTU',    '愈低愈好']
-    ];
-
-    var htmlTop = '';
-    var bad = [];
-    candidates.forEach(function(c){
-      var sc = scoreMetric(c[2], c[1].raw);
-      if(sc===2) bad.push(c);
-    });
-
-    // 保留原順序，只列出需要優化的項目；若都不需要優化，顯示一句話
-    if(bad.length===0){
-      htmlTop = '<tr><td colspan="5">目前無急需優化的指標（皆在 Strong / Adequate 範圍內）。</td></tr>';
-    }else{
-      bad.forEach(function(c){
-        htmlTop += trHTML(c[0], c[1], c[2], c[3]);
-      });
-    }
-    tbTop.innerHTML = htmlTop;
-
-    // 其他六組 KPI 表維持原本邏輯
-    fillTable('#kpiReturn', [
+    // 六組表的 rows（49 個 KPI）
+    var rowsReturn = [
       ['總報酬（Total Return）', {disp:pct(k.totalReturn), raw:k.totalReturn}, 'totalReturn', '—'],
       ['CAGR（年化報酬）',       {disp:pct(k.annRet),      raw:k.annRet},      'annRet',      '≥10%'],
       ['平均損益（Expectancy/Trade）', {disp:fmtInt(k.avgTrade), raw:k.avgTrade}, 'avgTrade', '—'],
@@ -541,8 +494,8 @@
       ['最佳週損益',             {disp:fmtInt(k.bestWeek), raw:k.bestWeek},    'bestWeek',    '—'],
       ['最差週損益',             {disp:fmtInt(k.worstWeek),raw:k.worstWeek},   'worstWeek',   '—'],
       ['Payoff（AvgWin/AvgLoss）',{disp:(isFinite(k.payoff)?k.payoff.toFixed(2):'∞'), raw:k.payoff}, 'payoff', '≥1.2']
-    ]);
-    fillTable('#kpiRisk', [
+    ];
+    var rowsRisk = [
       ['最大回撤（MaxDD）',           {disp:fmtInt(k.mdd),    raw:Math.abs(k.mdd)/CFG.capital}, 'mdd',        '≤15%資本'],
       ['水下時間 MaxTU（天）',        {disp:k.maxTU,          raw:k.maxTU},                      'maxTU',      '愈低愈好'],
       ['水下時間 TotalTU（天）',      {disp:k.totalTU,        raw:k.totalTU},                    'totalTU',    '愈低愈好'],
@@ -552,8 +505,8 @@
       ['Martin Ratio',                {disp:k.mart.toFixed(2),raw:k.mart},                      'mart',       '≥1.0'],
       ['每日最差報酬',               {disp:pct(k.min),       raw:k.min},                       'min',        '—'],
       ['每日最佳報酬',               {disp:pct(k.max),       raw:k.max},                       'max',        '—']
-    ]);
-    fillTable('#kpiEff', [
+    ];
+    var rowsEff = [
       ['Sharpe',    {disp:k.sr.toFixed(2),  raw:k.sr},  'sr',  '≥1.5'],
       ['Sortino',   {disp:k.so.toFixed(2),  raw:k.so},  'so',  '≥1.5'],
       ['Calmar',    {disp:k.cal.toFixed(2), raw:k.cal}, 'cal', '≥0.5'],
@@ -563,8 +516,8 @@
       ['Hit Rate',  {disp:pct(k.hitRate), raw:k.hitRate}, 'hitRate','≥50%'],
       ['Avg Win',   {disp:fmtInt(k.avgWin), raw:k.avgWin}, 'avgWin', '—'],
       ['Avg Loss',  {disp:fmtInt(-k.avgLoss), raw:-k.avgLoss}, 'avgLoss', '—']
-    ]);
-    fillTable('#kpiStab', [
+    ];
+    var rowsStab = [
       ['Max Win Streak',  {disp:k.maxWinStreak, raw:k.maxWinStreak}, 'maxWinStreak',  '愈高愈好'],
       ['Max Loss Streak', {disp:k.maxLossStreak,raw:k.maxLossStreak}, 'maxLossStreak', '愈低愈好'],
       ['Skewness',        {disp:k.skew.toFixed(2), raw:k.skew},       'skew',          '—'],
@@ -572,8 +525,8 @@
       ['Trading Days',    {disp:k.days, raw:k.days},                  'days',          '—'],
       ['Weekly PnL Vol',  {disp:fmtInt(k.volWeekly), raw:k.volWeekly},'volWeekly',     '愈低愈好'],
       ['Daily Std',       {disp:pct(k.std), raw:k.std},               'std',           '愈低愈好']
-    ]);
-    fillTable('#kpiCost', [
+    ];
+    var rowsCost = [
       ['Gross Buy',   {disp:fmtInt(k.grossBuy),  raw:k.grossBuy},  'grossBuy',  '—'],
       ['Gross Sell',  {disp:fmtInt(k.grossSell), raw:k.grossSell}, 'grossSell', '—'],
       ['Fee Sum',     {disp:fmtInt(k.feeSum),    raw:k.feeSum},    'feeSum',    '—'],
@@ -582,8 +535,8 @@
       ['Cost Ratio',  {disp:pct(k.costRatio), raw:k.costRatio},        'costRatio','≤0.3%'],
       ['Total Exec Rows', {disp:k.totalExecs, raw:k.totalExecs},   'totalExecs','—'],
       ['Unit Shares', {disp:k.unitShares, raw:k.unitShares},       'unitShares','—']
-    ]);
-    fillTable('#kpiDist', [
+    ];
+    var rowsDist = [
       ['#Trades (SELL)', {disp:k.tradeCount, raw:k.tradeCount}, 'tradeCount', '—'],
       ['Wins / Zeros / Losses', {disp:(k.posCount+' / '+k.zeroCount+' / '+k.negCount), raw:k.posCount}, 'posCount', '—'],
       ['Win Ratio',  {disp:pct(k.posRatio), raw:k.posRatio}, 'posRatio','≥50%'],
@@ -592,10 +545,50 @@
       ['Trade PnL Std', {disp:fmtInt(k.pnlStd), raw:k.pnlStd}, 'pnlStd','愈低愈好'],
       ['—', {disp:'—',raw:0}, 'na','—'],
       ['—', {disp:'—',raw:0}, 'na','—']
-    ]);
+    ];
+
+    // 1) 上方「建議優先指標」：49 個全部放進來，依 score 排序（Improve > Adequate > Strong）
+    var allRows = []
+      .concat(rowsReturn, rowsRisk, rowsEff, rowsStab, rowsCost, rowsDist);
+
+    var enriched = allRows.map(function(r, idx){
+      return {
+        idx: idx,
+        name: r[0],
+        val : r[1],
+        key : r[2],
+        ref : r[3],
+        score: scoreMetric(r[2], r[1].raw)
+      };
+    });
+
+    enriched.sort(function(a,b){
+      if(a.score !== b.score) return b.score - a.score; // 2 > 1 > 0
+      return a.idx - b.idx;                             // 同分維持原順序
+    });
+
+    var elTop = $('#kpiTop');
+    if(elTop){
+      elTop.innerHTML = theadHTML();
+      var tb = document.createElement('tbody'), html='';
+      for(var i=0;i<enriched.length;i++){
+        var e = enriched[i];
+        html += trHTML(e.name, e.val, e.key, e.ref);
+      }
+      tb.innerHTML = html;
+      elTop.appendChild(tb);
+    }
+
+    // 2) 六組分表：照原本區塊顯示
+    fillTable('#kpiReturn', rowsReturn);
+    fillTable('#kpiRisk',   rowsRisk);
+    fillTable('#kpiEff',    rowsEff);
+    fillTable('#kpiStab',   rowsStab);
+    fillTable('#kpiCost',   rowsCost);
+    fillTable('#kpiDist',   rowsDist);
   }
 
-  // ===== 交易明細（tw-1031 欄位） =====
+  // ===== 交易明細 =====
   function renderTrades(list){
     var th = document.querySelector('#tradeTable thead');
     var tb = document.querySelector('#tradeTable tbody');
@@ -621,7 +614,6 @@
       costAvgCell  = (e.costAvgDisp!=null) ? Number(e.costAvgDisp).toFixed(2) : '—';
       cumCostCell  = isSell ? fmtInt(e.cumCostDisp!=null?e.cumCostDisp:(e.cumCost + (e.fee||0) + (e.tax||0))) : fmtInt(e.cumCost || 0);
 
-      // 價格差 = (賣方費+稅)/股數
       priceDiffCell= isSell ? (((e.fee||0)+(e.tax||0))/(e.shares||1)).toFixed(2) : '—';
 
       pnlCell      = (isSell && e.pnlFull!=null) ? (e.pnlFull>0 ? '<span class="pnl-pos">'+fmtInt(e.pnlFull)+'</span>' : '<span class="pnl-neg">'+fmtInt(e.pnlFull)+'</span>') : '—';
@@ -654,7 +646,7 @@
   function runAll(rawText){
     var canon = toCanon(normalize(rawText));
 
-    // 從 TXT 中找 lotShares（每單位股數），自動覆蓋 CFG.unit
+    // 從 lotShares 自動抓每單位股數
     var autoUnit = null, i;
     for(i=0;i<canon.length;i++){
       if(canon[i].lotShares && canon[i].lotShares>0){
