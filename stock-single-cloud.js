@@ -4,6 +4,7 @@
 // - 價格差 = (賣方手續費 + 交易稅) / 股數（與 1031 明細一致）
 // - mapAct 強化：首買/加碼/再加碼/（再）加碼攤平 皆視為 BUY；賣出/平賣/強制平倉/強平 視為 SELL
 // - ★ 支援 1031 指標 TXT 的 unitsThis：1→1→2 會正確反映在成交數量與金額
+// - ★ 新增：支援 lotShares=XXXX，自動對應每單位股數（如 5000 股）
 (function(){
   'use strict';
 
@@ -20,7 +21,7 @@
     feeRate: +(url.searchParams.get('fee') || 0.001425),
     minFee : +(url.searchParams.get('min') || 20),
     taxRate: +(url.searchParams.get('tax') || 0.003), // 預設個股 0.3%
-    unit   : +(url.searchParams.get('unit')|| 1000),  // 每單位股數（與 XS lotShares 對應）
+    unit   : +(url.searchParams.get('unit')|| 1000),  // 每單位股數（與 XS lotShares 對應；會被 TXT 的 lotShares 覆蓋）
     slip   : +(url.searchParams.get('slip')|| 0),
     capital: +(url.searchParams.get('cap') || 1000000),
     rf     : +(url.searchParams.get('rf')  || 0.00)
@@ -201,9 +202,9 @@
       .filter(function(x){ return !!x; });
   }
 
-  // ★★★ toCanon：從 1031 指標 TXT 裡抓 unitsThis= 1/2
+  // ★★★ toCanon：從 1031 指標 TXT 裡抓 unitsThis=1/2 和 lotShares=XXXX
   function toCanon(lines){
-    var out=[], i, l, m, d8, t6, px, act, row, um;
+    var out=[], i, l, m, d8, t6, px, act, row, um, lm;
     for(i=0;i<lines.length;i++){
       l=lines[i];
 
@@ -227,6 +228,13 @@
         if(!(row.units>0)) row.units = 1;
       }else{
         row.units = 1;
+      }
+
+      // 從整行說明抓 lotShares=XXXX（每單位股數）
+      lm = l.match(/lotShares\s*=\s*(\d+)/);
+      if(lm){
+        row.lotShares = parseInt(lm[1],10);
+        if(!(row.lotShares>0)) row.lotShares = null;
       }
 
       out.push(row);
@@ -613,7 +621,21 @@
 
   // ===== 主流程 =====
   function runAll(rawText){
-    var canon=toCanon(normalize(rawText));
+    var canon = toCanon(normalize(rawText));
+
+    // ★ 從 1031 指標 TXT 裡自動偵測 lotShares（每單位股數），覆蓋 CFG.unit
+    var autoUnit = null, i;
+    for(i=0;i<canon.length;i++){
+      if(canon[i].lotShares && canon[i].lotShares>0){
+        autoUnit = canon[i].lotShares;
+        break;
+      }
+    }
+    if(autoUnit!=null){
+      CFG.unit = autoUnit;
+      refreshChips();  // 更新「單位股數」chip 顯示 5000 / 10000 ...
+    }
+
     var bt=backtest(canon);
     renderWeeklyChart(bt.weeks);
     renderTrades(bt.trades);
