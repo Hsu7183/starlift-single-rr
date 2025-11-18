@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>股票-雲端多檔分析（KPI49 簡表）</title>
+  <style>
+    body{font-family:ui-sans-serif,system-ui;-webkit-font-smoothing:antialiased;margin:0;padding:16px;background:#f7f7fb}
+    .wrap{max-width:1440px;margin:0 auto}
+    .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+    .card{background:#fff;border:1px solid #e5e7eb;border-radius:12px;box-shadow:0 2px 10px rgba(0,0,0,.03);padding:12px;margin-bottom:16px}
+    .back-link{margin-bottom:12px;display:inline-block}
+    .chip{display:inline-block;background:#eef;padding:6px 10px;border-radius:999px;font-size:12px}
+    .muted{color:#666;font-size:13px}
+    .muted.sm{font-size:12px;color:#777}
+    .input{padding:8px;border:1px solid #ddd;border-radius:8px;font-size:13px}
+    #chartBox{height:380px}
+    table{width:100%;border-collapse:collapse;background:#fff}
+    th,td{padding:8px 10px;border-bottom:1px solid #e5e7eb;white-space:nowrap;font:13px/1.65 ui-monospace,Consolas,Menlo,monospace}
+    thead th{background:#fafafa;position:sticky;top:0;z-index:2;cursor:pointer}
+    .num{text-align:right}
+    .p-red{color:#ef4444;font-weight:700}
+    .p-green{color:#10b981;font-weight:700}
+    .active-row{background:#f1f5ff !important}
+    .hint{opacity:.75;font-size:12px}
+    .param-cell{max-width:520px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .scroll-x{overflow-x:auto}
+  </style>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+</head>
+<body>
+  <div class="wrap">
+    <a class="back-link" href="index.html">← 返回首頁</a>
+    <h1>股票-雲端多檔分析（KPI49 簡表）</h1>
+    <div class="muted sm">來源：canonical 或 1031-CSV（自動轉換，支援 unitsThis＝1→1→2＋lotShares）｜本頁僅供內部研究</div>
+
+    <!-- 上：控制列 + 稅率方案 + CFG Chips -->
+    <div class="card">
+      <div class="row" style="margin-bottom:8px">
+        <button id="btn-clip" class="input" style="cursor:pointer;background:#6c757d;color:#fff;border:0;border-radius:10px">從剪貼簿貼上多份 TXT</button>
+        <input id="files" type="file" accept=".txt" multiple />
+        <span class="chip">已載入：<span id="fileCount">0</span> 檔</span>
+        <span class="chip">匯入時間：<span id="importAt">—</span></span>
+      </div>
+
+      <div class="row" style="margin-top:4px">
+        <label class="muted sm">稅率方案：</label>
+        <select id="taxScheme" class="input" style="min-width:140px">
+          <option value="ETF">ETF（0.1%）</option>
+          <option value="STOCK">個股（0.3%）</option>
+          <option value="CUSTOM">自訂</option>
+        </select>
+        <input id="taxCustom" class="input" type="number" step="0.0001" min="0" placeholder="自訂稅率(如0.0010)" style="width:150px" disabled />
+
+        <span class="chip">手續費率：<span id="feeRateChip">—</span></span>
+        <span class="chip">交易稅率：<span id="taxRateChip">—</span></span>
+        <span class="chip">最低手續費：<span id="minFeeChip">—</span></span>
+        <span class="chip">單位股數：<span id="unitChip">—</span></span>
+        <span class="chip">滑價(每股)：<span id="slipChip">—</span></span>
+        <span class="chip">Rf：<span id="rfChip">—</span></span>
+      </div>
+    </div>
+
+    <!-- 中：從 Supabase（reports）選多檔 -->
+    <div class="card">
+      <h3 style="margin:4px 0;font-size:16px;font-weight:800">從 Supabase（reports）選檔（可多選）</h3>
+      <div class="row">
+        <input id="cloudPrefix" class="input muted" placeholder="篩選資料夾（例：2025-11-01/）" />
+        <button id="btnCloudList" class="input" style="cursor:pointer;background:#0d6efd;color:#fff;border-radius:10px;border:0">載入清單</button>
+        <select id="cloudSelect" class="input" multiple size="6" style="min-width:320px">
+          <option value="">（請先載入清單）</option>
+        </select>
+        <button id="btnCloudPreview" class="input" style="cursor:pointer;background:#6c757d;color:#fff;border-radius:10px;border:0">預覽所選</button>
+        <button id="btnCloudImport" class="input" style="cursor:pointer;background:#0d6efd;color:#fff;border-radius:10px;border:0">載入到分析</button>
+      </div>
+      <div id="cloudMeta" class="muted sm" style="margin-top:6px;"></div>
+      <pre id="cloudPreview" class="muted" style="margin-top:8px;max-height:220px;overflow:auto;background:#f8f9fa;padding:10px;border:1px solid #eee;border-radius:8px;white-space:pre-wrap"></pre>
+    </div>
+
+    <!-- 上：多檔收益曲線（選一檔顯示） -->
+    <div class="card">
+      <h3 style="margin:4px 0;font-size:16px;font-weight:800">每日累積獲利曲線（選取檔案顯示）</h3>
+      <div id="chartBox"><canvas id="chMulti"></canvas></div>
+      <div id="chartCaption" class="hint" style="margin-top:4px">
+        （點擊下方任一列，上方圖切換顯示；標示 Max / Min / Last，皆為含滑價與費稅後累積損益）
+      </div>
+    </div>
+
+    <!-- 下：彙總表 -->
+    <div class="card">
+      <h3 style="margin:4px 0;font-size:16px;font-weight:800">多檔彙總（KPI49 簡表）</h3>
+      <div class="scroll-x">
+        <table id="sumTable">
+          <thead>
+            <tr>
+              <th data-k="shortName">檔名</th>
+              <th data-k="params">參數</th>
+              <th class="num" data-k="count">筆數</th>
+              <th class="num" data-k="winRate">勝率</th>
+              <th class="num" data-k="totalPnL">累積淨損益(含滑價)</th>
+              <th class="num" data-k="maxDD">最大回撤</th>
+              <th class="num" data-k="PF">PF（獲利因子）</th>
+              <th class="num" data-k="sharpe">Sharpe</th>
+              <th class="num" data-k="sortino">Sortino</th>
+              <th class="num" data-k="MAR">MAR（回報/回撤）</th>
+              <th class="num" data-k="tradesPerMonth">交易頻率（筆/月）</th>
+              <th class="num" data-k="annRet">年化報酬</th>
+              <th class="num" data-k="annVol">年化波動</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="hint" style="margin-top:8px">
+        提示：點欄位可升/降序；點擊一整列可切換上方圖顯示該檔每日累積獲利。
+      </div>
+    </div>
+  </div>
+
+  <script src="stock-multi-cloud.js?v=stock-multi-kpi49-v1"></script>
+</body>
+</html>
