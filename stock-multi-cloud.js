@@ -1,10 +1,10 @@
-// 股票｜雲端多檔分析（多檔版，沿用 KPI49 的回測與費稅邏輯）
+// 股票｜雲端多檔分析（直接使用指標 TXT 的「稅後損益 / 累積損益」）
 //
-// - 支援 canonical + 1031-CSV 自動轉換，mapAct / unitsThis / lotShares 與單檔版一致
-// - 稅率方案（ETF/個股/自訂）＋ URL fee/min/tax/unit/slip/cap/rf
-// - 每檔各自回測，計算：Total、MaxDD、PF、Sharpe、Sortino、MAR、HitRate、AnnRet、AnnVol…
-// - 上方圖：選取一檔 → 顯示其每週獲利（浮動長條）＋累積獲利（折線）
-// - 下方表：可排序、點列切換上方圖
+// - 解析格式：
+//   日期,時間,價格,動作,說明,.....,稅後損益=xxxx,報酬率%=x.xx,累積損益=yyyy,...
+// - 僅對「賣出 / 平賣」那幾行做統計：
+//   筆數、勝率、PF、累積淨損益、最大回撤、Sharpe、Sortino、MAR、年化報酬、年化波動、交易頻率(筆/月)
+// - 上方圖：每週「稅後損益」(浮動條) ＋ 累積損益 (折線)
 
 (function(){
   'use strict';
@@ -22,7 +22,6 @@
   var clamp = function(v,lo,hi){ return Math.max(lo,Math.min(hi,v)); };
   var setText = function(sel,t){ var el=$(sel); if(el) el.textContent=t; };
 
-  // 檔名縮短：抓 YYYYMMDD_HHMMSS → 顯示 MMDD_HHMMSS；否則原檔名
   function shortName(name){
     var base = String(name||'').split(/[\\/]/).pop().replace(/\.[^.]+$/,'');
     var m = base.match(/(\d{8})_(\d{6})/);
@@ -31,21 +30,20 @@
     return mmdd + '_' + m[2];
   }
 
-  // ts → Date（用在 tradesPerMonth）
   function tsToDate(ts){
     var s=String(ts||'');
     var y=s.slice(0,4), m=s.slice(4,6), d=s.slice(6,8), hh=s.slice(8,10)||'00', mm=s.slice(10,12)||'00', ss=s.slice(12,14)||'00';
     return new Date(y+'-'+m+'-'+d+'T'+hh+':'+mm+':'+ss);
   }
 
-  // ===== URL 參數 & 稅率、費用設定 =====
+  // ===== URL 參數 & 稅率、費用設定（這裡只用來顯示 / 計算年化） =====
   var url = new URL(location.href);
   var CFG = {
     feeRate: +(url.searchParams.get('fee') || 0.001425),
     minFee : +(url.searchParams.get('min') || 20),
-    taxRate: +(url.searchParams.get('tax') || 0.003), // 預設個股 0.3%
-    unit   : +(url.searchParams.get('unit')|| 1000),  // 每單位股數（如 TXT 沒有 lotShares 時使用）
-    slip   : +(url.searchParams.get('slip')|| 0),     // 每股滑價
+    taxRate: +(url.searchParams.get('tax') || 0.003),
+    unit   : +(url.searchParams.get('unit')|| 1000),
+    slip   : +(url.searchParams.get('slip')|| 0),
     capital: +(url.searchParams.get('cap') || 1000000),
     rf     : +(url.searchParams.get('rf')  || 0.00)
   };
@@ -64,13 +62,17 @@
   }
   refreshChips();
 
-  // 手續費與稅：整數進位 + 最低手續費
-  function fee(amount){ return Math.max(CFG.minFee, Math.ceil(amount * CFG.feeRate)); }
-  function tax(amount){ return Math.max(0, Math.ceil(amount * CFG.taxRate)); }
+  function normalize(txt){
+    return (txt||'')
+      .replace(/\ufeff/gi,'')
+      .replace(/[\u200B-\u200D\uFEFF]/g,'')
+      .replace(/[\x00-\x09\x0B-\x1F\x7F]/g,'')
+      .replace(/\r\n?/g,'\n')
+      .split('\n').map(function(s){ return s.trim(); })
+      .filter(function(x){ return !!x; });
+  }
 
-  // ===== 解析：canonical + 1031-CSV（沿用單檔版） =====
-  var CANON_RE=/^(\d{14})\.0{6}\s+(\d+\.\d{6})\s+(新買|平賣|新賣|平買|強制平倉)\s*$/;
-  var CSV_RE  = /^\s*(\d{8})\s*,\s*(\d{5,6})\s*,\s*(\d+(?:\.\d+)?)\s*,\s*([^,]+)\s*,/;
+  var CSV_RE  = /^\s*(\d{8})\s*,\s*(\d{5,6})\s*,\s*(\d+(?:\.\d+)?)\s*,\s*([^,]+)\s*,(.*)$/;
 
   function mapAct(s){
     s = String(s||'').trim();
@@ -79,58 +81,9 @@
     if (/^(新買|買進|首買|加碼|再加碼|加碼攤平|再加碼攤平|加碼\s*攤平|再加碼\s*攤平)$/i.test(s)) return '新買';
     return s;
   }
-
   function pad6(t){ t=String(t||''); if(t.length===5) t='0'+t; return t.slice(0,6); }
 
-  function normalize(txt){
-    return (txt||'')
-      .replace(/\ufeff/gi,'')
-      .replace(/[\u200B-\u200D\uFEFF]/g,'')
-      .replace(/[\x00-\x09\x0B-\x1F\x7F]/g,'')
-      .replace(/\r\n?/g,'\n')
-      .replace(/\s*,\s*/g, ',')
-      .split('\n').map(function(s){ return s.trim(); })
-      .filter(function(x){ return !!x; });
-  }
-
-  function toCanon(lines){
-    var out=[], i, l, m, d8, t6, px, act, row, um, lm;
-    for(i=0;i<lines.length;i++){
-      l=lines[i];
-      m=l.match(CANON_RE);
-      if(m){
-        row = { ts:m[1], px:+m[2], act:m[3] };
-      }else{
-        m=l.match(CSV_RE);
-        if(!m) continue;
-        d8=m[1]; t6=pad6(m[2]); px=+m[3]; act=mapAct(m[4]);
-        if(!isFinite(px) || !/^\d{6}$/.test(t6)) continue;
-        row = { ts:d8+t6, px:px, act:act };
-      }
-
-      // 讀 unitsThis（1→1→2 結構）
-      um = l.match(/unitsThis\s*=\s*(\d+)/);
-      if(um){
-        row.units = parseInt(um[1],10);
-        if(!(row.units>0)) row.units = 1;
-      }else{
-        row.units = 1;
-      }
-
-      // 讀 lotShares → 每單位股數
-      lm = l.match(/lotShares\s*=\s*(\d+)/);
-      if(lm){
-        row.lotShares = parseInt(lm[1],10);
-        if(!(row.lotShares>0)) row.lotShares = null;
-      }
-
-      out.push(row);
-    }
-    out.sort(function(a,b){ return a.ts.localeCompare(b.ts); });
-    return out;
-  }
-
-  // ===== 週次 key =====
+  // 週 key
   function weekKey(day){
     var dt=new Date(day.slice(0,4)+'-'+day.slice(4,6)+'-'+day.slice(6,8)+'T00:00:00');
     var y=dt.getFullYear(), oneJan=new Date(y,0,1);
@@ -138,75 +91,7 @@
     return y+'-W'+(week<10?('0'+week):week);
   }
 
-  // ===== Backtest：不檢查資金，一律視為成功成交 =====
-  function backtest(rows, unitShares){
-    var shares=0, cash=CFG.capital, cumCost=0, pnlCum=0;
-    var trades=[], weeks=new Map(), dayPnL=new Map();
-
-    for(var i=0;i<rows.length;i++){
-      var r=rows[i];
-
-      if(r.act === '新買'){
-        var lotUnits  = r.units || 1;
-        var sharesInc = unitShares * lotUnits;
-
-        var px  = r.px + CFG.slip;
-        var amt = px * sharesInc;
-        var f   = fee(amt);
-        var cost= amt + f;
-
-        // ⚠ 不再檢查 cash >= cost，直接視為成交
-        cash    -= cost;
-        shares  += sharesInc;
-        cumCost += cost;
-
-        var costAvgDisp = cumCost / shares;
-
-        trades.push({
-          ts:r.ts, kind:'BUY', price:px, shares:sharesInc,
-          buyAmount:amt, sellAmount:0, fee:f, tax:0,
-          cost:cost, costAvgDisp:costAvgDisp, cumCost:cumCost,
-          cumCostDisp:null, priceDiff:null, pnlFull:null,
-          retPctUnit:null, cumPnlFull:pnlCum
-        });
-
-      }else if(r.act === '平賣' && shares > 0){
-        var spx = r.px - CFG.slip;
-        var sam = spx * shares;
-        var ff  = fee(sam);
-        var tt  = tax(sam);
-        cash   += (sam - ff - tt);
-
-        var sellCumCostDisp = cumCost + ff + tt;
-        var sellCostAvgDisp = sellCumCostDisp / shares;
-        var priceDiff       = ((ff + tt) / shares);
-        var pnlFull         = (sam - ff - tt) - cumCost;
-        pnlCum += pnlFull;
-
-        var day = r.ts.slice(0,8);
-        dayPnL.set(day,(dayPnL.get(day)||0)+pnlFull);
-        var wkKey = weekKey(day);
-        weeks.set(wkKey,(weeks.get(wkKey)||0)+pnlFull);
-
-        trades.push({
-          ts:r.ts, kind:'SELL', price:spx, shares:shares,
-          buyAmount:0, sellAmount:sam, fee:ff, tax:tt,
-          cost:0, costAvgDisp:sellCostAvgDisp, cumCost:cumCost,
-          cumCostDisp:sellCumCostDisp, priceDiff:priceDiff,
-          pnlFull:pnlFull,
-          retPctUnit: sellCumCostDisp>0 ? (pnlFull/sellCumCostDisp) : null,
-          cumPnlFull:pnlCum
-        });
-
-        shares=0;
-        cumCost=0;
-      }
-    }
-
-    return { trades:trades, weeks:weeks, dayPnL:dayPnL, endingCash:cash, openShares:shares, pnlCum:pnlCum };
-  }
-
-  // ===== DayPnL → series =====
+  // ===== 統計工具 =====
   function seriesFromDayPnL(dayPnL){
     var days = Array.from(dayPnL.keys()).sort();
     var pnl  = days.map(function(d){ return dayPnL.get(d)||0; });
@@ -216,15 +101,12 @@
     return {days:days, pnl:pnl, eq:eq};
   }
 
-  // ===== 統計 & KPI（沿用單檔版） =====
   function statsBasic(arr){
-    var n=arr.length; if(!n) return {n:n,mean:0,std:0,min:0,max:0,skew:0,kurt:0};
+    var n=arr.length; if(!n) return {n:n,mean:0,std:0,min:0,max:0};
     var i, mean=0; for(i=0;i<n;i++) mean+=arr[i]; mean/=n;
     var v=0; for(i=0;i<n;i++) v+=(arr[i]-mean)*(arr[i]-mean); v/=n;
     var std=Math.sqrt(v), min=Math.min.apply(null,arr), max=Math.max.apply(null,arr);
-    var m3=0,m4=0; for(i=0;i<n;i++){ var d=arr[i]-mean; m3+=d*d*d; m4+=d*d*d*d; } m3/=n; m4/=n;
-    var skew = std>0 ? (m3/Math.pow(std,3)) : 0; var kurt = std>0 ? (m4/Math.pow(std,4))-3 : 0;
-    return {n:n,mean:mean,std:std,min:min,max:max,skew:skew,kurt:kurt};
+    return {n:n,mean:mean,std:std,min:min,max:max};
   }
   function maxDrawdown(eq){
     var peak=eq[0]||0, mdd=0, i, dd;
@@ -234,35 +116,6 @@
       if(dd<mdd) mdd=dd;
     }
     return {mdd:mdd};
-  }
-  function timeUnderwater(eq){
-    var peak=eq[0]||0, cur=0, maxTU=0, totalTU=0, i, v;
-    for(i=0;i<eq.length;i++){
-      v=eq[i];
-      if(v>=peak){
-        peak=v;
-        if(cur>0){ totalTU+=cur; cur=0; }
-      }else{
-        cur++;
-        if(cur>maxTU) maxTU=cur;
-      }
-    }
-    if(cur>0) totalTU+=cur;
-    return {maxTU:maxTU,totalTU:totalTU};
-  }
-  function ulcerIndex(eq){
-    var peak=eq[0]||0,sum=0,i;
-    for(i=0;i<eq.length;i++){
-      if(eq[i]>peak) peak=eq[i];
-      var d=eq[i]-peak;
-      sum+=d*d;
-    }
-    return Math.sqrt(sum/Math.max(1,eq.length));
-  }
-  function martin(eq){
-    var ui=ulcerIndex(eq);
-    var last=eq.length? eq[eq.length-1] : 0;
-    return ui>0? last/ui : 0;
   }
   function downsideStd(rets){
     var n=rets.length,i,neg=[],m=0;
@@ -278,39 +131,12 @@
   }
   function sharpe(annRet, annVol, rf){ return annVol>0 ? (annRet-rf)/annVol : 0; }
   function sortino(annRet, annDown, rf){ return annDown>0 ? (annRet-rf)/annDown : 0; }
-  function calmar(annRet, mdd){ return mdd<0 ? (annRet/Math.abs(mdd)) : 0; }
-  function omega(rets,thr){
-    if(thr===void 0) thr=0;
-    var pos=0,neg=0,i,r;
-    for(i=0;i<rets.length;i++){
-      r=rets[i];
-      if(r>thr) pos+=r-thr;
-      else neg+=thr-r;
-    }
-    return neg>0? pos/neg : Infinity;
-  }
-  function streaks(arr){
-    var win=0,loss=0,maxW=0,maxL=0,i,x;
-    for(i=0;i<arr.length;i++){
-      x=arr[i];
-      if(x>0){
-        win++; loss=0; if(win>maxW) maxW=win;
-      }else if(x<0){
-        loss++; win=0; if(loss>maxL) maxL=loss;
-      }else{
-        win=0; loss=0;
-      }
-    }
-    return {maxWinStreak:maxW,maxLossStreak:maxL};
-  }
 
-  // KPI：加上 tradesPerMonth（多檔表格會用到）
-  function computeKPI(bt, unitShares){
-    var sells = bt.trades.filter(function(x){return x.kind==='SELL';});
-    var tradePnl = sells.map(function(x){return x.pnlFull||0;});
-
-    var S = seriesFromDayPnL(bt.dayPnL);
-    var days = S.days, eqIncr = S.pnl, eq = S.eq;
+  // ===== 用 TXT 的「稅後損益 / 累積損益」計算 KPI =====
+  function computeKPI(dayPnL, trades){
+    var S = seriesFromDayPnL(dayPnL);
+    var eqIncr = S.pnl;
+    var eq     = S.eq;
 
     var annualFactor = 252;
     var total = eq.length ? eq[eq.length-1] : 0;
@@ -322,135 +148,97 @@
     var annVol = R.std  * Math.sqrt(annualFactor);
     var dStd   = downsideStd(dailyRet) * Math.sqrt(annualFactor);
 
-    var mdd = maxDrawdown(eq).mdd;
-    var ui  = ulcerIndex(eq);
+    var mddTrades = maxDrawdown(trades.map(function(t){return t.cum;})).mdd;
     var sr  = sharpe(annRet, annVol, CFG.rf);
-    var so  = sortino(annRet, dStd,  CFG.rf);
-    var cal = calmar(annRet, mdd);
-    var mar = annRet / Math.max(1,Math.abs(mdd));
-    var mart= martin(eq);
-    var omg = omega(dailyRet,0);
+    var so  = sortino(annRet, dStd, CFG.rf);
+    var mar = annRet / Math.max(1,Math.abs(mddTrades));
 
-    var nTrades = sells.length;
-    var hits    = sells.filter(function(s){return (s.pnlFull||0)>0;}).length;
+    var nTrades = trades.length;
+    var hits = trades.filter(function(t){return t.pnl>0;}).length;
     var hitRate = nTrades ? hits/nTrades : 0;
 
-    var grossWin = sells.filter(function(s){return (s.pnlFull||0)>0;})
-                        .reduce(function(a,b){return a+(b.pnlFull||0);},0);
-    var grossLoss= sells.filter(function(s){return (s.pnlFull||0)<0;})
-                        .reduce(function(a,b){return a+(b.pnlFull||0);},0);
-    var pf = grossLoss<0 ? (grossWin/Math.abs(grossLoss)) : (grossWin>0?Infinity:0);
+    var posPnL = trades.filter(function(t){return t.pnl>0;})
+                       .reduce(function(a,b){return a+b.pnl;},0);
+    var negPnL = trades.filter(function(t){return t.pnl<0;})
+                       .reduce(function(a,b){return a+b.pnl;},0);
+    var pf = negPnL<0 ? (posPnL/Math.abs(negPnL)) : (posPnL>0?Infinity:0);
 
-    var avgWin  = hits ? grossWin/hits : 0;
-    var avgLoss = (nTrades-hits) ? Math.abs(grossLoss)/(nTrades-hits) : 0;
-    var payoff  = avgLoss>0 ? avgWin/avgLoss : Infinity;
-    var expectancy = nTrades ? (grossWin+grossLoss)/nTrades : 0;
-
-    var weeklyVals = Array.from(bt.weeks.values());
-    var volWeekly  = statsBasic(weeklyVals).std;
-    var bestWeek   = weeklyVals.length ? Math.max.apply(null,weeklyVals) : 0;
-    var worstWeek  = weeklyVals.length ? Math.min.apply(null,weeklyVals) : 0;
-
-    var TU = timeUnderwater(eq);
-    var ST = streaks(tradePnl);
-
-    var grossBuy = bt.trades.filter(function(t){return t.kind==='BUY';})
-                            .reduce(function(a,b){return a+b.price*b.shares;},0);
-    var grossSell= bt.trades.filter(function(t){return t.kind==='SELL';})
-                            .reduce(function(a,b){return a+b.price*b.shares;},0);
-    var feeSum   = bt.trades.reduce(function(a,b){return a+(b.fee||0);},0);
-    var taxSum   = bt.trades.reduce(function(a,b){return a+(b.tax||0);},0);
-    var turnover = CFG.capital ? (grossBuy+grossSell)/CFG.capital : 0;
-    var costRatio= (grossBuy+grossSell)>0 ? (feeSum+taxSum)/(grossBuy+grossSell) : 0;
-
-    var avgTrade = nTrades ? tradePnl.reduce(function(a,b){return a+b;},0)/nTrades : 0;
-    var medTrade = (function(){
-      var s=[].concat(tradePnl).sort(function(a,b){return a-b;});
-      if(!s.length) return 0;
-      var m=Math.floor(s.length/2);
-      return s.length%2 ? s[m] : (s[m-1]+s[m])/2;
-    })();
-
-    // Trade 分布
-    var posCount = tradePnl.filter(function(x){return x>0;}).length;
-    var zeroCount= tradePnl.filter(function(x){return x===0;}).length;
-    var negCount = tradePnl.filter(function(x){return x<0;}).length;
-    var posRatio = nTrades ? posCount/nTrades : 0;
-    var negRatio = nTrades ? negCount/nTrades : 0;
-    var pnlStd   = statsBasic(tradePnl).std;
-
-    // 交易頻率（SELL 筆數／月）
     var tradesPerMonth = 0;
-    if(sells.length>1){
-      var firstTs = sells[0].ts;
-      var lastTs  = sells[sells.length-1].ts;
+    if(nTrades>1){
+      var firstTs = trades[0].ts;
+      var lastTs  = trades[nTrades-1].ts;
       var msDiff = tsToDate(lastTs) - tsToDate(firstTs);
       var months = msDiff / (1000*60*60*24*30.4);
       if(months <= 0) months = 1/30.4;
-      tradesPerMonth = sells.length / months;
+      tradesPerMonth = nTrades/months;
     }
 
     return {
-      total:total,
-      totalReturn:totalReturn,
-      annRet:annRet,
-      annVol:annVol,
-      bestWeek:bestWeek,
-      worstWeek:worstWeek,
-      avgTrade:avgTrade,
-      medTrade:medTrade,
-      payoff:payoff,
-      mdd:mdd,
-      dStd:dStd,
-      ui:ui,
-      mart:mart,
-      volWeekly:volWeekly,
-      min:R.min,
-      max:R.max,
-      std:R.std,
-      sr:sr,
-      so:so,
-      cal:cal,
-      mar:mar,
-      pf:pf,
-      expectancy:expectancy,
-      hitRate:hitRate,
-      avgWin:avgWin,
-      avgLoss:avgLoss,
-      maxTU:TU.maxTU,
-      totalTU:TU.totalTU,
-      maxWinStreak:ST.maxWinStreak,
-      maxLossStreak:ST.maxLossStreak,
-      skew:R.skew,
-      kurt:R.kurt,
-      days:days.length,
-      grossBuy:grossBuy,
-      grossSell:grossSell,
-      feeSum:feeSum,
-      taxSum:taxSum,
-      turnover:turnover,
-      costRatio:costRatio,
-      totalExecs:bt.trades.length,
-      unitShares:unitShares,
-      tradeCount:nTrades,
-      posCount:posCount,
-      zeroCount:zeroCount,
-      negCount:negCount,
-      posRatio:posRatio,
-      negRatio:negRatio,
-      omega:omg,
-      pnlStd:pnlStd,
-      tradesPerMonth:tradesPerMonth
+      total: total,              // 應 ≒ TXT 最後一筆「累積損益」
+      totalReturn: totalReturn,
+      annRet: annRet,
+      annVol: annVol,
+      sr: sr,
+      so: so,
+      mar: mar,
+      hitRate: hitRate,
+      pf: pf,
+      tradesPerMonth: tradesPerMonth,
+      maxDDAbs: Math.abs(mddTrades||0)
     };
   }
 
   // ===== 多檔狀態 =====
-  var rows = [];          // 每檔的彙總紀錄
-  var currentIdx = -1;    // 目前選取 index
+  var rows = [];
+  var currentIdx = -1;
   var chart = null;
-  var allSources = [];    // [{name,text}, ...] 方便調稅率時重算
+  var allSources = [];  // [{name,text}, ...]
 
-  // ===== 圖表：每週獲利（浮動長條）＋累積獲利（折線） =====
+  // ===== 從 TXT 解析出 trades / dayPnL / weeks =====
+  function parseFile(text){
+    var lines = normalize(text);
+    var trades = [];      // 每筆 SELL：{ts, date, pnl, cum}
+    var dayPnL = new Map();
+    var weeks  = new Map();
+
+    var lastCum = 0;
+
+    for(var i=0;i<lines.length;i++){
+      var l = lines[i];
+      var m = l.match(CSV_RE);
+      if(!m) continue;
+      var date = m[1];
+      var time = pad6(m[2]);
+      var px   = +m[3];   // 這裡其實用不到，只是留著
+      var actStr = m[4];
+      var rest = m[5] || '';
+      var act = mapAct(actStr);
+      if(act !== '平賣') continue;
+
+      var pnlMatch = rest.match(/稅後損益\s*=\s*(-?\d+)/);
+      var cumMatch = rest.match(/累積損益\s*=\s*(-?\d+)/);
+
+      if(!pnlMatch) continue;  // 沒稅後損益就跳過
+
+      var pnl = parseInt(pnlMatch[1],10);
+      var cum = cumMatch ? parseInt(cumMatch[1],10) : (lastCum + pnl);
+      lastCum = cum;
+
+      var ts = date + time;
+      trades.push({ ts:ts, date:date, pnl:pnl, cum:cum });
+
+      // 日別損益
+      var dKey = date;
+      dayPnL.set(dKey, (dayPnL.get(dKey)||0) + pnl);
+      // 週別損益
+      var wKey = weekKey(date);
+      weeks.set(wKey, (weeks.get(wKey)||0) + pnl);
+    }
+
+    return { trades:trades, dayPnL:dayPnL, weeks:weeks };
+  }
+
+  // ===== 圖表：每週稅後損益＋累積淨利 =====
   function drawChartFor(rec){
     var ctx = $('#chart');
     if(!ctx || !rec) return;
@@ -507,7 +295,7 @@
 
     $('#chartCaption').textContent =
       '目前：' + rec.shortName +
-      '｜Total=' + fmtInt(rec.total) +
+      '｜Total(累積損益)=' + fmtInt(rec.total) +
       '，MaxDD=' + fmtInt(rec.maxDDAbs) +
       '，PF=' + fmt2(rec.pf);
   }
@@ -584,7 +372,7 @@
     }
   }
 
-  // ===== 稅率方案自動偵測 =====
+  // ===== 稅率方案自動偵測（只影響顯示與年化計算） =====
   function autoPickSchemeByContent(sourceName, txt){
     if(userForcedScheme) return;
     var s=(sourceName||'')+' '+(txt||'');
@@ -611,40 +399,29 @@
 
     for(var i=0;i<nameTextPairs.length;i++){
       var src = nameTextPairs[i];
-      var lines = normalize(src.text);
-      if(!lines.length) continue;
+      var parsed = parseFile(src.text);
+      if(!parsed.trades.length) continue;
 
       autoPickSchemeByContent(src.name, src.text);
 
-      var canon = toCanon(lines);
-
-      var unitShares = CFG.unit;
-      for(var j=0;j<canon.length;j++){
-        if(canon[j].lotShares && canon[j].lotShares>0){
-          unitShares = canon[j].lotShares;
-          break;
-        }
-      }
-
-      var bt = backtest(canon, unitShares);
-      var k  = computeKPI(bt, unitShares);
+      var kpi = computeKPI(parsed.dayPnL, parsed.trades);
 
       rows.push({
         __id: Math.random().toString(36).slice(2),
         name: src.name,
         shortName: shortName(src.name),
-        weeks: bt.weeks,
-        tradeCount: k.tradeCount,
-        hitRate:    k.hitRate,
-        total:      k.total,
-        maxDDAbs:   Math.abs(k.mdd||0),
-        pf:         isFinite(k.pf)?k.pf:0,
-        sr:         k.sr,
-        so:         k.so,
-        mar:        k.mar,
-        tradesPerMonth: k.tradesPerMonth,
-        annRet:     k.annRet,
-        annVol:     k.annVol
+        weeks: parsed.weeks,
+        tradeCount: parsed.trades.length,
+        hitRate:    kpi.hitRate,
+        total:      kpi.total,
+        maxDDAbs:   kpi.maxDDAbs,
+        pf:         isFinite(kpi.pf)?kpi.pf:0,
+        sr:         kpi.sr,
+        so:         kpi.so,
+        mar:        kpi.mar,
+        tradesPerMonth: kpi.tradesPerMonth,
+        annRet:     kpi.annRet,
+        annVol:     kpi.annVol
       });
     }
 
@@ -653,7 +430,7 @@
     }else{
       renderTable();
       if(chart){ chart.destroy(); chart=null; }
-      $('#chartCaption').textContent = '尚未載入檔案。';
+      $('#chartCaption').textContent = '尚未載入檔案或找不到「賣出」資料行。';
     }
 
     $('#fileCount').textContent = String(rows.length);
