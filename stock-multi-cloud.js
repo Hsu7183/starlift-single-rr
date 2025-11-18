@@ -86,7 +86,6 @@
   // ===== 狀態 =====
   var rows = [];              // 多檔彙總列
   var currentIdx = -1;        // 目前選中的檔案索引
-  var currentRawForScheme = ''; // 保留最後一次匯入文字，用來自動判別稅率
 
   var chWeekly = null;
 
@@ -106,11 +105,6 @@
         if(isFinite(v)) CFG.taxRate = clamp(v,0,1);
       }
       refreshChips();
-      // 稅率變動時，不自動重算所有檔案；如需重算，可重新匯入（避免意外改變已看過的結果）
-      if(rows.length>0){
-        // 也可以選擇重算全部；這裡先保守，只提醒使用者。
-        // 若你想改成自動重算，可以在這裡呼叫 recomputeAll();
-      }
     });
   }
   if(taxCustom){
@@ -270,7 +264,9 @@
         row = { ts:d8+t6, px:px, act:act };
       }
 
+      // ★★ 關鍵：支援「unitsThis=」與「本次單位=」
       um = l.match(/unitsThis\s*=\s*(\d+)/);
+      if(!um) um = l.match(/本次單位\s*=\s*(\d+)/);   // 你的 1031 TXT 用的是這個欄位
       if(um){
         row.units = parseInt(um[1],10);
         if(!(row.units>0)) row.units = 1;
@@ -431,37 +427,8 @@
     return annVol>0 ? (annRet-rf)/annVol : 0;
   }
   function sortino(annRet, annDown, rf){
-    return annDown>0 ? (annRet-rf)/annDown : 0;
+    return annDown>0 ? (annDown? (annRet-rf)/annDown : 0) : 0;
   }
-  function calmar(annRet, mdd){
-    return mdd<0 ? (annRet/Math.abs(mdd)) : 0;
-  }
-  function timeUnderwater(eq){
-    var peak=eq[0]||0, cur=0, maxTU=0, totalTU=0, i, v;
-    for(i=0;i<eq.length;i++){
-      v=eq[i];
-      if(v>=peak){
-        peak=v;
-        if(cur>0){ totalTU+=cur; cur=0; }
-      }else{
-        cur++;
-        if(cur>maxTU) maxTU=cur;
-      }
-    }
-    if(cur>0) totalTU+=cur;
-    return { maxTU:maxTU, totalTU:totalTU };
-  }
-  function streaks(arr){
-    var win=0,loss=0,maxW=0,maxL=0,i,x;
-    for(i=0;i<arr.length;i++){
-      x=arr[i];
-      if(x>0){ win++; loss=0; if(win>maxW) maxW=win; }
-      else if(x<0){ loss++; win=0; if(loss>maxL) maxL=loss; }
-      else{ win=0; loss=0; }
-    }
-    return {maxWinStreak:maxW,maxLossStreak:maxL};
-  }
-
   function computeKPI(bt){
     var sells = bt.trades.filter(function(x){return x.kind==='SELL';});
     var tradePnl = sells.map(function(x){return x.pnlFull||0;});
@@ -482,8 +449,6 @@
     var sr   = sharpe(annRet,annVol,CFG.rf);
     var so   = sortino(annRet,dStd,CFG.rf);
     var mar  = annRet/Math.max(1,Math.abs(mdd));
-    var TU   = timeUnderwater(eq);
-    var ST   = streaks(tradePnl);
 
     // PF / 勝率 / 期望值 / 交易頻率
     var hits = sells.filter(function(s){return (s.pnlFull||0)>0;}).length;
@@ -491,10 +456,7 @@
     var grossWin=sells.filter(function(s){return (s.pnlFull||0)>0;}).reduce(function(a,b){return a+(b.pnlFull||0);},0);
     var grossLoss=sells.filter(function(s){return (s.pnlFull||0)<0;}).reduce(function(a,b){return a+(b.pnlFull||0);},0);
     var pf = grossLoss<0? (grossWin/Math.abs(grossLoss)) : (grossWin>0?Infinity:0);
-    var avgWin = hits? grossWin/hits : 0;
-    var avgLoss= (nTrades-hits)? Math.abs(grossLoss)/(nTrades-hits) : 0;
     var hitRate= nTrades? hits/nTrades : 0;
-    var expectancy = nTrades? (grossWin+grossLoss)/nTrades : 0;
 
     // 交易頻率（筆/月）：以首筆進場到最後一筆出場的時間估算
     var tradesPerMonth = 0;
@@ -521,14 +483,6 @@
       mar:mar,
       hitRate:hitRate,
       pf:pf,
-      avgWin:avgWin,
-      avgLoss:avgLoss,
-      expectancy:expectancy,
-      maxTU:TU.maxTU,
-      totalTU:TU.totalTU,
-      maxWinStreak:ST.maxWinStreak,
-      maxLossStreak:ST.maxLossStreak,
-      days:days.length,
       tradesPerMonth:tradesPerMonth,
       eqDays:days,
       eqSeries:eq,
@@ -718,9 +672,8 @@
   function handlePairs(pairs){
     if(!pairs || !pairs.length) return;
 
-    // 使用第一個檔案做稅率自動偵測（除非使用者已手動覆寫）
+    // 用第一檔幫忙自動判斷 ETF / STOCK 稅率（00909 / 2603 等）
     autoPickSchemeByContent(pairs[0].name, pairs[0].text);
-    currentRawForScheme = pairs[0].text;
 
     var newRows = [];
     for(var i=0;i<pairs.length;i++){
@@ -728,7 +681,7 @@
       var norm = normalize(p.text);
       var canon = toCanon(norm);
 
-      // 由 lotShares 覆蓋 CFG.unit（以第一筆有 lotShares 的列為主）
+      // 若有 lotShares，可覆蓋 CFG.unit（只看第一筆有 lotShares 的）
       var autoUnit = null, j;
       for(j=0;j<canon.length;j++){
         if(canon[j].lotShares && canon[j].lotShares>0){
