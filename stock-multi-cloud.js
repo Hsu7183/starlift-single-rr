@@ -1,6 +1,6 @@
 // 股票｜雲端多檔分析（KPI49 簡表）
-// - 解析：canonical + 1031-CSV，支援「本次單位=」＋「unitsThis=」＋「lotShares=」
-// - 口數：shares = CFG.unit * 本次單位
+// - 解析：canonical + 1031-CSV，支援「本次單位=」＋「unitsThis=」
+// - 1張 = 1000股：unit 永遠固定 1000，不吃 URL 也不看 lotShares
 // - 費稅：fee / tax 與 stock-single-cloud.js 一致（整數進位+最低手續費）
 // - 稅率方案：ETF / STOCK / CUSTOM，可由檔名/內容猜（00909/00910/0050、2603/長榮）
 // - 輸入：剪貼簿多份 TXT、本機多檔、Supabase reports 多選
@@ -50,7 +50,7 @@
     feeRate: +(url.searchParams.get('fee') || 0.001425),
     minFee : +(url.searchParams.get('min') || 20),
     taxRate: +(url.searchParams.get('tax') || 0.003),
-    unit   : +(url.searchParams.get('unit')|| 1000),
+    unit   : 1000,                          // ★ 直接鎖死：1張 = 1000股
     slip   : +(url.searchParams.get('slip')|| 0),
     capital: +(url.searchParams.get('cap') || 1000000),
     rf     : +(url.searchParams.get('rf')  || 0.00)
@@ -218,9 +218,9 @@
       .filter(function(x){return !!x;});
   }
 
-  // 只負責抓 ts/px/act/units/lotShares，不去管「賣出 vs 平賣」的名稱
+  // 只負責抓 ts / px / act / units
   function toCanon(lines){
-    var out=[], i,l,m,d8,t6,px,act,row,um,lm;
+    var out=[], i,l,m,d8,t6,px,act,row,um;
     for(i=0;i<lines.length;i++){
       l=lines[i];
 
@@ -235,17 +235,9 @@
         row={ts:d8+t6,px:px,act:act};
       }
 
-      // unitsThis / 本次單位
       um=l.match(/unitsThis\s*=\s*(\d+)/);
       if(!um) um=l.match(/本次單位\s*=\s*(\d+)/);
       row.units = um ? Math.max(1,parseInt(um[1],10)) : 1;
-
-      // lotShares
-      lm=l.match(/lotShares\s*=\s*(\d+)/);
-      if(lm){
-        var ls=parseInt(lm[1],10);
-        row.lotShares = ls>0? ls : null;
-      }
 
       out.push(row);
     }
@@ -278,14 +270,14 @@
     refreshChips();
   }
 
-  // ========= 回測（超寬鬆判斷：有「買」就 BUY，有「賣」或「平倉」就 SELL） =========
+  // ========= 回測（有「買」就 BUY，有「賣」或「平倉」就 SELL） =========
   function backtest(rowsCanon){
-    var shares=0, cash=CFG.capital, cumCost=0, pnlCum=0;
+    var shares=0, cumCost=0, pnlCum=0;
     var trades=[], dayPnL=new Map();
 
     for(var i=0;i<rowsCanon.length;i++){
       var r=rowsCanon[i];
-      var actStr=(r.act||'').replace(/\s/g,'');
+      var actStr=String(r.act||'').replace(/\s/g,'');
 
       var isBuy  = /買/.test(actStr) || /加碼/.test(actStr);
       var isSell = /賣/.test(actStr) || /平倉/.test(actStr);
@@ -293,33 +285,28 @@
       if(isBuy){
         var lotUnits=r.units||1;
         var sharesInc=CFG.unit*lotUnits;
-        var px = r.px + CFG.slip;
+        var px=r.px + CFG.slip;
         var amt=px*sharesInc;
-        var f  =fee(amt);
+        var f=fee(amt);
         var cost=amt+f;
 
-        if(cash >= cost){
-          cash   -=cost;
-          shares +=sharesInc;
-          cumCost+=cost;
+        shares += sharesInc;
+        cumCost += cost;
 
-          trades.push({
-            ts:r.ts, kind:'BUY', price:px, shares:sharesInc,
-            buyAmount:amt, sellAmount:0, fee:f, tax:0,
-            cost:cost, cumCost:cumCost,
-            pnlFull:null, cumPnlFull:pnlCum
-          });
-        }
+        trades.push({
+          ts:r.ts, kind:'BUY', price:px, shares:sharesInc,
+          buyAmount:amt, sellAmount:0, fee:f, tax:0,
+          cost:cost, cumCost:cumCost,
+          pnlFull:null, cumPnlFull:pnlCum
+        });
 
       }else if(isSell && shares>0){
         var spx=r.px - CFG.slip;
         var sam=spx*shares;
-        var ff =fee(sam);
-        var tt =tax(sam);
-        cash  +=(sam-ff-tt);
-
+        var ff=fee(sam);
+        var tt=tax(sam);
         var pnlFull=(sam-ff-tt)-cumCost;
-        pnlCum +=pnlFull;
+        pnlCum += pnlFull;
 
         var day=r.ts.slice(0,8);
         dayPnL.set(day,(dayPnL.get(day)||0)+pnlFull);
@@ -567,15 +554,6 @@
     pairs.forEach(function(p){
       var norm = normalize(p.text);
       var canon= toCanon(norm);
-
-      // 若有 lotShares → 覆蓋 unit
-      var autoUnit=null;
-      for(var i=0;i<canon.length;i++){
-        if(canon[i].lotShares && canon[i].lotShares>0){
-          autoUnit=canon[i].lotShares; break;
-        }
-      }
-      if(autoUnit!=null){ CFG.unit=autoUnit; refreshChips(); }
 
       var bt = backtest(canon);
       var k  = computeKPI(bt);
