@@ -130,7 +130,7 @@
     return out;
   }
 
-  // ===== 週次 key（同單檔版） =====
+  // ===== 週次 key =====
   function weekKey(day){
     var dt=new Date(day.slice(0,4)+'-'+day.slice(4,6)+'-'+day.slice(6,8)+'T00:00:00');
     var y=dt.getFullYear(), oneJan=new Date(y,0,1);
@@ -138,13 +138,12 @@
     return y+'-W'+(week<10?('0'+week):week);
   }
 
-  // ===== Backtest（多檔共用；unitShares 作為參數，不再用全域 CFG.unit） =====
+  // ===== Backtest：不檢查資金，一律視為成功成交 =====
   function backtest(rows, unitShares){
     var shares=0, cash=CFG.capital, cumCost=0, pnlCum=0;
     var trades=[], weeks=new Map(), dayPnL=new Map();
 
-    var i;
-    for(i=0;i<rows.length;i++){
+    for(var i=0;i<rows.length;i++){
       var r=rows[i];
 
       if(r.act === '新買'){
@@ -156,19 +155,20 @@
         var f   = fee(amt);
         var cost= amt + f;
 
-        if(cash >= cost){
-          cash    -= cost;
-          shares  += sharesInc;
-          cumCost += cost;
-          var costAvgDisp = cumCost / shares;
+        // ⚠ 不再檢查 cash >= cost，直接視為成交
+        cash    -= cost;
+        shares  += sharesInc;
+        cumCost += cost;
 
-          trades.push({
-            ts:r.ts, kind:'BUY', price:px, shares:sharesInc,
-            buyAmount:amt, sellAmount:0, fee:f, tax:0,
-            cost:cost, costAvgDisp:costAvgDisp, cumCost:cumCost,
-            cumCostDisp:null, priceDiff:null, pnlFull:null, retPctUnit:null, cumPnlFull:pnlCum
-          });
-        }
+        var costAvgDisp = cumCost / shares;
+
+        trades.push({
+          ts:r.ts, kind:'BUY', price:px, shares:sharesInc,
+          buyAmount:amt, sellAmount:0, fee:f, tax:0,
+          cost:cost, costAvgDisp:costAvgDisp, cumCost:cumCost,
+          cumCostDisp:null, priceDiff:null, pnlFull:null,
+          retPctUnit:null, cumPnlFull:pnlCum
+        });
 
       }else if(r.act === '平賣' && shares > 0){
         var spx = r.px - CFG.slip;
@@ -193,10 +193,13 @@
           buyAmount:0, sellAmount:sam, fee:ff, tax:tt,
           cost:0, costAvgDisp:sellCostAvgDisp, cumCost:cumCost,
           cumCostDisp:sellCumCostDisp, priceDiff:priceDiff,
-          pnlFull:pnlFull, retPctUnit: sellCumCostDisp>0 ? (pnlFull/sellCumCostDisp) : null, cumPnlFull:pnlCum
+          pnlFull:pnlFull,
+          retPctUnit: sellCumCostDisp>0 ? (pnlFull/sellCumCostDisp) : null,
+          cumPnlFull:pnlCum
         });
 
-        shares=0; cumCost=0;
+        shares=0;
+        cumCost=0;
       }
     }
 
@@ -213,7 +216,7 @@
     return {days:days, pnl:pnl, eq:eq};
   }
 
-  // ===== 基本統計 & KPI（取自單檔版） =====
+  // ===== 統計 & KPI（沿用單檔版） =====
   function statsBasic(arr){
     var n=arr.length; if(!n) return {n:n,mean:0,std:0,min:0,max:0,skew:0,kurt:0};
     var i, mean=0; for(i=0;i<n;i++) mean+=arr[i]; mean/=n;
@@ -301,7 +304,7 @@
     return {maxWinStreak:maxW,maxLossStreak:maxL};
   }
 
-  // KPI 核心：沿用單檔版，另外補 tradesPerMonth（給多檔表格）
+  // KPI：加上 tradesPerMonth（多檔表格會用到）
   function computeKPI(bt, unitShares){
     var sells = bt.trades.filter(function(x){return x.kind==='SELL';});
     var tradePnl = sells.map(function(x){return x.pnlFull||0;});
@@ -442,10 +445,10 @@
   }
 
   // ===== 多檔狀態 =====
-  var rows = [];          // 每檔的彙總紀錄（給表格與圖用）
+  var rows = [];          // 每檔的彙總紀錄
   var currentIdx = -1;    // 目前選取 index
   var chart = null;
-  var allSources = [];    // [{name,text}, ...] 方便調整稅率時重算
+  var allSources = [];    // [{name,text}, ...] 方便調稅率時重算
 
   // ===== 圖表：每週獲利（浮動長條）＋累積獲利（折線） =====
   function drawChartFor(rec){
@@ -457,8 +460,8 @@
     var labels = Array.from(weeks.keys());
     var weekly = labels.map(function(k){ return weeks.get(k)||0; });
 
-    var cum=[], s=0, floatBars=[], p=0, i;
-    for(i=0;i<weekly.length;i++){
+    var cum=[], s=0, floatBars=[], p=0;
+    for(var i=0;i<weekly.length;i++){
       s+=weekly[i];
       cum.push(s);
       floatBars.push([p, s]);
@@ -534,11 +537,10 @@
     }
     tb.innerHTML = html;
 
-    // 綁定 click
     var trs = tb.querySelectorAll('tr');
     for(i=0;i<trs.length;i++){
       (function(idx){
-        trs[i].onclick = function(){
+        trs[idx].onclick = function(){
           selectRow(idx);
         };
       })(i);
@@ -553,8 +555,7 @@
 
   function bindSort(){
     var ths = $('#sumTable thead').querySelectorAll('th');
-    var i;
-    for(i=0;i<ths.length;i++){
+    for(var i=0;i<ths.length;i++){
       (function(th){
         th.onclick = function(){
           var k = th.getAttribute('data-k');
@@ -569,11 +570,10 @@
             return asc ? (x-y) : (y-x);
           });
           th.setAttribute('data-asc', asc ? '1' : '0');
-          // 維持原選取（依 id 尋找）
           if(currentIdx>=0){
             var curId = rows[currentIdx].__id;
-            var newIdx = -1, j;
-            for(j=0;j<rows.length;j++){
+            var newIdx = -1;
+            for(var j=0;j<rows.length;j++){
               if(rows[j].__id === curId){ newIdx=j; break; }
             }
             currentIdx = newIdx;
@@ -584,7 +584,7 @@
     }
   }
 
-  // ===== 稅率方案自動偵測（與單檔概念相同） =====
+  // ===== 稅率方案自動偵測 =====
   function autoPickSchemeByContent(sourceName, txt){
     if(userForcedScheme) return;
     var s=(sourceName||'')+' '+(txt||'');
@@ -605,12 +605,11 @@
 
   // ===== 主處理：多檔 TXT → rows =====
   function handleTexts(nameTextPairs){
-    allSources = nameTextPairs.slice(); // 存起來，方便之後重算
+    allSources = nameTextPairs.slice();
     rows = [];
     currentIdx = -1;
 
-    var i;
-    for(i=0;i<nameTextPairs.length;i++){
+    for(var i=0;i<nameTextPairs.length;i++){
       var src = nameTextPairs[i];
       var lines = normalize(src.text);
       if(!lines.length) continue;
@@ -619,9 +618,8 @@
 
       var canon = toCanon(lines);
 
-      // 依檔案內的 lotShares 覆蓋 unitShares（每檔自己的）
-      var j, unitShares = CFG.unit;
-      for(j=0;j<canon.length;j++){
+      var unitShares = CFG.unit;
+      for(var j=0;j<canon.length;j++){
         if(canon[j].lotShares && canon[j].lotShares>0){
           unitShares = canon[j].lotShares;
           break;
@@ -631,13 +629,11 @@
       var bt = backtest(canon, unitShares);
       var k  = computeKPI(bt, unitShares);
 
-      // 把 weekly Map 留在 rec 裡，給圖用
       rows.push({
         __id: Math.random().toString(36).slice(2),
         name: src.name,
         shortName: shortName(src.name),
         weeks: bt.weeks,
-        // 彙總指標：
         tradeCount: k.tradeCount,
         hitRate:    k.hitRate,
         total:      k.total,
@@ -677,7 +673,6 @@
       }
       navigator.clipboard.readText().then(function(txt){
         if(!txt){ alert('剪貼簿沒有文字'); return; }
-        // 多份 TXT 用「------」分隔
         var parts = txt.split(/\n-{5,}\n/);
         var pairs = [];
         for(var i=0;i<parts.length;i++){
@@ -699,7 +694,7 @@
       var pending = fs.length;
       var pairs = [];
 
-      var readOne = function(f){
+      function readOne(f){
         var reader = new FileReader();
         reader.onload = function(){
           pairs.push({name:f.name, text:reader.result||''});
@@ -708,8 +703,8 @@
             handleTexts(pairs);
           }
         };
-        reader.readAsText(f); // 這裡直接用瀏覽器判斷編碼；如果要多編碼偵測可再強化
-      };
+        reader.readAsText(f);
+      }
 
       for(var i=0;i<fs.length;i++){
         readOne(fs[i]);
