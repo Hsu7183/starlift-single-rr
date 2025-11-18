@@ -1,12 +1,13 @@
-// 股票｜雲端多檔分析
-// 這版：不再自己回測，只「吃指標 TXT」裡的：稅後損益 / 累積損益。
-// Summary：
-//   筆數：稅後損益筆數
-//   勝率：稅後損益>0 比例
-//   累積淨損益：最後一筆累積損益
-//   MaxDD：依累積損益序列計算
-//   PF：∑正向稅後損益 / |∑負向稅後損益|
-//   其它 Sharpe/Sortino/MAR/年化報酬/波動：用每日稅後損益 / 初始資金估算
+// 股票｜雲端多檔分析（直接吃指標 TXT 的「稅後損益 / 累積損益」）
+// - 解析每個 TXT 檔：只看有「稅後損益=」「累積損益=」的行（賣出行）
+// - Summary:
+//   * 筆數：賣出筆數
+//   * 勝率：稅後損益 > 0 的比例
+//   * 累積淨損益：最後一筆累積損益
+//   * 最大回撤：依累積損益路徑計算
+//   * PF：Σ正向稅後損益 / |Σ負向稅後損益|
+//   * Sharpe / Sortino / MAR / 年化報酬 / 波動：用每日稅後損益 / capital 估算
+//   * 交易頻率：賣出筆數 / （首筆到末筆的月數）
 
 (function(){
   'use strict';
@@ -38,7 +39,7 @@
     return new Date(y+'-'+m+'-'+d+'T'+hh+':'+mm+':'+ss);
   }
 
-  // ===== URL & 參數（cap / rf 會影響年化計算） =====
+  // ===== URL & 參數（capital / rf 會影響年化計算） =====
   var url = new URL(location.href);
   var CFG = {
     feeRate: +(url.searchParams.get('fee') || 0.001425),
@@ -64,6 +65,23 @@
   }
   refreshChips();
 
+  // ===== 多編碼解碼（UTF-8 / Big5 / GB18030 / UTF-16） =====
+  function decodeBest(ab){
+    var encs = ['utf-8','big5','gb18030','utf-16le','utf-16be'];
+    var best = { txt:'', bad:1e9, enc:'' };
+    for(var i=0;i<encs.length;i++){
+      try{
+        var txt = new TextDecoder(encs[i], {fatal:false}).decode(ab);
+        var bad = (txt.match(/\uFFFD/g)||[]).length;
+        if(bad < best.bad){
+          best = { txt:txt, bad:bad, enc:encs[i] };
+          if(bad === 0) break;
+        }
+      }catch(e){}
+    }
+    return best;
+  }
+
   function normalize(txt){
     return (txt||'')
       .replace(/\ufeff/gi,'')
@@ -74,7 +92,7 @@
       .filter(function(x){ return !!x; });
   }
 
-  // 行首只抓 日期 / 時間
+  // 行首：日期,時間,...
   var ROW_RE  = /^\s*(\d{8})\s*,\s*(\d{5,6})\s*,/;
   var PNL_RE  = /稅後損益\s*=\s*(-?\d+)/;
   var CUM_RE  = /累積損益\s*=\s*(-?\d+)/;
@@ -133,7 +151,7 @@
   // ===== 解析一個 TXT：只抓有「稅後損益=」「累積損益=」的行 =====
   function parseFile(text){
     var lines = normalize(text);
-    var trades = [];      // 每筆：{ts,date,pnl,cum}
+    var trades = [];      // {ts,date,pnl,cum}
     var dayPnL = new Map();
     var weeks  = new Map();
 
@@ -146,10 +164,12 @@
 
       var date = m[1];
       var time = pad6(m[2]);
+
       var pnlMatch = PNL_RE.exec(l);
-      if(!pnlMatch) continue;         // 沒稅後損益就不是出場行
+      if(!pnlMatch) continue;   // 沒稅後損益就不是賣出行
 
       var cumMatch = CUM_RE.exec(l);
+
       var pnl = parseInt(pnlMatch[1],10);
       var cum = cumMatch ? parseInt(cumMatch[1],10) : (lastCum + pnl);
       lastCum = cum;
@@ -157,9 +177,9 @@
       var ts = date + time;
       trades.push({ ts:ts, date:date, pnl:pnl, cum:cum });
 
-      // 日別
+      // 日別損益
       dayPnL.set(date, (dayPnL.get(date)||0) + pnl);
-      // 週別
+      // 週別損益
       var wKey = weekKey(date);
       weeks.set(wKey, (weeks.get(wKey)||0) + pnl);
     }
@@ -463,15 +483,16 @@
       var pairs = [];
 
       function readOne(f){
-        var reader = new FileReader();
-        reader.onload = function(){
-          pairs.push({name:f.name, text:reader.result||''});
+        f.arrayBuffer().then(function(ab){
+          var best = decodeBest(ab);
+          pairs.push({name:f.name, text:best.txt});
           pending--;
           if(pending===0){
             handleTexts(pairs);
           }
-        };
-        reader.readAsText(f);
+        }).catch(function(){
+          pending--;
+        });
       }
 
       for(var i=0;i<fs.length;i++){
