@@ -1,13 +1,11 @@
-// 股票｜雲端多檔分析（直接吃指標 TXT 的「稅後損益 / 累積損益」）
-// - 解析每個 TXT 檔：只看有「稅後損益=」「累積損益=」的行（賣出行）
+// 股票｜雲端多檔分析（指標 TXT 版）
+// - 解析每檔 TXT 中含「稅後損益=」「累積損益=」的行（賣出）
 // - Summary:
 //   * 筆數：賣出筆數
 //   * 勝率：稅後損益 > 0 的比例
 //   * 累積淨損益：最後一筆累積損益
-//   * 最大回撤：依累積損益路徑計算
-//   * PF：Σ正向稅後損益 / |Σ負向稅後損益|
-//   * Sharpe / Sortino / MAR / 年化報酬 / 波動：用每日稅後損益 / capital 估算
-//   * 交易頻率：賣出筆數 / （首筆到末筆的月數）
+//   * Sharpe / MAR / 年化報酬 / 年化波動：用每日稅後損益 / capital 估算
+// - 上方圖：每週稅後損益（浮動長條）＋累積稅後損益（折線）
 
 (function(){
   'use strict';
@@ -51,17 +49,11 @@
     rf     : +(url.searchParams.get('rf')  || 0.00)
   };
 
-  var taxScheme = $('#taxScheme');
-  var taxCustom = $('#taxCustom');
-  var userForcedScheme = false;
-
   function refreshChips(){
     setText('#feeRateChip',(CFG.feeRate*100).toFixed(4)+'%');
     setText('#taxRateChip',(CFG.taxRate*100).toFixed(3)+'%');
     setText('#minFeeChip', String(CFG.minFee));
     setText('#unitChip'  , String(CFG.unit));
-    setText('#slipChip'  , String(CFG.slip));
-    setText('#rfChip'    , (CFG.rf*100).toFixed(2)+'%');
   }
   refreshChips();
 
@@ -99,7 +91,6 @@
 
   function pad6(t){ t=String(t||''); if(t.length===5) t='0'+t; return t.slice(0,6); }
 
-  // 週 key
   function weekKey(day){
     var dt=new Date(day.slice(0,4)+'-'+day.slice(4,6)+'-'+day.slice(6,8)+'T00:00:00');
     var y=dt.getFullYear(), oneJan=new Date(y,0,1);
@@ -125,6 +116,7 @@
     return {n:n,mean:mean,std:std,min:min,max:max};
   }
   function maxDrawdown(eq){
+    if(!eq.length) return {mdd:0};
     var peak=eq[0]||0, mdd=0, i, dd;
     for(i=0;i<eq.length;i++){
       if(eq[i]>peak) peak=eq[i];
@@ -135,6 +127,7 @@
   }
   function downsideStd(rets){
     var n=rets.length,i,neg=[],m=0;
+    if(!n) return 0;
     for(i=0;i<n;i++){ neg.push(Math.min(0,rets[i])); }
     for(i=0;i<n;i++){ m+=neg[i]; }
     m/=n;
@@ -148,7 +141,7 @@
   function sharpe(annRet, annVol, rf){ return annVol>0 ? (annRet-rf)/annVol : 0; }
   function sortino(annRet, annDown, rf){ return annDown>0 ? (annRet-rf)/annDown : 0; }
 
-  // ===== 解析一個 TXT：只抓有「稅後損益=」「累積損益=」的行 =====
+  // ===== 解析單檔 TXT：只抓有稅後損益 / 累積損益的行 =====
   function parseFile(text){
     var lines = normalize(text);
     var trades = [];      // {ts,date,pnl,cum}
@@ -166,7 +159,7 @@
       var time = pad6(m[2]);
 
       var pnlMatch = PNL_RE.exec(l);
-      if(!pnlMatch) continue;   // 沒稅後損益就不是賣出行
+      if(!pnlMatch) continue;
 
       var cumMatch = CUM_RE.exec(l);
 
@@ -177,9 +170,7 @@
       var ts = date + time;
       trades.push({ ts:ts, date:date, pnl:pnl, cum:cum });
 
-      // 日別損益
       dayPnL.set(date, (dayPnL.get(date)||0) + pnl);
-      // 週別損益
       var wKey = weekKey(date);
       weeks.set(wKey, (weeks.get(wKey)||0) + pnl);
     }
@@ -187,7 +178,7 @@
     return { trades:trades, dayPnL:dayPnL, weeks:weeks };
   }
 
-  // ===== 用 TXT 的損益計算 KPI =====
+  // ===== 用 TXT 損益算 KPI =====
   function computeKPI(dayPnL, trades){
     var S = seriesFromDayPnL(dayPnL);
     var eqIncr = S.pnl;
@@ -247,9 +238,8 @@
   var rows = [];
   var currentIdx = -1;
   var chart = null;
-  var allSources = [];
 
-  // ===== 圖表（週損益＋累積） =====
+  // ===== 圖表 =====
   function drawChartFor(rec){
     var ctx = $('#chart');
     if(!ctx || !rec) return;
@@ -293,7 +283,7 @@
       options:{
         responsive:true,
         maintainAspectRatio:false,
-        plugins:{ legend:{display:true} },
+        plugins:{ legend:{display:true } },
         scales:{
           y:{
             suggestedMin:Math.min(0, Math.min.apply(null, cum.concat([0]))*1.1),
@@ -306,9 +296,7 @@
 
     $('#chartCaption').textContent =
       '目前：' + rec.shortName +
-      '｜Total(累積損益)=' + fmtInt(rec.total) +
-      '，MaxDD=' + fmtInt(rec.maxDDAbs) +
-      '，PF=' + fmt2(rec.pf);
+      '｜Total(累積損益)=' + fmtInt(rec.total);
   }
 
   // ===== 表格渲染 & 排序 =====
@@ -324,10 +312,7 @@
            +  '<td class="num">'+r.tradeCount+'</td>'
            +  '<td class="num">'+pct(r.hitRate)+'</td>'
            +  '<td class="num '+pnlCls+'">'+fmtInt(r.total)+'</td>'
-           +  '<td class="num">-'+fmtInt(r.maxDDAbs)+'</td>'
-           +  '<td class="num">'+fmt2(r.pf)+'</td>'
            +  '<td class="num">'+fmt2(r.sr)+'</td>'
-           +  '<td class="num">'+fmt2(r.so)+'</td>'
            +  '<td class="num">'+fmt2(r.mar)+'</td>'
            +  '<td class="num">'+fmt2(r.tradesPerMonth)+'</td>'
            +  '<td class="num">'+pct(r.annRet)+'</td>'
@@ -339,9 +324,7 @@
     var trs = tb.querySelectorAll('tr');
     for(i=0;i<trs.length;i++){
       (function(idx){
-        trs[idx].onclick = function(){
-          selectRow(idx);
-        };
+        trs[idx].onclick = function(){ selectRow(idx); };
       })(i);
     }
   }
@@ -383,57 +366,50 @@
     }
   }
 
-  // ===== 稅率方案（只影響 chip & 年化計算用的稅率） =====
-  function autoPickSchemeByContent(sourceName, txt){
-    if(userForcedScheme) return;
-    var s=(sourceName||'')+' '+(txt||'');
-    var isETF   = /(?:^|[^0-9])(?:00909|00910|0050)(?:[^0-9]|$)/.test(s);
-    var isStock = /(?:^|[^0-9])(?:2603)(?:[^0-9]|$)|長榮/.test(s);
-
-    if(isETF && !isStock){
-      taxScheme.value='ETF'; CFG.taxRate=0.001; taxCustom.disabled=true;
-    }else if(isStock && !isETF){
-      taxScheme.value='STOCK'; CFG.taxRate=0.003; taxCustom.disabled=true;
-    }else{
-      if(CFG.taxRate===0.001){ taxScheme.value='ETF';   taxCustom.disabled=true; }
-      else if(CFG.taxRate===0.003){ taxScheme.value='STOCK'; taxCustom.disabled=true; }
-      else{ taxScheme.value='CUSTOM'; taxCustom.disabled=false; taxCustom.value=CFG.taxRate.toFixed(4); }
-    }
-    refreshChips();
-  }
-
   // ===== 主流程：多檔 TXT → rows =====
   function handleTexts(nameTextPairs){
-    allSources = nameTextPairs.slice();
     rows = [];
     currentIdx = -1;
 
     for(var i=0;i<nameTextPairs.length;i++){
       var src = nameTextPairs[i];
       var parsed = parseFile(src.text);
-      if(!parsed.trades.length) continue;
 
-      autoPickSchemeByContent(src.name, src.text);
-
-      var kpi = computeKPI(parsed.dayPnL, parsed.trades);
-
-      rows.push({
-        __id: Math.random().toString(36).slice(2),
-        name: src.name,
-        shortName: shortName(src.name),
-        weeks: parsed.weeks,
-        tradeCount: parsed.trades.length,
-        hitRate:    kpi.hitRate,
-        total:      kpi.total,
-        maxDDAbs:   kpi.maxDDAbs,
-        pf:         isFinite(kpi.pf)?kpi.pf:0,
-        sr:         kpi.sr,
-        so:         kpi.so,
-        mar:        kpi.mar,
-        tradesPerMonth: kpi.tradesPerMonth,
-        annRet:     kpi.annRet,
-        annVol:     kpi.annVol
-      });
+      var rec;
+      if(parsed.trades.length){
+        var kpi = computeKPI(parsed.dayPnL, parsed.trades);
+        rec = {
+          __id: Math.random().toString(36).slice(2),
+          name: src.name,
+          shortName: shortName(src.name),
+          weeks: parsed.weeks,
+          tradeCount: parsed.trades.length,
+          hitRate:    kpi.hitRate,
+          total:      kpi.total,
+          sr:         kpi.sr,
+          mar:        kpi.mar,
+          tradesPerMonth: kpi.tradesPerMonth,
+          annRet:     kpi.annRet,
+          annVol:     kpi.annVol
+        };
+      }else{
+        // 🔎 解析不到稅後損益也要顯示一列，方便 debug
+        rec = {
+          __id: Math.random().toString(36).slice(2),
+          name: src.name,
+          shortName: shortName(src.name),
+          weeks: new Map(),
+          tradeCount: 0,
+          hitRate: 0,
+          total: 0,
+          sr: 0,
+          mar: 0,
+          tradesPerMonth: 0,
+          annRet: 0,
+          annVol: 0
+        };
+      }
+      rows.push(rec);
     }
 
     if(rows.length){
@@ -449,31 +425,8 @@
     bindSort();
   }
 
-  // ===== 事件：剪貼簿、多檔選擇、稅率切換 =====
-  var btnClip = $('#btn-clip');
+  // ===== 檔案載入事件（只保留「選擇檔案」） =====
   var filesInp= $('#files');
-
-  if(btnClip){
-    btnClip.addEventListener('click', function(){
-      if(!navigator.clipboard || !navigator.clipboard.readText){
-        alert('瀏覽器不支援剪貼簿 API，請改用「選擇檔案」。');
-        return;
-      }
-      navigator.clipboard.readText().then(function(txt){
-        if(!txt){ alert('剪貼簿沒有文字'); return; }
-        var parts = txt.split(/\n-{5,}\n/);
-        var pairs = [];
-        for(var i=0;i<parts.length;i++){
-          var t = parts[i].trim();
-          if(t) pairs.push({name:'CLIP_'+(i+1)+'.txt', text:t});
-        }
-        if(!pairs.length){ alert('剪貼簿內容無法解析，請確認格式。'); return; }
-        handleTexts(pairs);
-      }).catch(function(){
-        alert('無法讀取剪貼簿內容，請改用「選擇檔案」。');
-      });
-    });
-  }
 
   if(filesInp){
     filesInp.addEventListener('change', function(e){
@@ -497,35 +450,6 @@
 
       for(var i=0;i<fs.length;i++){
         readOne(fs[i]);
-      }
-    });
-  }
-
-  if(taxScheme){
-    taxScheme.addEventListener('change', function(){
-      userForcedScheme = true;
-      if(taxScheme.value === 'ETF'){
-        CFG.taxRate = 0.001; taxCustom.disabled = true;
-      }else if(taxScheme.value === 'STOCK'){
-        CFG.taxRate = 0.003; taxCustom.disabled = true;
-      }else{
-        taxCustom.disabled = false;
-        var v=parseFloat(taxCustom.value);
-        if(isFinite(v)) CFG.taxRate = clamp(v,0,1);
-      }
-      refreshChips();
-      if(allSources.length) handleTexts(allSources);
-    });
-  }
-
-  if(taxCustom){
-    taxCustom.addEventListener('input', function(){
-      if(taxScheme.value!=='CUSTOM') return;
-      var v=parseFloat(taxCustom.value);
-      if(isFinite(v)){
-        CFG.taxRate = clamp(v,0,1);
-        refreshChips();
-        if(allSources.length) handleTexts(allSources);
       }
     });
   }
