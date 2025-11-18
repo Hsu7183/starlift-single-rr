@@ -1,10 +1,12 @@
-// 股票｜雲端多檔分析（直接使用指標 TXT 的「稅後損益 / 累積損益」）
-//
-// - 解析格式：
-//   日期,時間,價格,動作,說明,.....,稅後損益=xxxx,報酬率%=x.xx,累積損益=yyyy,...
-// - 僅對「賣出 / 平賣」那幾行做統計：
-//   筆數、勝率、PF、累積淨損益、最大回撤、Sharpe、Sortino、MAR、年化報酬、年化波動、交易頻率(筆/月)
-// - 上方圖：每週「稅後損益」(浮動條) ＋ 累積損益 (折線)
+// 股票｜雲端多檔分析
+// 這版：不再自己回測，只「吃指標 TXT」裡的：稅後損益 / 累積損益。
+// Summary：
+//   筆數：稅後損益筆數
+//   勝率：稅後損益>0 比例
+//   累積淨損益：最後一筆累積損益
+//   MaxDD：依累積損益序列計算
+//   PF：∑正向稅後損益 / |∑負向稅後損益|
+//   其它 Sharpe/Sortino/MAR/年化報酬/波動：用每日稅後損益 / 初始資金估算
 
 (function(){
   'use strict';
@@ -36,7 +38,7 @@
     return new Date(y+'-'+m+'-'+d+'T'+hh+':'+mm+':'+ss);
   }
 
-  // ===== URL 參數 & 稅率、費用設定（這裡只用來顯示 / 計算年化） =====
+  // ===== URL & 參數（cap / rf 會影響年化計算） =====
   var url = new URL(location.href);
   var CFG = {
     feeRate: +(url.searchParams.get('fee') || 0.001425),
@@ -72,15 +74,11 @@
       .filter(function(x){ return !!x; });
   }
 
-  var CSV_RE  = /^\s*(\d{8})\s*,\s*(\d{5,6})\s*,\s*(\d+(?:\.\d+)?)\s*,\s*([^,]+)\s*,(.*)$/;
+  // 行首只抓 日期 / 時間
+  var ROW_RE  = /^\s*(\d{8})\s*,\s*(\d{5,6})\s*,/;
+  var PNL_RE  = /稅後損益\s*=\s*(-?\d+)/;
+  var CUM_RE  = /累積損益\s*=\s*(-?\d+)/;
 
-  function mapAct(s){
-    s = String(s||'').trim();
-    if (/^(平賣|賣出)$/i.test(s)) return '平賣';
-    if (/^(強制平倉|強平)$/i.test(s)) return '強制平倉';
-    if (/^(新買|買進|首買|加碼|再加碼|加碼攤平|再加碼攤平|加碼\s*攤平|再加碼\s*攤平)$/i.test(s)) return '新買';
-    return s;
-  }
   function pad6(t){ t=String(t||''); if(t.length===5) t='0'+t; return t.slice(0,6); }
 
   // 週 key
@@ -132,7 +130,44 @@
   function sharpe(annRet, annVol, rf){ return annVol>0 ? (annRet-rf)/annVol : 0; }
   function sortino(annRet, annDown, rf){ return annDown>0 ? (annRet-rf)/annDown : 0; }
 
-  // ===== 用 TXT 的「稅後損益 / 累積損益」計算 KPI =====
+  // ===== 解析一個 TXT：只抓有「稅後損益=」「累積損益=」的行 =====
+  function parseFile(text){
+    var lines = normalize(text);
+    var trades = [];      // 每筆：{ts,date,pnl,cum}
+    var dayPnL = new Map();
+    var weeks  = new Map();
+
+    var lastCum = 0;
+
+    for(var i=0;i<lines.length;i++){
+      var l = lines[i];
+      var m = ROW_RE.exec(l);
+      if(!m) continue;
+
+      var date = m[1];
+      var time = pad6(m[2]);
+      var pnlMatch = PNL_RE.exec(l);
+      if(!pnlMatch) continue;         // 沒稅後損益就不是出場行
+
+      var cumMatch = CUM_RE.exec(l);
+      var pnl = parseInt(pnlMatch[1],10);
+      var cum = cumMatch ? parseInt(cumMatch[1],10) : (lastCum + pnl);
+      lastCum = cum;
+
+      var ts = date + time;
+      trades.push({ ts:ts, date:date, pnl:pnl, cum:cum });
+
+      // 日別
+      dayPnL.set(date, (dayPnL.get(date)||0) + pnl);
+      // 週別
+      var wKey = weekKey(date);
+      weeks.set(wKey, (weeks.get(wKey)||0) + pnl);
+    }
+
+    return { trades:trades, dayPnL:dayPnL, weeks:weeks };
+  }
+
+  // ===== 用 TXT 的損益計算 KPI =====
   function computeKPI(dayPnL, trades){
     var S = seriesFromDayPnL(dayPnL);
     var eqIncr = S.pnl;
@@ -150,7 +185,7 @@
 
     var mddTrades = maxDrawdown(trades.map(function(t){return t.cum;})).mdd;
     var sr  = sharpe(annRet, annVol, CFG.rf);
-    var so  = sortino(annRet, dStd, CFG.rf);
+    var so  = sortino(annRet, dStd,  CFG.rf);
     var mar = annRet / Math.max(1,Math.abs(mddTrades));
 
     var nTrades = trades.length;
@@ -174,7 +209,7 @@
     }
 
     return {
-      total: total,              // 應 ≒ TXT 最後一筆「累積損益」
+      total: total,
       totalReturn: totalReturn,
       annRet: annRet,
       annVol: annVol,
@@ -192,53 +227,9 @@
   var rows = [];
   var currentIdx = -1;
   var chart = null;
-  var allSources = [];  // [{name,text}, ...]
+  var allSources = [];
 
-  // ===== 從 TXT 解析出 trades / dayPnL / weeks =====
-  function parseFile(text){
-    var lines = normalize(text);
-    var trades = [];      // 每筆 SELL：{ts, date, pnl, cum}
-    var dayPnL = new Map();
-    var weeks  = new Map();
-
-    var lastCum = 0;
-
-    for(var i=0;i<lines.length;i++){
-      var l = lines[i];
-      var m = l.match(CSV_RE);
-      if(!m) continue;
-      var date = m[1];
-      var time = pad6(m[2]);
-      var px   = +m[3];   // 這裡其實用不到，只是留著
-      var actStr = m[4];
-      var rest = m[5] || '';
-      var act = mapAct(actStr);
-      if(act !== '平賣') continue;
-
-      var pnlMatch = rest.match(/稅後損益\s*=\s*(-?\d+)/);
-      var cumMatch = rest.match(/累積損益\s*=\s*(-?\d+)/);
-
-      if(!pnlMatch) continue;  // 沒稅後損益就跳過
-
-      var pnl = parseInt(pnlMatch[1],10);
-      var cum = cumMatch ? parseInt(cumMatch[1],10) : (lastCum + pnl);
-      lastCum = cum;
-
-      var ts = date + time;
-      trades.push({ ts:ts, date:date, pnl:pnl, cum:cum });
-
-      // 日別損益
-      var dKey = date;
-      dayPnL.set(dKey, (dayPnL.get(dKey)||0) + pnl);
-      // 週別損益
-      var wKey = weekKey(date);
-      weeks.set(wKey, (weeks.get(wKey)||0) + pnl);
-    }
-
-    return { trades:trades, dayPnL:dayPnL, weeks:weeks };
-  }
-
-  // ===== 圖表：每週稅後損益＋累積淨利 =====
+  // ===== 圖表（週損益＋累積） =====
   function drawChartFor(rec){
     var ctx = $('#chart');
     if(!ctx || !rec) return;
@@ -300,7 +291,7 @@
       '，PF=' + fmt2(rec.pf);
   }
 
-  // ===== 表格渲染與排序 =====
+  // ===== 表格渲染 & 排序 =====
   function renderTable(){
     var tb = $('#sumTable tbody');
     if(!tb) return;
@@ -372,7 +363,7 @@
     }
   }
 
-  // ===== 稅率方案自動偵測（只影響顯示與年化計算） =====
+  // ===== 稅率方案（只影響 chip & 年化計算用的稅率） =====
   function autoPickSchemeByContent(sourceName, txt){
     if(userForcedScheme) return;
     var s=(sourceName||'')+' '+(txt||'');
@@ -391,7 +382,7 @@
     refreshChips();
   }
 
-  // ===== 主處理：多檔 TXT → rows =====
+  // ===== 主流程：多檔 TXT → rows =====
   function handleTexts(nameTextPairs){
     allSources = nameTextPairs.slice();
     rows = [];
@@ -430,7 +421,7 @@
     }else{
       renderTable();
       if(chart){ chart.destroy(); chart=null; }
-      $('#chartCaption').textContent = '尚未載入檔案或找不到「賣出」資料行。';
+      $('#chartCaption').textContent = '尚未載入檔案或找不到「稅後損益=」資料行。';
     }
 
     $('#fileCount').textContent = String(rows.length);
