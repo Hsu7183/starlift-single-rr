@@ -1,15 +1,15 @@
 // 股票｜雲端多檔分析（KPI49 簡表）
-// - 解析：canonical + 1031-CSV，支援「本次單位=」＋「unitsThis=」
-// - 1張 = 1000股：unit 永遠固定 1000，不吃 URL 也不看 lotShares
-// - 費稅：fee / tax 與 stock-single-cloud.js 一致（整數進位+最低手續費）
-// - 稅率方案：ETF / STOCK / CUSTOM，可由檔名/內容猜（00909/00910/0050、2603/長榮）
-// - 輸入：剪貼簿多份 TXT、本機多檔、Supabase reports 多選
-// - 輸出：每檔 KPI 簡表 + 該檔每日累積損益曲線（含滑價與費稅）
+//
+// 核心原則：
+// 1) 解析 / 費稅 / 回測 / KPI 計算邏輯，完全沿用 stock-single-cloud.js。
+// 2) 每單位固定 1 張 = 1000 股，不再被 lotShares 或 URL ?unit= 覆蓋。
+// 3) 支援 canonical & 1031-CSV（買進 / 加碼攤平 / 再加碼攤平 / 賣出）。
+// 4) 一次讀多個 TXT，輸出：多檔 KPI 簡表 + 單檔每日累積損益曲線。
 
 (function(){
   'use strict';
 
-  // ========= 小工具 =========
+  // ===== DOM & 小工具 =====
   function $(s){ return document.querySelector(s); }
   function fmtInt(n){ return Math.round(n||0).toLocaleString('zh-TW'); }
   function pct(v){ return (v==null||!isFinite(v)) ? '0.00%' : (v*100).toFixed(2)+'%'; }
@@ -44,13 +44,13 @@
     return mmdd+'_'+m[2];
   }
 
-  // ========= CFG & URL =========
+  // ===== CFG & URL =====
   var url=new URL(location.href);
   var CFG={
     feeRate: +(url.searchParams.get('fee') || 0.001425),
     minFee : +(url.searchParams.get('min') || 20),
-    taxRate: +(url.searchParams.get('tax') || 0.003),
-    unit   : 1000,                          // ★ 直接鎖死：1張 = 1000股
+    taxRate: +(url.searchParams.get('tax') || 0.003), // 預設個股 0.3%
+    unit   : 1000,                                     // ★ 固定 1 張 = 1000 股
     slip   : +(url.searchParams.get('slip')|| 0),
     capital: +(url.searchParams.get('cap') || 1000000),
     rf     : +(url.searchParams.get('rf')  || 0.00)
@@ -70,7 +70,7 @@
   }
   refreshChips();
 
-  // ========= Supabase =========
+  // ===== Supabase =====
   var SUPABASE_URL  = "https://byhbmmnacezzgkwfkozs.supabase.co";
   var SUPABASE_ANON = "sb_publishable_xVe8fGbqQ0XGwi4DsmjPMg_Y2RBOD3t";
   var BUCKET        = "reports";
@@ -78,12 +78,12 @@
     global:{fetch:function(u,o){o=o||{};o.cache='no-store';return fetch(u,o);}}
   });
 
-  // ========= 狀態 =========
+  // ===== 狀態 =====
   var rows=[];          // 多檔彙總
   var currentIdx=-1;
   var chMulti=null;
 
-  // ========= 稅率方案 UI =========
+  // ===== 稅率方案事件 =====
   if(taxScheme){
     taxScheme.addEventListener('change',function(){
       userForcedScheme=true;
@@ -107,7 +107,7 @@
     });
   }
 
-  // ========= Supabase 選檔 =========
+  // ===== Supabase 雲端選檔 =====
   var prefix=$('#cloudPrefix'), btnList=$('#btnCloudList'), pick=$('#cloudSelect'),
       btnPrev=$('#btnCloudPreview'), btnImp=$('#btnCloudImport'),
       meta=$('#cloudMeta'), prev=$('#cloudPreview');
@@ -200,10 +200,17 @@
   if(btnPrev) btnPrev.addEventListener('click',previewCloud);
   if(btnImp)  btnImp.addEventListener('click',importCloud);
 
-  // ========= 解析：canonical + 1031-CSV =========
-  var CANON_RE=/^(\d{14})\.0{6}\s+(\d+\.\d{6})\s+(\S+)\s*$/;
+  // ===== 解析：canonical + 1031-CSV（沿用單檔版） =====
+  var CANON_RE=/^(\d{14})\.0{6}\s+(\d+\.\d{6})\s+(新買|平賣|新賣|平買|強制平倉)\s*$/;
   var CSV_RE  = /^\s*(\d{8})\s*,\s*(\d{5,6})\s*,\s*(\d+(?:\.\d+)?)\s*,\s*([^,]+)\s*,/;
 
+  function mapAct(s){
+    s = String(s||'').trim();
+    if (/^(平賣|賣出)$/i.test(s)) return '平賣';
+    if (/^(強制平倉|強平)$/i.test(s)) return '強制平倉';
+    if (/^(新買|買進|首買|加碼|再加碼|加碼攤平|再加碼攤平|加碼\s*攤平|再加碼\s*攤平)$/i.test(s)) return '新買';
+    return s;
+  }
   function pad6(t){
     t=String(t||''); if(t.length===5) t='0'+t; return t.slice(0,6);
   }
@@ -214,11 +221,10 @@
       .replace(/[\x00-\x09\x0B-\x1F\x7F]/g,'')
       .replace(/\r\n?/g,'\n')
       .replace(/\s*,\s*/g, ',')
-      .split('\n').map(function(s){return s.trim();})
-      .filter(function(x){return !!x;});
+      .split('\n').map(function(s){ return s.trim(); })
+      .filter(function(x){ return !!x; });
   }
 
-  // 只負責抓 ts / px / act / units
   function toCanon(lines){
     var out=[], i,l,m,d8,t6,px,act,row,um;
     for(i=0;i<lines.length;i++){
@@ -230,11 +236,12 @@
       }else{
         m=l.match(CSV_RE);
         if(!m) continue;
-        d8=m[1]; t6=pad6(m[2]); px=+m[3]; act=m[4];
+        d8=m[1]; t6=pad6(m[2]); px=+m[3]; act=mapAct(m[4]);
         if(!isFinite(px)||!/^\d{6}$/.test(t6)) continue;
         row={ts:d8+t6,px:px,act:act};
       }
 
+      // unitsThis / 本次單位
       um=l.match(/unitsThis\s*=\s*(\d+)/);
       if(!um) um=l.match(/本次單位\s*=\s*(\d+)/);
       row.units = um ? Math.max(1,parseInt(um[1],10)) : 1;
@@ -245,23 +252,23 @@
     return out;
   }
 
-  // ========= 費稅 =========
+  // ===== 手續費 / 稅（沿用單檔版） =====
   function fee(amount){ return Math.max(CFG.minFee,Math.ceil(amount*CFG.feeRate)); }
   function tax(amount){ return Math.max(0,Math.ceil(amount*CFG.taxRate)); }
 
-  // ========= 自動偵測稅率 =========
+  // ===== 自動偵測稅率方案 =====
   function autoPickSchemeByContent(name,txt){
     if(userForcedScheme) return;
     var s=(name||'')+' '+(txt||'');
     var isETF   = /(?:^|[^0-9])(?:00909|00910|0050)(?:[^0-9]|$)/.test(s);
     var isStock = /(?:^|[^0-9])(?:2603)(?:[^0-9]|$)|長榮/.test(s);
     if(isETF && !isStock){
-      taxScheme.value='ETF'; CFG.taxRate=0.001; if(taxCustom) taxCustom.disabled=true;
+      taxScheme.value='ETF';  CFG.taxRate=0.001; if(taxCustom) taxCustom.disabled=true;
     }else if(isStock && !isETF){
-      taxScheme.value='STOCK'; CFG.taxRate=0.003; if(taxCustom) taxCustom.disabled=true;
+      taxScheme.value='STOCK';CFG.taxRate=0.003; if(taxCustom) taxCustom.disabled=true;
     }else{
-      if(CFG.taxRate===0.001){taxScheme.value='ETF'; if(taxCustom) taxCustom.disabled=true;}
-      else if(CFG.taxRate===0.003){taxScheme.value='STOCK'; if(taxCustom) taxCustom.disabled=true;}
+      if(CFG.taxRate===0.001){taxScheme.value='ETF';  if(taxCustom) taxCustom.disabled=true;}
+      else if(CFG.taxRate===0.003){taxScheme.value='STOCK';if(taxCustom) taxCustom.disabled=true;}
       else{
         taxScheme.value='CUSTOM';
         if(taxCustom){taxCustom.disabled=false; taxCustom.value=CFG.taxRate.toFixed(4);}
@@ -270,45 +277,47 @@
     refreshChips();
   }
 
-  // ========= 回測（有「買」就 BUY，有「賣」或「平倉」就 SELL） =========
+  // ===== 回測（完全沿用單檔版邏輯，只保留 BUY/SELL） =====
   function backtest(rowsCanon){
-    var shares=0, cumCost=0, pnlCum=0;
+    var shares=0, cash=CFG.capital, cumCost=0, pnlCum=0;
     var trades=[], dayPnL=new Map();
 
     for(var i=0;i<rowsCanon.length;i++){
       var r=rowsCanon[i];
-      var actStr=String(r.act||'').replace(/\s/g,'');
 
-      var isBuy  = /買/.test(actStr) || /加碼/.test(actStr);
-      var isSell = /賣/.test(actStr) || /平倉/.test(actStr);
+      if(r.act==='新買'){
+        var lotUnits  = r.units || 1;
+        var sharesInc = CFG.unit * lotUnits;
 
-      if(isBuy){
-        var lotUnits=r.units||1;
-        var sharesInc=CFG.unit*lotUnits;
-        var px=r.px + CFG.slip;
-        var amt=px*sharesInc;
-        var f=fee(amt);
-        var cost=amt+f;
+        var px  = r.px + CFG.slip;
+        var amt = px * sharesInc;
+        var f   = fee(amt);
+        var cost= amt + f;
 
-        shares += sharesInc;
-        cumCost += cost;
+        if(cash >= cost){
+          cash    -= cost;
+          shares  += sharesInc;
+          cumCost += cost;
 
-        trades.push({
-          ts:r.ts, kind:'BUY', price:px, shares:sharesInc,
-          buyAmount:amt, sellAmount:0, fee:f, tax:0,
-          cost:cost, cumCost:cumCost,
-          pnlFull:null, cumPnlFull:pnlCum
-        });
+          trades.push({
+            ts:r.ts, kind:'BUY', price:px, shares:sharesInc,
+            buyAmount:amt, sellAmount:0, fee:f, tax:0,
+            cost:cost, cumCost:cumCost,
+            pnlFull:null, cumPnlFull:pnlCum
+          });
+        }
 
-      }else if(isSell && shares>0){
-        var spx=r.px - CFG.slip;
-        var sam=spx*shares;
-        var ff=fee(sam);
-        var tt=tax(sam);
-        var pnlFull=(sam-ff-tt)-cumCost;
+      }else if(r.act==='平賣' && shares>0){
+        var spx = r.px - CFG.slip;
+        var sam = spx * shares;
+        var ff  = fee(sam);
+        var tt  = tax(sam);
+        cash   += (sam - ff - tt);
+
+        var pnlFull = (sam - ff - tt) - cumCost;
         pnlCum += pnlFull;
 
-        var day=r.ts.slice(0,8);
+        var day = r.ts.slice(0,8);
         dayPnL.set(day,(dayPnL.get(day)||0)+pnlFull);
 
         trades.push({
@@ -322,10 +331,10 @@
       }
     }
 
-    return {trades:trades, dayPnL:dayPnL, pnlCum:pnlCum};
+    return { trades:trades, dayPnL:dayPnL, pnlCum:pnlCum, endingCash:cash, openShares:shares };
   }
 
-  // ========= KPI 簡版 =========
+  // ===== KPI 計算（抽出單檔版核心） =====
   function seriesFromDayPnL(dayPnL){
     var days=Array.from(dayPnL.keys()).sort();
     var pnl =days.map(function(d){return dayPnL.get(d)||0;});
@@ -334,10 +343,12 @@
     return {days:days,pnl:pnl,eq:eq};
   }
   function statsBasic(arr){
-    var n=arr.length; if(!n) return {n:n,mean:0,std:0};
+    var n=arr.length; if(!n) return {n:n,mean:0,std:0,min:0,max:0};
     var i,mean=0; for(i=0;i<n;i++) mean+=arr[i]; mean/=n;
     var v=0; for(i=0;i<n;i++) v+=(arr[i]-mean)*(arr[i]-mean); v/=n;
-    return {n:n,mean:mean,std:Math.sqrt(v)};
+    var std=Math.sqrt(v);
+    var min=Math.min.apply(null,arr), max=Math.max.apply(null,arr);
+    return {n:n,mean:mean,std:std,min:min,max:max};
   }
   function maxDrawdown(eq){
     var peak=eq[0]||0, mdd=0,i,dd;
@@ -414,7 +425,7 @@
     };
   }
 
-  // ========= 圖表 =========
+  // ===== 圖表 =====
   function roundRect(ctx,x,y,w,h,r){
     var rr=Math.min(r,w/2,h/2);
     ctx.beginPath();
@@ -493,7 +504,7 @@
     $('#chartCaption').textContent='目前：'+rec.shortName+'（Max/Min/Last 皆為含滑價與費稅後累積損益）';
   }
 
-  // ========= 表格 =========
+  // ===== 表格 =====
   function clsPnL(v){ return v>0?'p-red':(v<0?'p-green':''); }
   function renderTable(){
     var tb=$('#sumTable tbody'); if(!tb) return;
@@ -545,7 +556,7 @@
     });
   }
 
-  // ========= 主流程：多檔處理 =========
+  // ===== 主流程：多檔處理 =====
   function handlePairs(pairs){
     if(!pairs || !pairs.length) return;
     autoPickSchemeByContent(pairs[0].name,pairs[0].text);
@@ -592,7 +603,7 @@
     }
   }
 
-  // ========= 剪貼簿 / 本機 =========
+  // ===== 剪貼簿 / 本機 =====
   var btnClip=$('#btn-clip'), filesInput=$('#files');
 
   if(btnClip){
