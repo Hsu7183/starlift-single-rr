@@ -63,30 +63,50 @@
       </div>
     </div>
 
-    <!-- 下：精簡彙總表（可排序、點選切換上方圖） -->
+    <!-- 下：精簡彙總表（可排序、點選切換上方圖）＋ Score＋ 詳細 KPI -->
     <div class="card">
+
+      <!-- 🏆 最佳參數卡片 -->
+      <div id="bestCard" style="margin-bottom:10px;padding:8px 10px;border-radius:8px;background:#f9fafb;border:1px dashed #e5e7eb;font-size:13px;display:none">
+        <div style="font-weight:600;margin-bottom:4px;">🏆 最佳參數組</div>
+        <div id="bestMain"></div>
+        <div id="bestSub" class="hint" style="margin-top:4px;font-size:12px"></div>
+      </div>
+
       <table id="sumTable">
         <thead>
           <tr>
             <th data-k="shortName">檔名</th>
-            <th class="num" data-k="tradeCount">筆數</th>
-            <th class="num" data-k="hitRate">勝率</th>
+            <th class="num" data-k="score">Score</th>
+            <th class="num" data-k="pf">PF</th>
+            <th class="num" data-k="mar">MAR</th>
+            <th class="num" data-k="maxDDAbs">MaxDD</th>
             <th class="num" data-k="total">累積淨損益</th>
             <th class="num" data-k="sr">Sharpe</th>
-            <th class="num" data-k="mar">MAR</th>
-            <th class="num" data-k="tradesPerMonth">交易頻率（筆/月）</th>
+            <th class="num" data-k="so">Sortino</th>
+            <th class="num" data-k="expectancy">期望值/筆</th>
+            <th class="num" data-k="payoff">Payoff</th>
+            <th class="num" data-k="hitRate">勝率</th>
+            <th class="num" data-k="tradesPerMonth">交易頻率（月筆數）</th>
             <th class="num" data-k="annRet">年化報酬</th>
             <th class="num" data-k="annVol">年化波動</th>
+            <th class="num" data-k="tradeCount">筆數</th>
           </tr>
         </thead>
         <tbody></tbody>
       </table>
       <div class="hint" style="margin-top:8px">
-        提示：點欄位可升/降序；再次點擊同欄切換排序方向。
+        提示：點欄位可升/降序；再次點擊同欄切換排序方向。Score 為 PF / MAR / MaxDD / Sharpe / Sortino / 期望值 / Payoff / 勝率 / 交易頻率的綜合分數（0–100）。
+      </div>
+
+      <!-- 詳細 KPI 區塊（選擇一檔後顯示） -->
+      <div id="kpiDetail" style="margin-top:12px;font-size:13px;line-height:1.7;display:none">
+        <div><strong id="kpiName"></strong></div>
+        <div id="kpiBody" class="hint" style="margin-top:4px;font-size:12px"></div>
       </div>
     </div>
   </div>
 
-  <script src="stock-multi-cloud.js?v=stock-multi-kpi49-v4"></script>
+  <script src="stock-multi-cloud.js?v=stock-multi-score-v1"></script>
 </body>
 </html>
