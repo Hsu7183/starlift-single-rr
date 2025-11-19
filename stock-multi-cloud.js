@@ -1,10 +1,9 @@
-// 股票｜雲端多檔分析（指標 TXT 版） - 多檔 KPI + Score 儀表板版
-// - 解析每檔 TXT 中含「稅後損益=」「累積損益=」的行（賣出）
+// 股票｜雲端多檔分析（指標 TXT 版） - 多檔 KPI + Score + MAE 版
+// - 解析每檔 TXT 中含「稅後損益=」「累積損益=」「MAE%=」的行（賣出）
 // - Summary（表格）：
-//   * Score：依 PF / MAR / MaxDD / Sharpe / Sortino / Expectancy / Payoff / HitRate / TradesPerMonth 綜合評分（0–100）
-//   * PF / MAR / MaxDD / Total / Sharpe / Sortino / 期望值 / Payoff / 勝率 / 月筆數 / 年化報酬 / 年化波動 / 筆數
-// - 詳細 KPI（下方文字）：
-//   * 月勝率 / Ulcer Index / Recovery Days / Cost 結構等
+//   * Score：PF / MAR / MaxDD / AvgMAE% / Sharpe / Sortino / Expectancy / Payoff / HitRate / TradesPerMonth 綜合評分（0–100）
+//   * PF / MAR / MaxDD / AvgMAE% / Total / Sharpe / Sortino / 期望值 / Payoff / 勝率 / 月筆數 / 年化報酬 / 年化波動 / 筆數
+// - 詳細 KPI：再顯示 Ulcer / RecoveryDays / 月勝率 / Worst MAE% 等
 // - 上方圖：每週稅後損益（浮動長條）＋累積稅後損益（折線）
 
 (function(){
@@ -41,7 +40,7 @@
   var CFG = {
     feeRate: +(url.searchParams.get('fee') || 0.001425),
     minFee : +(url.searchParams.get('min') || 20),
-    // ✅ 交易稅預設固定為 0.1%（0.001）
+    // 交易稅預設 0.1%
     taxRate: +(url.searchParams.get('tax') || 0.001),
     unit   : +(url.searchParams.get('unit')|| 1000),
     slip   : +(url.searchParams.get('slip')|| 0),
@@ -88,6 +87,8 @@
   var ROW_RE  = /^\s*(\d{8})\s*,\s*(\d{5,6})\s*,/;
   var PNL_RE  = /稅後損益\s*=\s*(-?\d+)/;
   var CUM_RE  = /累積損益\s*=\s*(-?\d+)/;
+  // 單筆最大的浮虧百分比（例如 MAE%= -1.23）
+  var MAE_RE  = /MAE%\s*=\s*(-?\d+(?:\.\d+)?)/;
 
   function pad6(t){ t=String(t||''); if(t.length===5) t='0'+t; return t.slice(0,6); }
 
@@ -148,7 +149,7 @@
     return Math.sqrt(sumSq/n);
   }
 
-  // Recovery Days：從最大回撤點回到前高所需「天數」（以日績效序列）
+  // Recovery Days：從最大回撤點回到前高所需「天數」
   function recoveryDays(eq){
     var n = eq.length;
     if(!n) return 0;
@@ -191,10 +192,10 @@
   function sharpe(annRet, annVol, rf){ return annVol>0 ? (annRet-rf)/annVol : 0; }
   function sortino(annRet, annDown, rf){ return annDown>0 ? (annRet-rf)/annDown : 0; }
 
-  // ===== 解析單檔 TXT：只抓有稅後損益 / 累積損益的行 =====
+  // ===== 解析單檔 TXT：只抓有稅後損益 / 累積損益 / MAE% 的行 =====
   function parseFile(text){
     var lines = normalize(text);
-    var trades = [];      // {ts,date,pnl,cum}
+    var trades = [];      // {ts,date,pnl,cum,maePct}
     var dayPnL = new Map();
     var weeks  = new Map();
 
@@ -212,13 +213,20 @@
       if(!pnlMatch) continue;
 
       var cumMatch = CUM_RE.exec(l);
+      var maeMatch = MAE_RE.exec(l);
 
       var pnl = parseInt(pnlMatch[1],10);
       var cum = cumMatch ? parseInt(cumMatch[1],10) : (lastCum + pnl);
       lastCum = cum;
 
+      var maePct = null;
+      if(maeMatch){
+        maePct = parseFloat(maeMatch[1]); // 例如 -1.23（百分比）
+        if(!isFinite(maePct)) maePct = null;
+      }
+
       var ts = date + time;
-      trades.push({ ts:ts, date:date, pnl:pnl, cum:cum });
+      trades.push({ ts:ts, date:date, pnl:pnl, cum:cum, maePct:maePct });
 
       dayPnL.set(date, (dayPnL.get(date)||0) + pnl);
       var wKey = weekKey(date);
@@ -293,6 +301,28 @@
     var ui  = ulcerIndex(eq);
     var rec = recoveryDays(eq);
 
+    // MAE%：單筆最大浮虧百分比
+    var maeList = [];
+    var i;
+    for(i=0;i<trades.length;i++){
+      if(trades[i].maePct!=null && isFinite(trades[i].maePct)){
+        maeList.push(trades[i].maePct);
+      }
+    }
+    var maeAvgAbs = 0;
+    var maeWorst  = 0; // 最差 MAE%（可能是負值）
+    if(maeList.length){
+      var sumAbs = 0;
+      var minMae = maeList[0];
+      for(i=0;i<maeList.length;i++){
+        var v = maeList[i];
+        sumAbs += Math.abs(v);
+        if(v < minMae) minMae = v;
+      }
+      maeAvgAbs = sumAbs / maeList.length;
+      maeWorst  = minMae;
+    }
+
     return {
       total: total,
       totalReturn: totalReturn,
@@ -310,7 +340,9 @@
       ulcer: ui,
       recoveryDays: rec,
       monthHit: monthHit,
-      monthStd: M.std
+      monthStd: M.std,
+      maeAvgAbs: maeAvgAbs,  // 平均 MAE%（絕對值）
+      maeWorst: maeWorst     // 單筆最差 MAE%
     };
   }
 
@@ -319,15 +351,17 @@
   var currentIdx = -1;
   var chart = null;
 
-  // ===== Score 計算（依重要性加權） =====
+  // ===== Score 計算（含 MAE 之加權） =====
   function computeScores(){
     if(rows.length === 0) return;
 
+    // 正向：越大越好
     var keysPos = ['pf','mar','total','sr','so','expectancy','payoff','hitRate','tradesPerMonth'];
-    var keysNeg = ['maxDDAbs']; // 越小越好
+    // 反向：越小越好
+    var keysNeg = ['maxDDAbs','maeAvgAbs'];
 
     var stats = {};
-    var i, k, v;
+    var i, k;
 
     for(i=0;i<keysPos.length;i++){
       k = keysPos[i];
@@ -364,37 +398,38 @@
       var s = stats[key];
       if(!s || !isFinite(val)) return 0.5;
       if(s.max === s.min) return 0.5;
-      // 越小越好：反過來
       return Math.max(0, Math.min(1, (s.max - val) / (s.max - s.min)));
     }
 
-    // 權重依你之前的重要性排序設計（總和約 = 1）
+    // 權重：加入 MAE 之後微調（總和約 1）
     var W = {
-      pf:           0.20,
-      mar:          0.18,
-      maxDDAbs:     0.15,
-      total:        0.12,
-      sr:           0.10,
-      so:           0.08,
-      expectancy:   0.07,
-      payoff:       0.04,
-      hitRate:      0.03,
-      tradesPerMonth:0.03
+      pf:             0.18,
+      mar:            0.17,
+      maxDDAbs:       0.13,
+      maeAvgAbs:      0.08,
+      total:          0.11,
+      sr:             0.09,
+      so:             0.07,
+      expectancy:     0.06,
+      payoff:         0.04,
+      hitRate:        0.03,
+      tradesPerMonth: 0.04
     };
 
     rows.forEach(function(r){
       var score = 0;
 
-      score += W.pf           * normPos(Number(r.pf||0),           'pf');
-      score += W.mar          * normPos(Number(r.mar||0),          'mar');
-      score += W.maxDDAbs     * normNeg(Number(r.maxDDAbs||0),     'maxDDAbs');
-      score += W.total        * normPos(Number(r.total||0),        'total');
-      score += W.sr           * normPos(Number(r.sr||0),           'sr');
-      score += W.so           * normPos(Number(r.so||0),           'so');
-      score += W.expectancy   * normPos(Number(r.expectancy||0),   'expectancy');
-      score += W.payoff       * normPos(Number(r.payoff||0),       'payoff');
-      score += W.hitRate      * normPos(Number(r.hitRate||0),      'hitRate');
-      score += W.tradesPerMonth*normPos(Number(r.tradesPerMonth||0),'tradesPerMonth');
+      score += W.pf             * normPos(Number(r.pf||0),           'pf');
+      score += W.mar            * normPos(Number(r.mar||0),          'mar');
+      score += W.maxDDAbs       * normNeg(Number(r.maxDDAbs||0),     'maxDDAbs');
+      score += W.maeAvgAbs      * normNeg(Number(r.maeAvgAbs||0),    'maeAvgAbs');
+      score += W.total          * normPos(Number(r.total||0),        'total');
+      score += W.sr             * normPos(Number(r.sr||0),           'sr');
+      score += W.so             * normPos(Number(r.so||0),           'so');
+      score += W.expectancy     * normPos(Number(r.expectancy||0),   'expectancy');
+      score += W.payoff         * normPos(Number(r.payoff||0),       'payoff');
+      score += W.hitRate        * normPos(Number(r.hitRate||0),      'hitRate');
+      score += W.tradesPerMonth * normPos(Number(r.tradesPerMonth||0),'tradesPerMonth');
 
       r.score = score * 100; // 0–100
     });
@@ -477,6 +512,8 @@
       + 'Score：' + fmt2(rec.score) 
       + '｜總淨利：' + fmtInt(rec.total)
       + '｜MaxDD：' + fmtInt(rec.maxDDAbs)
+      + '｜Avg MAE%：' + fmt2(rec.maeAvgAbs)
+      + '｜最差 MAE%：' + fmt2(rec.maeWorst)
       + '｜交易筆數：' + rec.tradeCount + '<br>'
       + '年化報酬：' + pct(rec.annRet)
       + '｜年化波動：' + pct(rec.annVol)
@@ -521,6 +558,7 @@
       '｜PF：' + fmt2(best.pf) +
       '｜MAR：' + fmt2(best.mar) +
       '｜MaxDD：' + fmtInt(best.maxDDAbs) +
+      '｜Avg MAE%：' + fmt2(best.maeAvgAbs) +
       '｜總淨利：' + fmtInt(best.total);
 
     sub.innerHTML =
@@ -529,7 +567,8 @@
       '｜期望值/筆：' + fmt2(best.expectancy) +
       '｜Payoff：' + fmt2(best.payoff) +
       '｜勝率：' + pct(best.hitRate) +
-      '｜交易頻率（月）：' + fmt2(best.tradesPerMonth);
+      '｜月筆數：' + fmt2(best.tradesPerMonth) +
+      '｜最差 MAE%：' + fmt2(best.maeWorst);
   }
 
   // ===== 表格渲染 & 排序 =====
@@ -546,6 +585,7 @@
            +  '<td class="num">'+fmt2(r.pf)+'</td>'
            +  '<td class="num">'+fmt2(r.mar)+'</td>'
            +  '<td class="num">'+fmtInt(r.maxDDAbs)+'</td>'
+           +  '<td class="num">'+fmt2(r.maeAvgAbs)+'</td>'
            +  '<td class="num '+pnlCls+'">'+fmtInt(r.total)+'</td>'
            +  '<td class="num">'+fmt2(r.sr)+'</td>'
            +  '<td class="num">'+fmt2(r.so)+'</td>'
@@ -645,10 +685,12 @@
           ulcer:      kpi.ulcer,
           recoveryDays: kpi.recoveryDays,
           monthHit:   kpi.monthHit,
+          maeAvgAbs:  kpi.maeAvgAbs,
+          maeWorst:   kpi.maeWorst,
           score:      0
         };
       }else{
-        // 🔎 解析不到稅後損益也要顯示一列，方便 debug
+        // 解析不到稅後損益也要顯示一列，方便 debug
         rec = {
           __id: Math.random().toString(36).slice(2),
           name: src.name,
@@ -670,6 +712,8 @@
           ulcer: 0,
           recoveryDays: 0,
           monthHit: 0,
+          maeAvgAbs: 0,
+          maeWorst: 0,
           score: 0
         };
       }
@@ -677,7 +721,6 @@
     }
 
     if(rows.length){
-      // 先計算 Score，再依 Score 排序（由高到低）
       computeScores();
       rows.sort(function(a,b){ return (b.score||0) - (a.score||0); });
       selectRow(0);
