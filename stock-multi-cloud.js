@@ -1,10 +1,10 @@
-// 股票｜雲端多檔分析（指標 TXT 版）
+// 股票｜雲端多檔分析（指標 TXT 版） - 多檔 KPI + Score 儀表板版
 // - 解析每檔 TXT 中含「稅後損益=」「累積損益=」的行（賣出）
-// - Summary:
-//   * 筆數：賣出筆數
-//   * 勝率：稅後損益 > 0 的比例
-//   * 累積淨損益：最後一筆累積損益
-//   * Sharpe / MAR / 年化報酬 / 年化波動：用每日稅後損益 / capital 估算
+// - Summary（表格）：
+//   * Score：依 PF / MAR / MaxDD / Sharpe / Sortino / Expectancy / Payoff / HitRate / TradesPerMonth 綜合評分（0–100）
+//   * PF / MAR / MaxDD / Total / Sharpe / Sortino / 期望值 / Payoff / 勝率 / 月筆數 / 年化報酬 / 年化波動 / 筆數
+// - 詳細 KPI（下方文字）：
+//   * 月勝率 / Ulcer Index / Recovery Days / Cost 結構等
 // - 上方圖：每週稅後損益（浮動長條）＋累積稅後損益（折線）
 
 (function(){
@@ -20,7 +20,6 @@
     var d=new Date(), p=function(n){return String(n).padStart(2,'0');};
     return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+' '+p(d.getHours())+':'+p(d.getMinutes())+':'+p(d.getSeconds());
   };
-  var clamp = function(v,lo,hi){ return Math.max(lo,Math.min(hi,v)); };
   var setText = function(sel,t){ var el=$(sel); if(el) el.textContent=t; };
 
   function shortName(name){
@@ -42,7 +41,8 @@
   var CFG = {
     feeRate: +(url.searchParams.get('fee') || 0.001425),
     minFee : +(url.searchParams.get('min') || 20),
-    taxRate: +(url.searchParams.get('tax') || 0.003),
+    // ✅ 交易稅預設固定為 0.1%（0.001）
+    taxRate: +(url.searchParams.get('tax') || 0.001),
     unit   : +(url.searchParams.get('unit')|| 1000),
     slip   : +(url.searchParams.get('slip')|| 0),
     capital: +(url.searchParams.get('cap') || 1000000),
@@ -115,6 +115,7 @@
     var std=Math.sqrt(v), min=Math.min.apply(null,arr), max=Math.max.apply(null,arr);
     return {n:n,mean:mean,std:std,min:min,max:max};
   }
+
   function maxDrawdown(eq){
     if(!eq.length) return {mdd:0};
     var peak=eq[0]||0, mdd=0, i, dd;
@@ -125,6 +126,54 @@
     }
     return {mdd:mdd};
   }
+
+  // Ulcer Index（%）
+  function ulcerIndex(eq){
+    var n=eq.length;
+    if(!n) return 0;
+    var maxEq = eq[0];
+    var sumSq = 0;
+    var i, dd;
+    for(i=0;i<n;i++){
+      if(eq[i]>maxEq) maxEq = eq[i];
+      if(maxEq === 0){
+        dd = 0;
+      }else{
+        dd = ((eq[i]-maxEq)/maxEq)*100; // drawdown %
+      }
+      if(dd < 0){
+        sumSq += dd*dd;
+      }
+    }
+    return Math.sqrt(sumSq/n);
+  }
+
+  // Recovery Days：從最大回撤點回到前高所需「天數」（以日績效序列）
+  function recoveryDays(eq){
+    var n = eq.length;
+    if(!n) return 0;
+    var i, peak = eq[0], peakIdx = 0;
+    var mdd = 0, mddIdx = -1;
+
+    for(i=0;i<n;i++){
+      if(eq[i] > peak){
+        peak = eq[i];
+        peakIdx = i;
+      }
+      var dd = eq[i] - peak;
+      if(dd < mdd){
+        mdd = dd;
+        mddIdx = i;
+      }
+    }
+    if(mddIdx < 0) return 0;
+
+    for(i=mddIdx+1;i<n;i++){
+      if(eq[i] >= peak) return i - mddIdx;
+    }
+    return n - mddIdx - 1;
+  }
+
   function downsideStd(rets){
     var n=rets.length,i,neg=[],m=0;
     if(!n) return 0;
@@ -138,6 +187,7 @@
     varD/=n;
     return Math.sqrt(varD);
   }
+
   function sharpe(annRet, annVol, rf){ return annVol>0 ? (annRet-rf)/annVol : 0; }
   function sortino(annRet, annDown, rf){ return annDown>0 ? (annRet-rf)/annDown : 0; }
 
@@ -209,6 +259,15 @@
                        .reduce(function(a,b){return a+b.pnl;},0);
     var pf = negPnL<0 ? (posPnL/Math.abs(negPnL)) : (posPnL>0?Infinity:0);
 
+    var expectancy = nTrades ? total/nTrades : 0;
+
+    var avgWin = 0, avgLoss = 0, payoff = 0;
+    if(hits>0) avgWin = posPnL / hits;
+    var lossTrades = trades.filter(function(t){return t.pnl<0;});
+    var lossCount = lossTrades.length;
+    if(lossCount>0) avgLoss = Math.abs(negPnL) / lossCount;
+    if(avgLoss>0) payoff = avgWin / avgLoss;
+
     var tradesPerMonth = 0;
     if(nTrades>1){
       var firstTs = trades[0].ts;
@@ -218,6 +277,21 @@
       if(months <= 0) months = 1/30.4;
       tradesPerMonth = nTrades/months;
     }
+
+    // 月度績效（穩定度）
+    var monthMap = new Map();
+    dayPnL.forEach(function(v,day){
+      var mKey = day.slice(0,6); // YYYYMM
+      monthMap.set(mKey, (monthMap.get(mKey)||0) + v);
+    });
+    var monthKeys = Array.from(monthMap.keys()).sort();
+    var monthPnL = monthKeys.map(function(k){ return monthMap.get(k)||0; });
+    var M = statsBasic(monthPnL);
+    var posM = monthPnL.filter(function(x){return x>0;}).length;
+    var monthHit = monthKeys.length ? posM/monthKeys.length : 0;
+
+    var ui  = ulcerIndex(eq);
+    var rec = recoveryDays(eq);
 
     return {
       total: total,
@@ -229,8 +303,14 @@
       mar: mar,
       hitRate: hitRate,
       pf: pf,
+      expectancy: expectancy,
+      payoff: payoff,
       tradesPerMonth: tradesPerMonth,
-      maxDDAbs: Math.abs(mddTrades||0)
+      maxDDAbs: Math.abs(mddTrades||0),
+      ulcer: ui,
+      recoveryDays: rec,
+      monthHit: monthHit,
+      monthStd: M.std
     };
   }
 
@@ -238,6 +318,87 @@
   var rows = [];
   var currentIdx = -1;
   var chart = null;
+
+  // ===== Score 計算（依重要性加權） =====
+  function computeScores(){
+    if(rows.length === 0) return;
+
+    var keysPos = ['pf','mar','total','sr','so','expectancy','payoff','hitRate','tradesPerMonth'];
+    var keysNeg = ['maxDDAbs']; // 越小越好
+
+    var stats = {};
+    var i, k, v;
+
+    for(i=0;i<keysPos.length;i++){
+      k = keysPos[i];
+      var minP = Infinity, maxP = -Infinity;
+      rows.forEach(function(r){
+        var val = Number(r[k]||0);
+        if(!isFinite(val)) val = 0;
+        if(val < minP) minP = val;
+        if(val > maxP) maxP = val;
+      });
+      stats[k] = {min:minP, max:maxP};
+    }
+
+    for(i=0;i<keysNeg.length;i++){
+      k = keysNeg[i];
+      var minN = Infinity, maxN = -Infinity;
+      rows.forEach(function(r){
+        var val = Number(r[k]||0);
+        if(!isFinite(val)) val = 0;
+        if(val < minN) minN = val;
+        if(val > maxN) maxN = val;
+      });
+      stats[k] = {min:minN, max:maxN};
+    }
+
+    function normPos(val, key){
+      var s = stats[key];
+      if(!s || !isFinite(val)) return 0.5;
+      if(s.max === s.min) return 0.5;
+      return Math.max(0, Math.min(1, (val - s.min) / (s.max - s.min)));
+    }
+
+    function normNeg(val, key){
+      var s = stats[key];
+      if(!s || !isFinite(val)) return 0.5;
+      if(s.max === s.min) return 0.5;
+      // 越小越好：反過來
+      return Math.max(0, Math.min(1, (s.max - val) / (s.max - s.min)));
+    }
+
+    // 權重依你之前的重要性排序設計（總和約 = 1）
+    var W = {
+      pf:           0.20,
+      mar:          0.18,
+      maxDDAbs:     0.15,
+      total:        0.12,
+      sr:           0.10,
+      so:           0.08,
+      expectancy:   0.07,
+      payoff:       0.04,
+      hitRate:      0.03,
+      tradesPerMonth:0.03
+    };
+
+    rows.forEach(function(r){
+      var score = 0;
+
+      score += W.pf           * normPos(Number(r.pf||0),           'pf');
+      score += W.mar          * normPos(Number(r.mar||0),          'mar');
+      score += W.maxDDAbs     * normNeg(Number(r.maxDDAbs||0),     'maxDDAbs');
+      score += W.total        * normPos(Number(r.total||0),        'total');
+      score += W.sr           * normPos(Number(r.sr||0),           'sr');
+      score += W.so           * normPos(Number(r.so||0),           'so');
+      score += W.expectancy   * normPos(Number(r.expectancy||0),   'expectancy');
+      score += W.payoff       * normPos(Number(r.payoff||0),       'payoff');
+      score += W.hitRate      * normPos(Number(r.hitRate||0),      'hitRate');
+      score += W.tradesPerMonth*normPos(Number(r.tradesPerMonth||0),'tradesPerMonth');
+
+      r.score = score * 100; // 0–100
+    });
+  }
 
   // ===== 圖表 =====
   function drawChartFor(rec){
@@ -250,7 +411,8 @@
     var weekly = labels.map(function(k){ return weeks.get(k)||0; });
 
     var cum=[], s=0, floatBars=[], p=0;
-    for(var i=0;i<weekly.length;i++){
+    var i;
+    for(i=0;i<weekly.length;i++){
       s+=weekly[i];
       cum.push(s);
       floatBars.push([p, s]);
@@ -296,7 +458,78 @@
 
     $('#chartCaption').textContent =
       '目前：' + rec.shortName +
-      '｜Total(累積損益)=' + fmtInt(rec.total);
+      '｜Total(累積損益)=' + fmtInt(rec.total) +
+      '｜PF=' + fmt2(rec.pf) +
+      '｜Sharpe=' + fmt2(rec.sr);
+  }
+
+  // ===== 詳細 KPI 區塊 =====
+  function renderDetail(rec){
+    var box = $('#kpiDetail');
+    var nameEl = $('#kpiName');
+    var bodyEl = $('#kpiBody');
+    if(!box || !nameEl || !bodyEl || !rec) return;
+
+    box.style.display = 'block';
+    nameEl.textContent = rec.shortName + ' 的詳細 KPI';
+
+    var html = ''
+      + 'Score：' + fmt2(rec.score) 
+      + '｜總淨利：' + fmtInt(rec.total)
+      + '｜MaxDD：' + fmtInt(rec.maxDDAbs)
+      + '｜交易筆數：' + rec.tradeCount + '<br>'
+      + '年化報酬：' + pct(rec.annRet)
+      + '｜年化波動：' + pct(rec.annVol)
+      + '｜Sharpe：' + fmt2(rec.sr)
+      + '｜Sortino：' + fmt2(rec.so)
+      + '｜MAR：' + fmt2(rec.mar) + '<br>'
+      + '勝率：' + pct(rec.hitRate)
+      + '｜PF：' + fmt2(rec.pf)
+      + '｜期望值(每筆)：' + fmt2(rec.expectancy)
+      + '｜Payoff：' + fmt2(rec.payoff) + '<br>'
+      + '月度勝率：' + pct(rec.monthHit)
+      + '｜Ulcer Index：' + fmt2(rec.ulcer)
+      + '｜Recovery Days：' + fmtInt(rec.recoveryDays);
+
+    bodyEl.innerHTML = html;
+  }
+
+  // ===== 最佳參數卡片 =====
+  function renderBestCard(){
+    var card = $('#bestCard');
+    var main = $('#bestMain');
+    var sub  = $('#bestSub');
+    if(!card || !main || !sub) return;
+
+    if(!rows.length){
+      card.style.display = 'none';
+      return;
+    }
+
+    var best = rows[0];
+    var i;
+    for(i=1;i<rows.length;i++){
+      if(Number(rows[i].score||0) > Number(best.score||0)){
+        best = rows[i];
+      }
+    }
+
+    card.style.display = 'block';
+    main.innerHTML =
+      best.shortName +
+      '｜Score：<strong>' + fmt2(best.score) + '</strong>' +
+      '｜PF：' + fmt2(best.pf) +
+      '｜MAR：' + fmt2(best.mar) +
+      '｜MaxDD：' + fmtInt(best.maxDDAbs) +
+      '｜總淨利：' + fmtInt(best.total);
+
+    sub.innerHTML =
+      'Sharpe：' + fmt2(best.sr) +
+      '｜Sortino：' + fmt2(best.so) +
+      '｜期望值/筆：' + fmt2(best.expectancy) +
+      '｜Payoff：' + fmt2(best.payoff) +
+      '｜勝率：' + pct(best.hitRate) +
+      '｜交易頻率（月）：' + fmt2(best.tradesPerMonth);
   }
 
   // ===== 表格渲染 & 排序 =====
@@ -309,14 +542,20 @@
       pnlCls = cls(r.total);
       html += '<tr data-idx="'+i+'" class="'+(i===currentIdx?'active-row':'')+'">'
            +  '<td>'+r.shortName+'</td>'
-           +  '<td class="num">'+r.tradeCount+'</td>'
-           +  '<td class="num">'+pct(r.hitRate)+'</td>'
+           +  '<td class="num">'+fmt2(r.score)+'</td>'
+           +  '<td class="num">'+fmt2(r.pf)+'</td>'
+           +  '<td class="num">'+fmt2(r.mar)+'</td>'
+           +  '<td class="num">'+fmtInt(r.maxDDAbs)+'</td>'
            +  '<td class="num '+pnlCls+'">'+fmtInt(r.total)+'</td>'
            +  '<td class="num">'+fmt2(r.sr)+'</td>'
-           +  '<td class="num">'+fmt2(r.mar)+'</td>'
+           +  '<td class="num">'+fmt2(r.so)+'</td>'
+           +  '<td class="num">'+fmt2(r.expectancy)+'</td>'
+           +  '<td class="num">'+fmt2(r.payoff)+'</td>'
+           +  '<td class="num">'+pct(r.hitRate)+'</td>'
            +  '<td class="num">'+fmt2(r.tradesPerMonth)+'</td>'
            +  '<td class="num">'+pct(r.annRet)+'</td>'
            +  '<td class="num">'+pct(r.annVol)+'</td>'
+           +  '<td class="num">'+r.tradeCount+'</td>'
            +  '</tr>';
     }
     tb.innerHTML = html;
@@ -333,11 +572,15 @@
     currentIdx = idx;
     renderTable();
     drawChartFor(rows[idx]);
+    renderDetail(rows[idx]);
   }
 
   function bindSort(){
-    var ths = $('#sumTable thead').querySelectorAll('th');
-    for(var i=0;i<ths.length;i++){
+    var thead = $('#sumTable thead');
+    if(!thead) return;
+    var ths = thead.querySelectorAll('th');
+    var i;
+    for(i=0;i<ths.length;i++){
       (function(th){
         th.onclick = function(){
           var k = th.getAttribute('data-k');
@@ -355,12 +598,14 @@
           if(currentIdx>=0){
             var curId = rows[currentIdx].__id;
             var newIdx = -1;
-            for(var j=0;j<rows.length;j++){
+            var j;
+            for(j=0;j<rows.length;j++){
               if(rows[j].__id === curId){ newIdx=j; break; }
             }
             currentIdx = newIdx;
           }
           renderTable();
+          // 排序不影響最佳參數卡（Score 是全域 best）
         };
       })(ths[i]);
     }
@@ -371,7 +616,8 @@
     rows = [];
     currentIdx = -1;
 
-    for(var i=0;i<nameTextPairs.length;i++){
+    var i;
+    for(i=0;i<nameTextPairs.length;i++){
       var src = nameTextPairs[i];
       var parsed = parseFile(src.text);
 
@@ -387,10 +633,19 @@
           hitRate:    kpi.hitRate,
           total:      kpi.total,
           sr:         kpi.sr,
+          so:         kpi.so,
+          pf:         kpi.pf,
           mar:        kpi.mar,
           tradesPerMonth: kpi.tradesPerMonth,
           annRet:     kpi.annRet,
-          annVol:     kpi.annVol
+          annVol:     kpi.annVol,
+          maxDDAbs:   kpi.maxDDAbs,
+          expectancy: kpi.expectancy,
+          payoff:     kpi.payoff,
+          ulcer:      kpi.ulcer,
+          recoveryDays: kpi.recoveryDays,
+          monthHit:   kpi.monthHit,
+          score:      0
         };
       }else{
         // 🔎 解析不到稅後損益也要顯示一列，方便 debug
@@ -403,21 +658,38 @@
           hitRate: 0,
           total: 0,
           sr: 0,
+          so: 0,
+          pf: 0,
           mar: 0,
           tradesPerMonth: 0,
           annRet: 0,
-          annVol: 0
+          annVol: 0,
+          maxDDAbs: 0,
+          expectancy: 0,
+          payoff: 0,
+          ulcer: 0,
+          recoveryDays: 0,
+          monthHit: 0,
+          score: 0
         };
       }
       rows.push(rec);
     }
 
     if(rows.length){
+      // 先計算 Score，再依 Score 排序（由高到低）
+      computeScores();
+      rows.sort(function(a,b){ return (b.score||0) - (a.score||0); });
       selectRow(0);
+      renderBestCard();
     }else{
       renderTable();
       if(chart){ chart.destroy(); chart=null; }
       $('#chartCaption').textContent = '尚未載入檔案或找不到「稅後損益=」資料行。';
+      var box = $('#kpiDetail');
+      if(box) box.style.display = 'none';
+      var card = $('#bestCard');
+      if(card) card.style.display = 'none';
     }
 
     $('#fileCount').textContent = String(rows.length);
@@ -448,7 +720,8 @@
         });
       }
 
-      for(var i=0;i<fs.length;i++){
+      var i;
+      for(i=0;i<fs.length;i++){
         readOne(fs[i]);
       }
     });
