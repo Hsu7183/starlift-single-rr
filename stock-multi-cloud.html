@@ -81,6 +81,7 @@
             <th class="num" data-k="pf">PF</th>
             <th class="num" data-k="mar">MAR</th>
             <th class="num" data-k="maxDDAbs">MaxDD</th>
+            <th class="num" data-k="maeAvgAbs">Avg&nbsp;MAE%</th>
             <th class="num" data-k="total">累積淨損益</th>
             <th class="num" data-k="sr">Sharpe</th>
             <th class="num" data-k="so">Sortino</th>
@@ -96,7 +97,7 @@
         <tbody></tbody>
       </table>
       <div class="hint" style="margin-top:8px">
-        提示：點欄位可升/降序；再次點擊同欄切換排序方向。Score 為 PF / MAR / MaxDD / Sharpe / Sortino / 期望值 / Payoff / 勝率 / 交易頻率的綜合分數（0–100）。
+        提示：點欄位可升/降序；再次點擊同欄切換排序方向。Score 為 PF / MAR / MaxDD / AvgMAE% / Sharpe / Sortino / 期望值 / Payoff / 勝率 / 交易頻率 的綜合分數（0–100），MAE 採用每筆交易 MAE% 絕對值的平均。
       </div>
 
       <!-- 詳細 KPI 區塊（選擇一檔後顯示） -->
@@ -107,6 +108,6 @@
     </div>
   </div>
 
-  <script src="stock-multi-cloud.js?v=stock-multi-score-v1"></script>
+  <script src="stock-multi-cloud.js?v=stock-multi-score-mae-v1"></script>
 </body>
 </html>
