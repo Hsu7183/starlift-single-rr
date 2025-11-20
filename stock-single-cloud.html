@@ -39,7 +39,7 @@
   <div class="wrap">
     <a class="back" href="index.html">← 返回首頁</a>
     <h1>股票-雲端單檔分析（KPI49）</h1>
-    <div class="subtitle muted sm">來源：canonical 或 1031-CSV（自動轉換，支援 unitsThis＝1→1→2）｜本頁僅供內部研究</div>
+    <div class="subtitle muted sm">來源：canonical 或 1031-CSV（自動轉換，支援 unitsThis＝1→1→2＋lotShares）｜本頁僅供內部研究</div>
 
     <!-- 控制列 + 參數 chips -->
     <div class="card row">
@@ -82,21 +82,27 @@
       <div class="chartbox"><canvas id="chWeekly"></canvas></div>
     </div>
 
-    <!-- 建議優先指標 -->
+    <!-- Score + KPI 一覽（依重要性排序） -->
     <div class="card">
-      <h3 class="section-title">建議優先指標</h3>
+      <h3 class="section-title">Score ＋ KPI 一覽（依重要性排序）</h3>
+      <div id="scoreLine" class="muted sm" style="margin-bottom:6px;">
+        Score：—
+      </div>
       <div class="scroll-x">
-        <table id="kpiTop"><thead><tr><th>指標</th><th>數值</th><th>建議</th><th>機構評語</th><th>參考區間</th></tr></thead><tbody></tbody></table>
+        <table id="kpiAll">
+          <thead>
+            <tr>
+              <th>指標</th>
+              <th>數值</th>
+              <th>建議</th>
+              <th>評級</th>
+              <th>參考區間</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
       </div>
     </div>
-
-    <!-- KPI（49 項分組） -->
-    <div class="card"><h3 class="section-title">一、報酬（Return）</h3><div class="scroll-x"><table id="kpiReturn"><thead></thead><tbody></tbody></table></div></div>
-    <div class="card"><h3 class="section-title">二、風險（Risk）</h3><div class="scroll-x"><table id="kpiRisk"><thead></thead><tbody></tbody></table></div></div>
-    <div class="card"><h3 class="section-title">三、效率（Efficiency）</h3><div class="scroll-x"><table id="kpiEff"><thead></thead><tbody></tbody></table></div></div>
-    <div class="card"><h3 class="section-title">四、穩定度（Stability）</h3><div class="scroll-x"><table id="kpiStab"><thead></thead><tbody></tbody></table></div></div>
-    <div class="card"><h3 class="section-title">五、成本 / 交易活性（Cost / Activity）</h3><div class="scroll-x"><table id="kpiCost"><thead></thead><tbody></tbody></table></div></div>
-    <div class="card"><h3 class="section-title">六、分布（Distribution）</h3><div class="scroll-x"><table id="kpiDist"><thead></thead><tbody></tbody></table></div></div>
 
     <!-- 交易明細 -->
     <div class="card">
@@ -105,6 +111,7 @@
     </div>
   </div>
 
-  <script src="stock-single-cloud.js?v=kpi49-taxscheme-unitsThis-lotShares-v4"></script>
+  <!-- ★ 改版：版本號換成新的，避免 cache -->
+  <script src="stock-single-cloud.js?v=single-kpi-score-mae-v1"></script>
 </body>
 </html>
