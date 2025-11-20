@@ -1,7 +1,6 @@
 // 股票｜雲端單檔分析（KPI＋Score 單列表版）
 // - 支援 1031 指標 TXT：買進 / 加碼攤平 / 再加碼攤平 / 賣出 + 本次單位 + lotShares
-// - 解析稅後損益自行回測（股票費稅口徑），並計算 49＋ 指標
-// - 新增：MAE%（平均／最差）、RecoveryDays（回到前高天數）、月勝率（Month Hit）
+// - 解析 TXT → 回測（股票費稅口徑），並計算 KPI（含 MAE / RecoveryDays / 月勝率）
 // - KPI 不分類，依重要性排序，最上方顯示綜合 Score（0–100）
 
 (function(){
@@ -183,6 +182,7 @@
 
   // ===== 解析：canonical + 1031-CSV =====
   var CANON_RE=/^(\d{14})\.0{6}\s+(\d+\.\d{6})\s+(新買|平賣|新賣|平買|強制平倉)\s*$/;
+  // CSV_RE 在新版 toCanon 不再使用，但保留不影響
   var CSV_RE  = /^\s*(\d{8})\s*,\s*(\d{5,6})\s*,\s*(\d+(?:\.\d+)?)\s*,\s*([^,]+)\s*,/;
   var MAE_RE  = /MAE%\s*=\s*(-?\d+(?:\.\d+)?)/;
 
@@ -202,44 +202,72 @@
       .replace(/[\u200B-\u200D\uFEFF]/g,'')
       .replace(/[\x00-\x09\x0B-\x1F\x7F]/g,'')
       .replace(/\r\n?/g,'\n')
-      .replace(/\s*,\s*/g, ',')
       .split('\n').map(function(s){ return s.trim(); })
       .filter(function(x){ return !!x; });
   }
 
+  // ★ 新版：專吃你的 1031 TXT（首行表頭＋後面多欄位）
   function toCanon(lines){
-    var out=[], i, l, m, d8, t6, px, act, row, um, lm;
-    for(i=0;i<lines.length;i++){
-      l=lines[i];
+    var out = [];
+    for(var i=0;i<lines.length;i++){
+      var l = lines[i];
+      if(!l) continue;
 
-      m=l.match(CANON_RE);
+      // 1) 嘗試 canonical 形式（回測 TXT 之類）
+      var m = l.match(CANON_RE);
       if(m){
-        row = { ts:m[1], px:+m[2], act:m[3] };
-      }else{
-        m=l.match(CSV_RE);
-        if(!m) continue;
-        d8=m[1]; t6=pad6(m[2]); px=+m[3]; act=mapAct(m[4]);
-        if(!isFinite(px) || !/^\d{6}$/.test(t6)) continue;
-        row = { ts:d8+t6, px:px, act:act };
+        out.push({
+          ts : m[1],
+          px : +m[2],
+          act: m[3],
+          units: 1,
+          lotShares: null
+        });
+        continue;
       }
 
-      // 同時支援 unitsThis= 與 本次單位=
-      um = l.match(/(?:unitsThis|本次單位)\s*=\s*(\d+)/);
+      // 2) 解析你這種 1031-CSV 行：YYYYMMDD,hhmmss,price,動作,說明,...
+      var parts = l.split(',');
+      if(parts.length < 4) continue;
+
+      var d8    = (parts[0] || '').trim();
+      var tRaw  = (parts[1] || '').trim();
+      var pxRaw = (parts[2] || '').trim();
+      var actRaw= (parts[3] || '').trim();
+
+      if(!/^\d{8}$/.test(d8)) continue;
+      var t6 = pad6(tRaw);
+      if(!/^\d{6}$/.test(t6)) continue;
+
+      var px = parseFloat(pxRaw);
+      if(!isFinite(px)) continue;
+
+      var act = mapAct(actRaw);  // 買進/加碼攤平→新買；賣出→平賣
+      var row = {
+        ts : d8 + t6,
+        px : px,
+        act: act
+      };
+
+      // 本次單位（或舊版 unitsThis）
+      var um = l.match(/本次單位\s*=\s*(\d+)/) || l.match(/unitsThis\s*=\s*(\d+)/);
       if(um){
         row.units = parseInt(um[1],10);
-        if(!(row.units>0)) row.units = 1;
+        if(!(row.units>0)) row.units=1;
       }else{
         row.units = 1;
       }
 
-      lm = l.match(/lotShares\s*=\s*(\d+)/);
+      // 每單位股數 lotShares
+      var lm = l.match(/lotShares\s*=\s*(\d+)/);
       if(lm){
         row.lotShares = parseInt(lm[1],10);
-        if(!(row.lotShares>0)) row.lotShares = null;
+        if(!(row.lotShares>0)) row.lotShares=null;
       }
 
       out.push(row);
     }
+
     out.sort(function(a,b){ return a.ts.localeCompare(b.ts); });
     return out;
   }
@@ -292,7 +320,7 @@
 
       if(r.act==='新買'){
         var lotUnits  = r.units || 1;
-        var sharesInc = CFG.unit * lotUnits;
+        var sharesInc = (r.lotShares || CFG.unit) * lotUnits;
 
         var px  = r.px + CFG.slip;
         var amt = px * sharesInc;
@@ -511,7 +539,7 @@
     if(maeList && maeList.length){
       var sumAbs=0, minMae=maeList[0];
       for(var i=0;i<maeList.length;i++){
-        var v = maeList[i]; // 例如 -5.99
+        var v = maeList[i];
         sumAbs += Math.abs(v);
         if(v < minMae) minMae = v;
       }
@@ -578,7 +606,7 @@
     return score===2 ? '建議優化' : '維持監控';
   }
 
-  // 針對不同指標的 band 規則（Strong / Adequate / Improve）
+  // 針對不同指標的 band 規則
   function scoreMetric(key, raw){
     // 風險類：越小越好
     if(key==='annVol' || key==='dStd' || key==='mdd' || key==='costRatio'){
@@ -600,7 +628,7 @@
     if(key==='maeAvgAbs'){
       return raw<=5 ? 0 : (raw<=10 ? 1 : 2);
     }
-    // MAE 最差：越小越好（單位：％）
+    // MAE 最差：越小越好（單位：％，用絕對值）
     if(key==='maeWorst'){
       return raw<=15 ? 0 : (raw<=25 ? 1 : 2);
     }
@@ -780,7 +808,7 @@
     pushRow('Trade PnL Std',
       {disp:fmtInt(k.pnlStd), raw:k.pnlStd}, 'pnlStd','愈低愈好');
 
-    // 補齊到接近 49 項（保留 2 個保留位）
+    // 補兩個保留位
     pushRow('—', {disp:'—', raw:0}, 'na', '—');
     pushRow('—', {disp:'—', raw:0}, 'na', '—');
 
@@ -796,7 +824,7 @@
     var score = sumW>0 ? (sumS / sumW * 100) : 0;
     setText('#scoreLine', 'Score：' + score.toFixed(1) + ' / 100');
 
-    // ===== 依重要性排序：先權重，再 band（需優化排前面）=====
+    // ===== 依重要性排序：先權重，再 band（需優化排前）=====
     rows.sort(function(a,b){
       if(b.weight !== a.weight) return b.weight - a.weight;
       return b.band - a.band; // 2(需優化) > 1 > 0
@@ -888,10 +916,10 @@
   // ===== 主流程 =====
   function runAll(rawText){
     var normLines = normalize(rawText);
-    var canon = toCanon(normLines);
-    var maeList = extractMAE(normLines);
+    var canon    = toCanon(normLines);
+    var maeList  = extractMAE(normLines);
 
-    // lotShares → 覆蓋 CFG.unit
+    // 若 TXT 有 lotShares，就覆蓋 CFG.unit
     var autoUnit = null, i;
     for(i=0;i<canon.length;i++){
       if(canon[i].lotShares && canon[i].lotShares>0){
