@@ -1,6 +1,6 @@
 // 股票雲端單檔分析（1031 TXT 版）
 // - 讀取 1031 指標 TXT（首行參數 + 每筆買進/加碼/再加碼/賣出）
-// - 依 TXT 首行決定：FeeRate / MinFee / UnitShares / ETF or STOCK 稅率（含 TaxRateOverride）
+// - 依 TXT 首行決定：FeeRate / MinFee / UnitSharesBase / IsETF / TaxRateOverride
 // - 回測結果 → 每週獲利圖（連續週 + 週平均 MAE%）、交易明細、KPI（含 MAE / RecoveryDays / 月勝率）＋總分 Score
 
 (function(){
@@ -25,7 +25,7 @@
     rf     : +(url.searchParams.get('rf')  || 0.00)
   };
 
-  // chips
+  // chips 顯示
   function refreshChips(){
     setText('#feeRateChip',(CFG.feeRate*100).toFixed(4)+'%');
     setText('#taxRateChip',(CFG.taxRate*100).toFixed(3)+'%');
@@ -44,6 +44,7 @@
 
   // ===== 狀態 =====
   var currentRaw = null;
+  var chWeekly = null;
 
   // ===== UI 綁定 =====
   var fileInput=$('#file'), btnClip=$('#btn-clip'), prefix=$('#cloudPrefix');
@@ -74,6 +75,7 @@
   if(btnImp)  btnImp.addEventListener('click', importCloud);
 
   function listCloud(){
+    if(!prefix) return;
     prev.textContent=''; meta.textContent='';
     pick.innerHTML='<option value="">載入中…</option>';
     var p=(prefix.value||'').trim();
@@ -111,6 +113,7 @@
     return best;
   }
   function previewCloud(){
+    if(!pick) return;
     prev.textContent=''; meta.textContent='';
     var path=pick.value; if(!path) return;
     getUrl(path).then(function(u){
@@ -128,6 +131,7 @@
     });
   }
   function importCloud(){
+    if(!pick) return;
     var path=pick.value; if(!path) return alert('請先選檔');
     getUrl(path).then(function(u){
       if(!u){ alert('取得連結失敗'); return null; }
@@ -168,11 +172,11 @@
       .filter(function(x){ return !!x; });
   }
 
-  // 解析 TXT 首行參數：FeeRate / MinFee / UnitShares / IsETF / TaxRateOverride
+  // 首行參數 → CFG & 畫面
   function applyHeaderParams(headerLine){
     if(!headerLine) return;
-
     var m;
+
     m = headerLine.match(/_FeeRate=([\d.]+)/);
     if(m && isFinite(+m[1])) CFG.feeRate = +m[1];
 
@@ -199,12 +203,11 @@
     }
   }
 
-  // 將首行參數輸出到畫面
   function renderParams(headerLine){
     var box = $('#paramBox');
     if(!box) return;
     if(!headerLine){
-      box.textContent = '尚未載入 TXT。';
+      box.textContent = '';
       return;
     }
     var params = [];
@@ -212,21 +215,15 @@
     while((m = re.exec(headerLine)) !== null){
       params.push(m[1] + '=' + m[2]);
     }
-    if(params.length===0){
-      box.textContent = headerLine;
-    }else{
-      box.innerHTML = params.join(' ｜ ');
-    }
+    box.innerHTML = params.join(' ｜ ');
   }
 
-  // 專吃 1031 TXT 的解析：每行變成 {ts, px, act, units, lotShares}
   function toCanon(lines){
     var out = [];
     for(var i=0;i<lines.length;i++){
       var l = lines[i];
       if(!l) continue;
 
-      // 1) canonical 形式
       var m = l.match(CANON_RE);
       if(m){
         out.push({
@@ -239,7 +236,6 @@
         continue;
       }
 
-      // 2) 1031 CSV 行
       var head = ROW_HEAD_RE.exec(l);
       if(!head) continue;
       var d8 = head[1];
@@ -252,11 +248,7 @@
       var actRaw = (parts[3] || '').trim();
       var act = mapAct(actRaw);
 
-      var row = {
-        ts : d8 + t6,
-        px : px,
-        act: act
-      };
+      var row = { ts:d8+t6, px:px, act:act };
 
       var um = l.match(/本次單位\s*=\s*(\d+)/) || l.match(/unitsThis\s*=\s*(\d+)/);
       if(um){
@@ -279,7 +271,6 @@
     return out;
   }
 
-  // 從 TXT 抓出 MAE%：同時回傳 list（整體平均用）與 byDay（畫週圖用）
   function extractMAEInfo(lines){
     var list = [];
     var byDay = new Map();
@@ -300,7 +291,6 @@
     return { list:list, byDay:byDay };
   }
 
-  // MAE byDay -> byWeek
   function maeByWeekFromDay(maeByDay){
     var res = new Map();
     maeByDay.forEach(function(v,day){
@@ -382,7 +372,6 @@
     return { trades:trades, weeks:weeks, dayPnL:dayPnL, endingCash:cash, openShares:shares, pnlCum:pnlCum };
   }
 
-  // ===== 週次鍵 =====
   function weekKey(day){
     var dt=new Date(day.slice(0,4)+'-'+day.slice(4,6)+'-'+day.slice(6,8)+'T00:00:00');
     var y=dt.getFullYear(), oneJan=new Date(y,0,1);
@@ -528,7 +517,6 @@
       return s.length%2? s[m] : (s[m-1]+s[m])/2;
     })();
 
-    // 月度勝率/月度資料
     var monthMap = new Map();
     bt.dayPnL.forEach(function(v,day){
       var mKey = day.slice(0,6);
@@ -539,7 +527,6 @@
     var posM = monthPnL.filter(function(x){return x>0;}).length;
     var monthHit = monthKeys.length ? posM/monthKeys.length : 0;
 
-    // MAE%：平均 / 最差
     var maeAvgAbs = 0;
     var maeWorst  = 0;
     if(maeList && maeList.length){
@@ -576,12 +563,10 @@
     };
   }
 
-  // ===== 週次圖：連續週＋週平均 MAE% =====
-  var chWeekly=null;
+  // ===== 週次圖（X 軸顯示週結算日期） =====
   function renderWeeklyChart(weeksMap, maeByWeek, dayPnL){
-    var ctx=$('#chWeekly');
+    var ctx = $('#chWeekly');
     if(!ctx) return;
-
     if(chWeekly){ chWeekly.destroy(); chWeekly=null; }
 
     var dayKeys = Array.from(dayPnL.keys());
@@ -599,7 +584,6 @@
 
     var labels=[], weekly=[], cum=[], maeAvg=[];
     var pnlCum=0;
-
     var seenWeek = null;
 
     while(cur <= end){
@@ -611,7 +595,7 @@
 
       if(wkKey !== seenWeek){
         seenWeek = wkKey;
-        labels.push(wkKey);
+        labels.push(y+'/'+m+'/'+d);  // 用日期當 X 軸顯示
 
         var wPnL = weeksMap.get(wkKey) || 0;
         weekly.push(wPnL);
@@ -623,7 +607,7 @@
         maeAvg.push(wMae);
       }
 
-      cur.setDate(cur.getDate()+7); // 每 7 天走一格（週）
+      cur.setDate(cur.getDate()+7);
     }
 
     var floatBars=[], prev=0;
@@ -675,8 +659,7 @@
           y:{
             position:'left',
             suggestedMin:Math.min(0, Math.min.apply(null, cum.concat([0]))*1.1),
-            suggestedMax:Math.max(1, Math.max.apply(null, cum.concat([0]))*1.05),
-            title:{display:true,text:'獲利（金額）'}
+            suggestedMax:Math.max(1, Math.max.apply(null, cum.concat([0]))*1.05)
           },
           y1:{
             position:'right',
@@ -799,7 +782,7 @@
     pushRow('Daily Std',{disp:pct(k.std),raw:k.std},'std','愈低愈好');
     pushRow('Month Hit Ratio（月度勝率）',{disp:pct(k.monthHit),raw:k.monthHit},'monthHit','≥60%');
 
-    // 成本/活性
+    // 成本 / 活性
     pushRow('Gross Buy',{disp:fmtInt(k.grossBuy),raw:k.grossBuy},'grossBuy','—');
     pushRow('Gross Sell',{disp:fmtInt(k.grossSell),raw:k.grossSell},'grossSell','—');
     pushRow('Fee Sum',{disp:fmtInt(k.feeSum),raw:k.feeSum},'feeSum','—');
@@ -833,7 +816,7 @@
     var score = sumW>0 ? (sumS/sumW*100) : 0;
     setText('#scoreLine','Score：'+score.toFixed(1)+' / 100');
 
-    // 排序：先 weight，再 band（需優化排前面）
+    // 排序：先權重，再 band（需優化排前面）
     rows.sort(function(a,b){
       if(b.weight!==a.weight) return b.weight-a.weight;
       return b.band-a.band;
@@ -931,12 +914,12 @@
     renderParams(header);
     refreshChips();
 
-    var canon = toCanon(normLines);
-    var maeInfo = extractMAEInfo(normLines);
-    var maeList = maeInfo.list;
+    var canon    = toCanon(normLines);
+    var maeInfo  = extractMAEInfo(normLines);
+    var maeList  = maeInfo.list;
     var maeByWeek = maeByWeekFromDay(maeInfo.byDay);
 
-    // 如 TXT 有 lotShares，覆蓋 CFG.unit
+    // TXT 有 lotShares 時，以之覆蓋 CFG.unit
     var autoUnit = null, i;
     for(i=0;i<canon.length;i++){
       if(canon[i].lotShares && canon[i].lotShares>0){
@@ -954,4 +937,5 @@
     renderTrades(bt.trades);
     renderKPI(computeKPI(bt, maeList));
   }
+
 })();
