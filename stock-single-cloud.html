@@ -53,15 +53,15 @@
       </div>
     </div>
 
-    <!-- TXT 首行參數 -->
+    <!-- TXT 參數（標題空白，只保留內容） -->
     <div class="card">
-      <h3 class="section-title">TXT 參數</h3>
+      <h3 class="section-title"></h3>
       <div id="paramBox" class="muted sm">尚未載入 TXT。</div>
     </div>
 
-    <!-- 雲端選檔 -->
+    <!-- 雲端選檔（標題空白，只保留功能） -->
     <div class="card">
-      <h3 class="section-title">從 Supabase（reports）選檔</h3>
+      <h3 class="section-title"></h3>
       <div class="row">
         <input id="cloudPrefix" class="input muted" placeholder="篩選資料夾（例：2025-11-01/）" />
         <button id="btnCloudList" class="btn">載入清單</button>
@@ -75,17 +75,16 @@
       <pre id="cloudPreview" class="muted" style="margin-top:8px;max-height:260px;overflow:auto;background:#f8f9fa;padding:10px;border:1px solid #eee;border-radius:8px;white-space:pre-wrap"></pre>
     </div>
 
-    <!-- 週次盈虧圖 -->
+    <!-- 週次盈虧圖（標題與說明都空白，只留圖） -->
     <div class="card">
-      <h3 class="section-title">每週獲利（浮動長條）＋累積獲利（折線）＋週平均 MAE%</h3>
-      <div class="muted sm">X 軸為連續日曆週（含無成交週顯示 0）；線條顯示累積獲利與每週平均 MAE%（絕對值）。</div>
+      <h3 class="section-title"></h3>
       <div class="chartbox"><canvas id="chWeekly"></canvas></div>
     </div>
 
-    <!-- Score + KPI 一覽（依重要性排序） -->
+    <!-- Score + KPI 一覽（標題空白，Score 放大） -->
     <div class="card">
-      <h3 class="section-title">Score ＋ KPI 一覽（依重要性排序）</h3>
-      <div id="scoreLine" class="muted sm" style="margin-bottom:6px;">
+      <h3 class="section-title"></h3>
+      <div id="scoreLine" style="margin-bottom:10px;font-size:28px;font-weight:800;">
         Score：—
       </div>
       <div class="scroll-x">
@@ -104,13 +103,13 @@
       </div>
     </div>
 
-    <!-- 交易明細 -->
+    <!-- 交易明細（標題空白） -->
     <div class="card">
-      <h3 class="section-title">交易明細（BUY/SELL 以實際費稅計，支援 unitsThis 1→1→2＋lotShares）</h3>
+      <h3 class="section-title"></h3>
       <div class="scroll-x"><table id="tradeTable"><thead></thead><tbody></tbody></table></div>
     </div>
   </div>
 
-  <script src="stock-single-cloud.js?v=single-kpi-score-mae-v2"></script>
+  <script src="stock-single-cloud.js?v=single-kpi-score-mae-v3"></script>
 </body>
 </html>
