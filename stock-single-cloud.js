@@ -213,7 +213,8 @@
         row = { ts:d8+t6, px:px, act:act };
       }
 
-      um = l.match(/unitsThis\s*=\s*(\d+)/);
+      // ★★ 關鍵修正：同時支援 unitsThis= 與 本次單位=
+      um = l.match(/(?:unitsThis|本次單位)\s*=\s*(\d+)/);
       if(um){
         row.units = parseInt(um[1],10);
         if(!(row.units>0)) row.units = 1;
