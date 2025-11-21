@@ -1,7 +1,7 @@
 // 股票雲端單檔分析（1031 TXT 版）
 // - 讀取 1031 指標 TXT（首行參數 + 每筆買進/加碼/再加碼/賣出）
 // - 依 TXT 首行決定：FeeRate / MinFee / UnitSharesBase / IsETF / TaxRateOverride
-// - 回測結果 → 每週獲利圖（連續週 + 週平均 MAE%）、交易明細、KPI（含 MAE / RecoveryDays / 月勝率）＋總分 Score
+// - 回測結果 → 每週獲利圖（連續週 + 每週最大 MAE 金額）、交易明細、KPI（含 MAE / RecoveryDays / 月勝率）＋總分 Score
 
 (function(){
   'use strict';
@@ -291,6 +291,36 @@
     return { list:list, byDay:byDay };
   }
 
+  // 由 SELL trades + MAE% 計算「每週單筆最大 MAE 金額」
+  function computeMaeRiskWeek(trades, maeList){
+    var riskWeek = new Map();
+    var idx = 0;
+    for(var i=0;i<trades.length;i++){
+      var t = trades[i];
+      if(t.kind !== 'SELL') continue;
+
+      var maePct = 0;
+      if(idx < maeList.length){
+        maePct = Math.abs(maeList[idx]);
+      }
+      idx++;
+
+      if(maePct <= 0) continue;
+
+      // 以顯示累計成本當作部位成本（含費稅）
+      var base = t.cumCostDisp!=null ? t.cumCostDisp
+                                     : (t.cumCost + (t.fee||0) + (t.tax||0));
+      if(!(base>0)) continue;
+
+      var riskCash = base * maePct / 100.0;   // 單筆最大浮虧金額（NTD）
+      var day = t.ts.slice(0,8);
+      var wk = weekKey(day);
+      var cur = riskWeek.get(wk) || 0;
+      if(riskCash > cur) riskWeek.set(wk, riskCash); // 取該週最大值
+    }
+    return riskWeek;
+  }
+
   function maeByWeekFromDay(maeByDay){
     var res = new Map();
     maeByDay.forEach(function(v,day){
@@ -563,8 +593,8 @@
     };
   }
 
-  // ===== 週次圖（X 軸顯示週結算日期） =====
-  function renderWeeklyChart(weeksMap, maeByWeek, dayPnL){
+  // ===== 週次圖（X 軸顯示週結算日期；藍條：獲利；綠條：最大 MAE 金額；紅線：累積獲利） =====
+  function renderWeeklyChart(weeksMap, riskWeekMap, dayPnL){
     var ctx = $('#chWeekly');
     if(!ctx) return;
     if(chWeekly){ chWeekly.destroy(); chWeekly=null; }
@@ -582,7 +612,7 @@
     var cur = new Date(firstDay.slice(0,4)+'-'+firstDay.slice(4,6)+'-'+firstDay.slice(6,8)+'T00:00:00');
     var end = new Date(lastDay.slice(0,4)+'-'+lastDay.slice(4,6)+'-'+lastDay.slice(6,8)+'T00:00:00');
 
-    var labels=[], weekly=[], cum=[], maeAvg=[];
+    var labels=[], weekly=[], riskBars=[], cum=[];
     var pnlCum=0;
     var seenWeek = null;
 
@@ -595,16 +625,16 @@
 
       if(wkKey !== seenWeek){
         seenWeek = wkKey;
-        labels.push(y+'/'+m+'/'+d);  // 用日期當 X 軸顯示
+        labels.push(y+'/'+m+'/'+d);  // 週結算日期
 
         var wPnL = weeksMap.get(wkKey) || 0;
+        var wRisk = riskWeekMap.get(wkKey) || 0;
+
         weekly.push(wPnL);
+        riskBars.push(-wRisk);  // 畫成向下的直條
+
         pnlCum += wPnL;
         cum.push(pnlCum);
-
-        var maeEntry = maeByWeek.get(wkKey);
-        var wMae = maeEntry && maeEntry.cnt>0 ? (maeEntry.sum/maeEntry.cnt) : 0;
-        maeAvg.push(wMae);
       }
 
       cur.setDate(cur.getDate()+7);
@@ -622,30 +652,29 @@
         datasets:[
           {
             type:'bar',
-            label:'每週獲利（浮動長條）',
-            data:floatBars,
+            label:'每週獲利（NT$）',
+            data:weekly,
             yAxisID:'y',
             borderWidth:1,
-            backgroundColor:'rgba(13,110,253,0.30)',
-            borderColor:'#0d6efd'
+            backgroundColor:'rgba(37,99,235,0.35)',
+            borderColor:'#2563eb'
+          },
+          {
+            type:'bar',
+            label:'每週單筆最大浮虧（NT$）',
+            data:riskBars,
+            yAxisID:'y',
+            borderWidth:1,
+            backgroundColor:'rgba(16,185,129,0.35)',
+            borderColor:'#10b981'
           },
           {
             type:'line',
-            label:'累積淨利',
+            label:'累積淨利（NT$）',
             data:cum,
             yAxisID:'y',
             borderWidth:2,
-            borderColor:'#f43f5e',
-            tension:0.2,
-            pointRadius:0
-          },
-          {
-            type:'line',
-            label:'週平均 MAE%（絕對值）',
-            data:maeAvg,
-            yAxisID:'y1',
-            borderWidth:1.5,
-            borderColor:'#22c55e',
+            borderColor:'#f97316',
             tension:0.2,
             pointRadius:0
           }
@@ -658,13 +687,9 @@
         scales:{
           y:{
             position:'left',
-            suggestedMin:Math.min(0, Math.min.apply(null, cum.concat([0]))*1.1),
-            suggestedMax:Math.max(1, Math.max.apply(null, cum.concat([0]))*1.05)
-          },
-          y1:{
-            position:'right',
-            grid:{drawOnChartArea:false},
-            title:{display:true,text:'MAE%（絕對值）'}
+            suggestedMin:Math.min(0, Math.min.apply(null, cum.concat(riskBars,[0]))*1.2),
+            suggestedMax:Math.max(1, Math.max.apply(null, cum.concat(riskBars,[0]))*1.2),
+            title:{display:true,text:'金額（NT$）'}
           },
           x:{ ticks:{ maxTicksLimit:20 } }
         }
@@ -917,7 +942,6 @@
     var canon    = toCanon(normLines);
     var maeInfo  = extractMAEInfo(normLines);
     var maeList  = maeInfo.list;
-    var maeByWeek = maeByWeekFromDay(maeInfo.byDay);
 
     // TXT 有 lotShares 時，以之覆蓋 CFG.unit
     var autoUnit = null, i;
@@ -933,7 +957,9 @@
     }
 
     var bt=backtest(canon);
-    renderWeeklyChart(bt.weeks, maeByWeek, bt.dayPnL);
+    var riskWeek = computeMaeRiskWeek(bt.trades, maeList);
+
+    renderWeeklyChart(bt.weeks, riskWeek, bt.dayPnL);
     renderTrades(bt.trades);
     renderKPI(computeKPI(bt, maeList));
   }
