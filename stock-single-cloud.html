@@ -20,15 +20,15 @@
     th,td{border-bottom:1px solid #eee;padding:6px 8px;font-size:13px;white-space:nowrap}
     th{background:#fafafa;text-align:left}
     h1{margin:0 0 4px 0;font-size:32px;font-weight:800}
-    .chartbox{height:300px;margin-top:6px}
+    .chartbox{height:340px;margin-top:6px}
     .back{margin-bottom:12px;display:inline-block}
-    .pnl-pos{color:#d0021b;font-weight:600}
-    .pnl-neg{color:#0f8a00;font-weight:600}
+    .pnl-pos{color:#d97706;font-weight:600}
+    .pnl-neg{color:#16a34a;font-weight:600}
     .section-title{font-weight:800;margin:6px 0}
     .ok-row{background:#f4fff8}
-    .improve-row{background:#fff5f5}
-    .buy-row{background:#ffecec}
-    .sell-row{background:#ecffec}
+    .improve-row{background:#fef2f2}
+    .buy-row{background:#fef2f2}
+    .sell-row{background:#ecfdf5}
     .input{padding:8px;border:1px solid #ddd;border-radius:8px}
   </style>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -53,13 +53,13 @@
       </div>
     </div>
 
-    <!-- TXT 參數 -->
+    <!-- TXT 參數（標題空白，只顯示內容） -->
     <div class="card">
       <h3 class="section-title"></h3>
-      <div id="paramBox" class="muted sm">尚未載入 TXT。</div>
+      <div id="paramBox" class="muted sm"></div>
     </div>
 
-    <!-- 雲端選檔（可保留以後用） -->
+    <!-- 雲端選檔（標題空白，只保留功能） -->
     <div class="card">
       <h3 class="section-title"></h3>
       <div class="row">
@@ -75,13 +75,15 @@
       <pre id="cloudPreview" class="muted" style="margin-top:8px;max-height:260px;overflow:auto;background:#f8f9fa;padding:10px;border:1px solid #eee;border-radius:8px;white-space:pre-wrap"></pre>
     </div>
 
-    <!-- 資產堆疊圖 -->
+    <!-- 帳戶資金 / 風險圖（標題空白，只顯示圖表） -->
     <div class="card">
       <h3 class="section-title"></h3>
-      <div class="chartbox"><canvas id="chWeekly"></canvas></div>
+      <div class="chartbox">
+        <canvas id="chWeekly"></canvas>
+      </div>
     </div>
 
-    <!-- Score + KPI 一覽 -->
+    <!-- Score + KPI 一覽（標題空白，Score 放大顯示） -->
     <div class="card">
       <h3 class="section-title"></h3>
       <div id="scoreLine" style="margin-bottom:10px;font-size:28px;font-weight:800;">
@@ -103,13 +105,19 @@
       </div>
     </div>
 
-    <!-- 交易明細 -->
+    <!-- 交易明細（標題空白，只顯示表格） -->
     <div class="card">
       <h3 class="section-title"></h3>
-      <div class="scroll-x"><table id="tradeTable"><thead></thead><tbody></tbody></table></div>
+      <div class="scroll-x">
+        <table id="tradeTable">
+          <thead></thead>
+          <tbody></tbody>
+        </table>
+      </div>
     </div>
   </div>
 
-  <script src="stock-single-cloud.js?v=single-equity-stack-v1"></script>
+  <!-- 更新版 JS：記得同步檔名 & 版本號 -->
+  <script src="stock-single-cloud.js?v=account-ntd-v1"></script>
 </body>
 </html>
