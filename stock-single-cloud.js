@@ -681,7 +681,7 @@
     };
   }
 
-  // ===== 資金拆解折線圖 =====
+  // ===== 資金拆解折線圖（本金 / 成本 / 已實現 = 直條疊加 + 其餘線圖） =====
   function renderEquityChart(eqSeries){
     var ctx = $('#chWeekly');
     if(!ctx) return;
@@ -696,6 +696,7 @@
       data:{
         labels:eqSeries.labels,
         datasets:[
+          // 總資產線
           {
             type:'line',
             label:'總資產（現金 + 市值）',
@@ -703,20 +704,29 @@
             borderWidth:2,
             tension:0
           },
+          // 本金 / 成本 / 已實現損益，用同一個 stack 做直條疊加
           {
-            type:'line',
-            label:'本金 (NT$)',
+            type:'bar',
+            label:'本金餘額 (NT$)',
             data:eqSeries.principal,
-            borderWidth:1,
-            tension:0
+            stack:'funds',
+            borderWidth:1
           },
           {
-            type:'line',
+            type:'bar',
             label:'已投入成本 (NT$)',
             data:eqSeries.cost,
-            borderWidth:1,
-            tension:0
+            stack:'funds',
+            borderWidth:1
           },
+          {
+            type:'bar',
+            label:'累積已實現損益 (NT$)',
+            data:eqSeries.realized,
+            stack:'funds',
+            borderWidth:1
+          },
+          // 帳面市值（浮盈/浮虧）點圖
           {
             type:'line',
             label:'帳面市值（浮盈）',
@@ -730,13 +740,6 @@
             data:eqSeries.mvDown,
             showLine:false,
             pointRadius:4
-          },
-          {
-            type:'line',
-            label:'累積已實現損益 (NT$)',
-            data:eqSeries.realized,
-            borderWidth:1,
-            tension:0
           }
         ]
       },
@@ -756,9 +759,11 @@
         },
         scales:{
           x:{
+            stacked:true,
             ticks:{ autoSkip:false, maxRotation:0, minRotation:0, font:{size:10} }
           },
           y:{
+            stacked:true,
             title:{display:true,text:'金額 (NT$)'},
             ticks:{ callback:function(v){ return fmtInt(v); } }
           }
@@ -937,11 +942,32 @@
       tb.innerHTML=html;
     }
 
-    // 上方「需精進 KPI」表（只列 band=2）
+    // === 上方「需精進 KPI」小表：動態建立在 kpiAll 之上，並複製 Improve ===
+    var mainTable = $('#kpiAll');
     var topTable = $('#kpiImprove') || $('#kpiTop');
+    if(!topTable && mainTable){
+      // 動態建立一張小卡片在主表前面
+      var wrap = mainTable.parentNode;
+      var card = document.createElement('div');
+      card.className = 'card mb-3';
+      card.innerHTML =
+        '<div class="card-header">需精進 KPI（Improve）</div>' +
+        '<div class="card-body p-0">' +
+        '  <table class="table table-sm mb-0" id="kpiTop">' +
+        '    <thead>' +
+        '      <tr><th>指標</th><th>數值</th><th>建議</th><th>評級</th><th>參考區間</th></tr>' +
+        '    </thead>' +
+        '    <tbody></tbody>' +
+        '  </table>' +
+        '</div>';
+      wrap.parentNode.insertBefore(card, wrap);
+      topTable = $('#kpiTop');
+    }
+
     if(topTable){
       var tbTop = topTable.querySelector('tbody');
       if(!tbTop){ tbTop=document.createElement('tbody'); topTable.appendChild(tbTop); }
+      // 只抓 band=2 的，依重要度排序
       var improve = rows.filter(function(r){ return r.band===2; })
                         .sort(function(a,b){ return b.weight-a.weight; });
       var htmlTop='';
