@@ -467,7 +467,7 @@
 
       var label = day.slice(0,4)+'/'+day.slice(4,6)+'/'+day.slice(6,8);
       labels.push(label);
-      principal.push(cash);      // << 本金＝剩餘現金（不是固定 100 萬）
+      principal.push(cash);      // 本金＝剩餘現金
       cost.push(cumCost);
       realizedArr.push(realized);
       equityArr.push(equity);
@@ -497,7 +497,7 @@
     };
   }
 
-  // ===== KPI 計算（沿用舊版） =====
+  // ===== KPI 計算 =====
   function seriesFromDayPnL(dayPnL){
     var days=Array.from(dayPnL.keys()).sort();
     var pnl=days.map(function(d){ return dayPnL.get(d)||0; });
@@ -767,7 +767,7 @@
     });
   }
 
-  // ===== KPI + Score（單表 + 上方「需精進」表） =====
+  // ===== KPI + Score（主表依重要度排序，上方列出 Improve） =====
   function bandTxt(score){
     return score===0 ? 'Strong（強）'
          : score===1 ? 'Adequate（可接受）'
@@ -911,11 +911,10 @@
     var score = sumW>0 ? (sumS/sumW*100) : 0;
     setText('#scoreLine','Score：'+score.toFixed(1)+' / 100');
 
-    // 排序：先 band（Improve=2 最上面），再 weight（重要度）
+    // === 主表排序：依重要度（weight）由高到低，band 只當次要順序 ===
     rows.sort(function(a,b){
-      if(b.band !== a.band) return b.band - a.band;
-      if(b.weight !== a.weight) return b.weight - a.weight;
-      return 0;
+      if (b.weight !== a.weight) return b.weight - a.weight; // 重要度優先
+      return a.band - b.band;                                // Strong(0) → Adequate(1) → Improve(2)
     });
 
     // 下方完整 KPI 表
