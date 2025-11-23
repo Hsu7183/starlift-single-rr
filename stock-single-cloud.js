@@ -1,8 +1,8 @@
-// 股票雲端單檔分析（1031 TXT 版 + 每筆交易直條圖）
+// 股票雲端單檔分析（1031 TXT 版 + 資金拆解折線圖）
 // - 讀取 1031 指標 TXT（首行參數 + 買進/加碼/再加碼/賣出 + 日線 closeD）
 // - 依首行參數設定：FeeRate / MinFee / UnitSharesBase / IsETF / TaxRateOverride
 // - 回測：模擬現金與持股成本
-// - 圖表：每筆交易一組直條圖：成本 (NT$)、單筆最大 MAE 金額 (NT$)、實現盈虧 (NT$)
+// - 圖表：每天一點，直觀顯示：本金 / 成本 / 帳面市值（紅點＝浮盈、綠點＝浮虧） / 累積已實現損益
 // - KPI：49 指標 + Score（以本金 CFG.capital 為基準）
 
 (function(){
@@ -249,7 +249,7 @@
       if(!isFinite(px)) continue;
 
       var actRaw = (parts[3] || '').trim();
-      // 日線 closeD 行的動作是「日線」，這裡直接跳過
+      // 日線 closeD 行的動作是「日線」，這裡不進 trades，在別的函數處理
       if(actRaw === '日線') continue;
 
       var act = mapAct(actRaw);
@@ -288,6 +288,30 @@
       }
     }
     return arr;
+  }
+
+  // 讀取日線 closeD：key = 'YYYYMMDD', val = close 價
+  function extractDailyCloses(lines){
+    var map = {};
+    for(var i=0;i<lines.length;i++){
+      var l = lines[i];
+      if(!l) continue;
+      var parts = l.split(',');
+      if(parts.length < 4) continue;
+      var act = (parts[3] || '').trim();
+      if(act !== '日線') continue;
+
+      var dRaw = (parts[0] || '').replace(/\D/g,'');
+      if(!dRaw) continue;
+      if(dRaw.length > 8) dRaw = dRaw.slice(0,8);
+      if(dRaw.length !== 8) continue;
+
+      var px = parseFloat(parts[2]);
+      if(!isFinite(px)) continue;
+
+      map[dRaw] = px; // 同一天多行就以最後一行為準
+    }
+    return map;
   }
 
   // ===== 手續費/稅 =====
@@ -364,6 +388,98 @@
     var y=dt.getFullYear(), oneJan=new Date(y,0,1);
     var week=Math.ceil((((dt-oneJan)/86400000)+oneJan.getDay()+1)/7);
     return y+'-W'+(week<10?('0'+week):week);
+  }
+
+  // ===== 依日線 closeD 建立「本金 / 成本 / 帳面市值 / 已實現損益」序列 =====
+  function buildEquitySeries(rows, dailyCloses){
+    var days = Object.keys(dailyCloses).sort();
+    var labels = [];
+    var principal = [];
+    var cost = [];
+    var realizedArr = [];
+    var mvUp = [];
+    var mvDown = [];
+
+    var capital = CFG.capital;
+    var cash = capital;
+    var shares = 0;
+    var cumCost = 0;
+    var realized = 0;
+    var iTrade = 0;
+
+    for(var di=0; di<days.length; di++){
+      var day = days[di];
+
+      // 先處理這一天（以及之前尚未處理）的所有交易
+      while(iTrade < rows.length && rows[iTrade].ts.slice(0,8) <= day){
+        var r = rows[iTrade];
+
+        if(r.act === '新買'){
+          var lotUnits  = r.units || 1;
+          var unitSize  = r.lotShares || CFG.unit;
+          var sharesInc = unitSize * lotUnits;
+
+          var px  = r.px + CFG.slip;
+          var amt = px * sharesInc;
+          var f   = fee(amt);
+          var costBuy = amt + f;
+
+          if(cash >= costBuy){
+            cash    -= costBuy;
+            shares  += sharesInc;
+            cumCost += costBuy;
+          }
+        }else if(r.act === '平賣' && shares > 0){
+          var spx = r.px - CFG.slip;
+          var sam = spx * shares;
+          var ff  = fee(sam);
+          var tt  = tax(sam);
+          cash   += (sam - ff - tt);
+
+          var pnlTrade = (sam - ff - tt) - cumCost;
+          realized += pnlTrade;
+
+          shares = 0;
+          cumCost = 0;
+        }
+
+        iTrade++;
+      }
+
+      var closeD = +dailyCloses[day];
+      if(!isFinite(closeD)) continue;
+
+      var mv   = shares * closeD;
+      var uPnL = mv - cumCost;
+
+      var label = day.slice(0,4)+'/'+day.slice(4,6)+'/'+day.slice(6,8);
+      labels.push(label);
+      principal.push(capital);
+      cost.push(cumCost);
+      realizedArr.push(realized);
+
+      if(shares > 0){
+        if(uPnL >= 0){
+          mvUp.push(mv);
+          mvDown.push(null);
+        }else{
+          mvUp.push(null);
+          mvDown.push(mv);
+        }
+      }else{
+        mvUp.push(null);
+        mvDown.push(null);
+      }
+    }
+
+    return {
+      labels: labels,
+      principal: principal,
+      cost: cost,
+      realized: realizedArr,
+      mvUp: mvUp,
+      mvDown: mvDown
+    };
   }
 
   // ===== KPI 計算（沿用舊版） =====
@@ -550,69 +666,56 @@
     };
   }
 
-  // ===== 每筆交易直條圖：成本 / Worst MAE 金額 / 實現盈虧 =====
-  function renderTradeChart(bt, maeList){
+  // ===== 新版：資金拆解折線圖 =====
+  function renderEquityChart(eqSeries){
     var ctx = $('#chWeekly');
     if(!ctx) return;
     if(chTrades){ chTrades.destroy(); chTrades=null; }
 
-    var sells = bt.trades.filter(function(t){ return t.kind==='SELL'; });
-    if(!sells.length){
-      chTrades = new Chart(ctx,{type:'bar',data:{labels:[],datasets:[]},options:{}});
+    if(!eqSeries || !eqSeries.labels.length){
+      chTrades = new Chart(ctx,{type:'line',data:{labels:[],datasets:[]},options:{}});
       return;
-    }
-
-    var labels=[], costArr=[], maeArr=[], pnlArr=[];
-    var maeIdx=0;
-
-    for(var i=0;i<sells.length;i++){
-      var t = sells[i];
-      var day = t.ts.slice(0,8);
-      var label = (i+1)+'筆\n'+day.slice(0,4)+'/'+day.slice(4,6)+'/'+day.slice(6,8);
-      labels.push(label);
-
-      var tradeCost = (t.cumCost || 0) + (t.fee||0) + (t.tax||0);
-      costArr.push(tradeCost);
-
-      var maePct = 0;
-      if(maeIdx<maeList.length){
-        maePct = Math.abs(maeList[maeIdx]);
-      }
-      maeIdx++;
-      var maeCash = tradeCost * maePct / 100.0;
-      maeArr.push(-maeCash);      // 畫成往下的單筆最大浮虧金額
-
-      var pnl = t.pnlFull || 0;
-      pnlArr.push(pnl);
     }
 
     chTrades = new Chart(ctx,{
       data:{
-        labels:labels,
+        labels:eqSeries.labels,
         datasets:[
           {
-            type:'bar',
-            label:'成本 (NT$)',
-            data:costArr,
-            backgroundColor:'rgba(59,130,246,0.75)',
-            borderColor:'#1d4ed8',
-            borderWidth:1
+            type:'line',
+            label:'本金 (NT$)',
+            data:eqSeries.principal,
+            borderWidth:1,
+            tension:0
           },
           {
-            type:'bar',
-            label:'單筆最大浮虧 (NT$)',
-            data:maeArr,
-            backgroundColor:'rgba(34,197,94,0.75)',
-            borderColor:'#15803d',
-            borderWidth:1
+            type:'line',
+            label:'已投入成本 (NT$)',
+            data:eqSeries.cost,
+            borderWidth:1,
+            tension:0
           },
           {
-            type:'bar',
-            label:'實現盈虧 (NT$)',
-            data:pnlArr,
-            backgroundColor:'rgba(249,115,22,0.85)',
-            borderColor:'#c2410c',
-            borderWidth:1
+            type:'line',
+            label:'帳面市值（浮盈）',
+            data:eqSeries.mvUp,
+            showLine:false,
+            pointRadius:4
+          },
+          {
+            type:'line',
+            label:'帳面市值（浮虧）',
+            data:eqSeries.mvDown,
+            showLine:false,
+            pointRadius:4
+          },
+          {
+            type:'line',
+            label:'累積已實現損益 (NT$)',
+            data:eqSeries.realized,
+            borderWidth:1,
+            tension:0,
+            yAxisID:'y'
           }
         ]
       },
@@ -624,7 +727,7 @@
           tooltip:{
             callbacks:{
               label:function(ctx){
-                var v = ctx.parsed.y || 0;
+                var v = ctx.parsed.y;
                 return ctx.dataset.label + '：' + fmtInt(v) + ' 元';
               }
             }
@@ -632,11 +735,9 @@
         },
         scales:{
           x:{
-            stacked:false,
             ticks:{ autoSkip:false, maxRotation:0, minRotation:0, font:{size:10} }
           },
           y:{
-            stacked:false,
             title:{display:true,text:'金額 (NT$)'},
             ticks:{ callback:function(v){ return fmtInt(v); } }
           }
@@ -885,8 +986,9 @@
     renderParams(header);
     refreshChips();
 
-    var canon    = toCanon(normLines);
-    var maeList  = extractMaeList(normLines);
+    var canon       = toCanon(normLines);
+    var maeList     = extractMaeList(normLines);
+    var dailyCloses = extractDailyCloses(normLines);
 
     // TXT 有 lotShares 時，以之覆蓋 CFG.unit
     var autoUnit = null, i;
@@ -901,9 +1003,10 @@
       refreshChips();
     }
 
-    var bt = backtest(canon);
+    var bt       = backtest(canon);
+    var eqSeries = buildEquitySeries(canon, dailyCloses);
 
-    renderTradeChart(bt, maeList);
+    renderEquityChart(eqSeries);
     renderTrades(bt.trades);
     renderKPI(computeKPI(bt, maeList));
   }
