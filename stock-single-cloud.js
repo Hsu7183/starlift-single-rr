@@ -4,7 +4,7 @@
 // - 回測：模擬現金與持股成本
 // - 圖表：每天一點，直觀顯示：
 //     1) 總資產（現金 + 持股市值）
-//     2) 本金
+//     2) 本金（剩餘現金）
 //     3) 成本
 //     4) 帳面市值（紅點＝浮盈、綠點＝浮虧）
 //     5) 累積已實現損益
@@ -53,7 +53,7 @@
 
   // ===== UI 綁定 =====
   var fileInput=$('#file'), btnClip=$('#btn-clip'), prefix=$('#cloudPrefix');
-  var btnList=$('#btnCloudList'), pick=$('#cloudSelect'), btnPrev=$('#btnCloudPreview'), btnImp=$('#btnCloudImport');
+  var btnList=$('#btnCloudList'), pick=$('#cloudSelect'), btnPrev=$('#cloudPreview'), btnImp=$('#btnCloudImport');
   var meta=$('#cloudMeta'), prev=$('#cloudPreview');
 
   if(btnClip){
@@ -411,10 +411,9 @@
     var realizedArr = [];
     var mvUp = [];
     var mvDown = [];
-    var equityArr = [];  // 新增：每天「總資產 = 現金 + 持股市值」
+    var equityArr = [];  // 每天「總資產 = 現金 + 持股市值」
 
-    var capital = CFG.capital;
-    var cash = capital;
+    var cash = CFG.capital;   // 剩餘現金（本金餘額）
     var shares = 0;
     var cumCost = 0;
     var realized = 0;
@@ -464,14 +463,14 @@
 
       var mv   = shares * closeD;
       var uPnL = mv - cumCost;
-      var equity = cash + mv;  // 核心：每天的「現金＋市值」＝總資產
+      var equity = cash + mv;  // 每日總資產
 
       var label = day.slice(0,4)+'/'+day.slice(4,6)+'/'+day.slice(6,8);
       labels.push(label);
-      principal.push(capital);
+      principal.push(cash);      // << 本金＝剩餘現金（不是固定 100 萬）
       cost.push(cumCost);
       realizedArr.push(realized);
-      equityArr.push(equity);  // 記錄總資產
+      equityArr.push(equity);
 
       if(shares > 0){
         if(uPnL >= 0){
@@ -494,7 +493,7 @@
       realized: realizedArr,
       mvUp: mvUp,
       mvDown: mvDown,
-      equity: equityArr     // 新增：給圖表畫「總資產」用
+      equity: equityArr
     };
   }
 
@@ -682,7 +681,7 @@
     };
   }
 
-  // ===== 新版：資金拆解折線圖（含「總資產線」） =====
+  // ===== 資金拆解折線圖 =====
   function renderEquityChart(eqSeries){
     var ctx = $('#chWeekly');
     if(!ctx) return;
@@ -914,7 +913,7 @@
 
     // 排序：先 band（Improve=2 最上面），再 weight（重要度）
     rows.sort(function(a,b){
-      if(b.band !== a.band) return b.band - a.band;       // band: 2 > 1 > 0
+      if(b.band !== a.band) return b.band - a.band;
       if(b.weight !== a.weight) return b.weight - a.weight;
       return 0;
     });
