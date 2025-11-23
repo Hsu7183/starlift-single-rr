@@ -249,8 +249,8 @@
       if(!isFinite(px)) continue;
 
       var actRaw = (parts[3] || '').trim();
-      // 日線 closeD 行的動作是「日線」，這裡不進 trades，在別的函數處理
-      if(actRaw === '日線') continue;
+      // 日線 closeD 行在 extractDailyCloses 處理，這裡略過
+      if(actRaw.indexOf('日線') !== -1) continue;
 
       var act = mapAct(actRaw);
       var row = { ts:d8+t6, px:px, act:act };
@@ -297,19 +297,26 @@
       var l = lines[i];
       if(!l) continue;
       var parts = l.split(',');
-      if(parts.length < 4) continue;
-      var act = (parts[3] || '').trim();
-      if(act !== '日線') continue;
+      if(parts.length < 3) continue;
 
-      var dRaw = (parts[0] || '').replace(/\D/g,'');
-      if(!dRaw) continue;
-      if(dRaw.length > 8) dRaw = dRaw.slice(0,8);
-      if(dRaw.length !== 8) continue;
+      var dateRaw = (parts[0] || '').replace(/\D/g,'');
+      if(!dateRaw) continue;
+      if(dateRaw.length > 8) dateRaw = dateRaw.slice(0,8);
+      if(dateRaw.length !== 8) continue;
+
+      var act = (parts[3] || '').trim();
+      var desc = (parts[4] || '').trim();
+
+      // 動作欄只要包含「日線」，或說明欄有 closeD，就當作日線
+      var isDaily = false;
+      if(act && act.indexOf('日線') !== -1) isDaily = true;
+      if(!isDaily && /closeD/i.test(desc)) isDaily = true;
+      if(!isDaily) continue;
 
       var px = parseFloat(parts[2]);
       if(!isFinite(px)) continue;
 
-      map[dRaw] = px; // 同一天多行就以最後一行為準
+      map[dateRaw] = px; // 同一天多行就以最後一行為準
     }
     return map;
   }
@@ -746,7 +753,7 @@
     });
   }
 
-  // ===== KPI + Score（單表） =====
+  // ===== KPI + Score（單表 + 上方「需精進」表） =====
   function bandTxt(score){
     return score===0 ? 'Strong（強）'
          : score===1 ? 'Adequate（可接受）'
@@ -878,6 +885,7 @@
     pushRow('—',{disp:'—',raw:0},'na','—');
     pushRow('—',{disp:'—',raw:0},'na','—');
 
+    // Score
     var sumW=0,sumS=0;
     for(var i=0;i<rows.length;i++){
       var w=rows[i].weight;
@@ -889,28 +897,52 @@
     var score = sumW>0 ? (sumS/sumW*100) : 0;
     setText('#scoreLine','Score：'+score.toFixed(1)+' / 100');
 
+    // 排序（權重高 & band 高優先）
     rows.sort(function(a,b){
       if(b.weight!==a.weight) return b.weight-a.weight;
       return b.band-a.band;
     });
 
+    // 下方完整 KPI 表
     var table = $('#kpiAll');
-    if(!table) return;
-    var tb = table.querySelector('tbody');
-    if(!tb){ tb=document.createElement('tbody'); table.appendChild(tb); }
-    var html='';
-    for(var j=0;j<rows.length;j++){
-      var r=rows[j];
-      var cls = r.band===2?'improve-row':(r.band===0?'ok-row':'');
-      html+='<tr class="'+cls+'">'
-          + '<td>'+r.name+'</td>'
-          + '<td>'+r.disp+'</td>'
-          + '<td>'+bandAdvice(r.band)+'</td>'
-          + '<td>'+bandTxt(r.band)+'</td>'
-          + '<td>'+r.ref+'</td>'
-          + '</tr>';
+    if(table){
+      var tb = table.querySelector('tbody');
+      if(!tb){ tb=document.createElement('tbody'); table.appendChild(tb); }
+      var html='';
+      for(var j=0;j<rows.length;j++){
+        var r=rows[j];
+        var cls = r.band===2?'improve-row':(r.band===0?'ok-row':'');
+        html+='<tr class="'+cls+'">'
+            + '<td>'+r.name+'</td>'
+            + '<td>'+r.disp+'</td>'
+            + '<td>'+bandAdvice(r.band)+'</td>'
+            + '<td>'+bandTxt(r.band)+'</td>'
+            + '<td>'+r.ref+'</td>'
+            + '</tr>';
+      }
+      tb.innerHTML=html;
     }
-    tb.innerHTML=html;
+
+    // 上方「需精進 KPI」表（只列 band=2）
+    var topTable = $('#kpiImprove') || $('#kpiTop');
+    if(topTable){
+      var tbTop = topTable.querySelector('tbody');
+      if(!tbTop){ tbTop=document.createElement('tbody'); topTable.appendChild(tbTop); }
+      var improve = rows.filter(function(r){ return r.band===2; })
+                        .sort(function(a,b){ return b.weight-a.weight; });
+      var htmlTop='';
+      for(var k2=0;k2<improve.length;k2++){
+        var r2 = improve[k2];
+        htmlTop+='<tr class="improve-row">'
+               +  '<td>'+r2.name+'</td>'
+               +  '<td>'+r2.disp+'</td>'
+               +  '<td>'+bandAdvice(r2.band)+'</td>'
+               +  '<td>'+bandTxt(r2.band)+'</td>'
+               +  '<td>'+r2.ref+'</td>'
+               + '</tr>';
+      }
+      tbTop.innerHTML = htmlTop;
+    }
   }
 
   // ===== 交易明細 =====
