@@ -2,7 +2,12 @@
 // - 讀取 1031 指標 TXT（首行參數 + 買進/加碼/再加碼/賣出 + 日線 closeD）
 // - 依首行參數設定：FeeRate / MinFee / UnitSharesBase / IsETF / TaxRateOverride
 // - 回測：模擬現金與持股成本
-// - 圖表：每天一點，直觀顯示：本金 / 成本 / 帳面市值（紅點＝浮盈、綠點＝浮虧） / 累積已實現損益
+// - 圖表：每天一點，直觀顯示：
+//     1) 總資產（現金 + 持股市值）
+//     2) 本金
+//     3) 成本
+//     4) 帳面市值（紅點＝浮盈、綠點＝浮虧）
+//     5) 累積已實現損益
 // - KPI：49 指標 + Score（以本金 CFG.capital 為基準）
 
 (function(){
@@ -397,7 +402,7 @@
     return y+'-W'+(week<10?('0'+week):week);
   }
 
-  // ===== 依日線 closeD 建立「本金 / 成本 / 帳面市值 / 已實現損益」序列 =====
+  // ===== 依日線 closeD 建立「本金 / 成本 / 帳面市值 / 已實現損益 / 總資產」序列 =====
   function buildEquitySeries(rows, dailyCloses){
     var days = Object.keys(dailyCloses).sort();
     var labels = [];
@@ -406,6 +411,7 @@
     var realizedArr = [];
     var mvUp = [];
     var mvDown = [];
+    var equityArr = [];  // 新增：每天「總資產 = 現金 + 持股市值」
 
     var capital = CFG.capital;
     var cash = capital;
@@ -458,12 +464,14 @@
 
       var mv   = shares * closeD;
       var uPnL = mv - cumCost;
+      var equity = cash + mv;  // 核心：每天的「現金＋市值」＝總資產
 
       var label = day.slice(0,4)+'/'+day.slice(4,6)+'/'+day.slice(6,8);
       labels.push(label);
       principal.push(capital);
       cost.push(cumCost);
       realizedArr.push(realized);
+      equityArr.push(equity);  // 記錄總資產
 
       if(shares > 0){
         if(uPnL >= 0){
@@ -485,7 +493,8 @@
       cost: cost,
       realized: realizedArr,
       mvUp: mvUp,
-      mvDown: mvDown
+      mvDown: mvDown,
+      equity: equityArr     // 新增：給圖表畫「總資產」用
     };
   }
 
@@ -673,7 +682,7 @@
     };
   }
 
-  // ===== 新版：資金拆解折線圖 =====
+  // ===== 新版：資金拆解折線圖（含「總資產線」） =====
   function renderEquityChart(eqSeries){
     var ctx = $('#chWeekly');
     if(!ctx) return;
@@ -688,6 +697,13 @@
       data:{
         labels:eqSeries.labels,
         datasets:[
+          {
+            type:'line',
+            label:'總資產（現金 + 市值）',
+            data:eqSeries.equity || [],
+            borderWidth:2,
+            tension:0
+          },
           {
             type:'line',
             label:'本金 (NT$)',
@@ -721,8 +737,7 @@
             label:'累積已實現損益 (NT$)',
             data:eqSeries.realized,
             borderWidth:1,
-            tension:0,
-            yAxisID:'y'
+            tension:0
           }
         ]
       },
@@ -897,10 +912,11 @@
     var score = sumW>0 ? (sumS/sumW*100) : 0;
     setText('#scoreLine','Score：'+score.toFixed(1)+' / 100');
 
-    // 排序（權重高 & band 高優先）
+    // 排序：先 band（Improve=2 最上面），再 weight（重要度）
     rows.sort(function(a,b){
-      if(b.weight!==a.weight) return b.weight-a.weight;
-      return b.band-a.band;
+      if(b.band !== a.band) return b.band - a.band;       // band: 2 > 1 > 0
+      if(b.weight !== a.weight) return b.weight - a.weight;
+      return 0;
     });
 
     // 下方完整 KPI 表
