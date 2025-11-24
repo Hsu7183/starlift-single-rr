@@ -681,7 +681,7 @@
     };
   }
 
-  // ===== 資金拆解折線圖（本金 / 成本 / 已實現 = 直條疊加 + 其餘線圖） =====
+  // ===== 資金結構圖（全部用線＋點） =====
   function renderEquityChart(eqSeries){
     var ctx = $('#chWeekly');
     if(!ctx) return;
@@ -696,7 +696,6 @@
       data:{
         labels:eqSeries.labels,
         datasets:[
-          // 總資產線
           {
             type:'line',
             label:'總資產（現金 + 市值）',
@@ -704,29 +703,27 @@
             borderWidth:2,
             tension:0
           },
-          // 本金 / 成本 / 已實現損益，用同一個 stack 做直條疊加
           {
-            type:'bar',
-            label:'本金餘額 (NT$)',
+            type:'line',
+            label:'現金（本金餘額）',
             data:eqSeries.principal,
-            stack:'funds',
-            borderWidth:1
+            borderWidth:1,
+            tension:0
           },
           {
-            type:'bar',
+            type:'line',
             label:'已投入成本 (NT$)',
             data:eqSeries.cost,
-            stack:'funds',
-            borderWidth:1
+            borderWidth:1,
+            tension:0
           },
           {
-            type:'bar',
+            type:'line',
             label:'累積已實現損益 (NT$)',
             data:eqSeries.realized,
-            stack:'funds',
-            borderWidth:1
+            borderWidth:1,
+            tension:0
           },
-          // 帳面市值（浮盈/浮虧）點圖
           {
             type:'line',
             label:'帳面市值（浮盈）',
@@ -759,11 +756,9 @@
         },
         scales:{
           x:{
-            stacked:true,
             ticks:{ autoSkip:false, maxRotation:0, minRotation:0, font:{size:10} }
           },
           y:{
-            stacked:true,
             title:{display:true,text:'金額 (NT$)'},
             ticks:{ callback:function(v){ return fmtInt(v); } }
           }
@@ -772,7 +767,7 @@
     });
   }
 
-  // ===== KPI + Score（主表依重要度排序，上方列出 Improve） =====
+  // ===== KPI + Score（主表依重要度排序，上方 Improve 小表） =====
   function bandTxt(score){
     return score===0 ? 'Strong（強）'
          : score===1 ? 'Adequate（可接受）'
