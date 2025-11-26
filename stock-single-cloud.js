@@ -5,8 +5,8 @@
 // - 圖表：每天一點，直觀顯示：
 //     1) 總資產（現金 + 持股市值）> / = / < 本金（三色線）
 //     2) 直條：累積已實現損益（紅）＋現金本金（黑）＋已投入成本（黃）
-//     3) 帳面市值：紅點＝浮盈、綠點＝浮虧，以成本上緣為 baseline
-//     4) tooltip 顯示：浮盈/浮虧金額＋百分比＋投入成本
+//     3) 帳面市值紅/綠點：浮盈/虧以成本上緣為 baseline
+//     4) tooltip：浮盈/虧金額 + 百分比 + 總資產
 // - KPI：49 指標 + Score（以本金 CFG.capital 為基準）
 
 (function(){
@@ -401,11 +401,9 @@
   // ===== 依日線 closeD 建立「本金 / 成本 / 帳面市值 / 已實現損益 / 總資產」序列 =====
   // 直條堆疊（由下而上）：
   //   1) realizedArr（紅） = 累積已實現損益
-  //   2) principal（黑） = 現金本金 = cash - realized
-  //   3) cost（黃） = 未平倉成本
-  // 紅綠點 tooltip 使用：
-  //   floatAbs = uPnL（浮盈/虧金額）
-  //   floatPct = uPnL / cumCost（浮盈/虧比例）
+  //   2) principal（黑）  = 現金本金 = cash - realized
+  //   3) cost（黃）       = 未平倉成本
+  // 紅綠點：以「紅+黑+黃」頂部為 baseline 再加浮盈/虧
   function buildEquitySeries(rows, dailyCloses){
     var days = Object.keys(dailyCloses).sort();
     var labels = [];
@@ -478,8 +476,7 @@
       realizedArr.push(realized);
       equityArr.push(equity);
 
-      // 累積直條頂端 = realized + (cash - realized) + cumCost = cash + cumCost
-      var stackTop = principalBase + realized + cumCost;
+      var stackTop = principalBase + realized + cumCost; // 累積直條頂端
 
       if(shares > 0 && cumCost > 0){
         var pointY = stackTop + uPnL;
@@ -631,12 +628,19 @@
     var payoff=avgLoss>0? avgWin/avgLoss : Infinity;
     var expectancy=nTrades? (grossWin+grossLoss)/nTrades : 0;
 
-    var weeklyVals=Array.from(bt.weeks.values());
+    var weeklyVals=Array.from(bt.trades.reduce(function(map,t){
+      var day = t.ts.slice(0,8);
+      var wk  = weekKey(day);
+      var prev = map.get(wk) || 0;
+      if(t.kind==='SELL' && t.pnlFull!=null) prev += t.pnlFull;
+      map.set(wk, prev);
+      return map;
+    }, new Map()).values());
     var volWeekly=statsBasic(weeklyVals).std;
-    var bestWeek=weeklyVals.length? Math.max.apply(null,weeklyVals):0;
-    var worstWeek=weeklyVals.length? Math.min.apply(null,weeklyVals):0;
+    var bestWeek = weeklyVals.length ? Math.max.apply(null,weeklyVals) : 0;
+    var worstWeek= weeklyVals.length ? Math.min.apply(null,weeklyVals) : 0;
 
-    var TU=timeUnderwater(eq), ST=streaks(tradePnl);
+    var TU=timeUnderwater(S.eq), ST=streaks(tradePnl);
 
     var grossBuy=bt.trades.filter(function(t){return t.kind==='BUY';}).reduce(function(a,b){return a+b.price*b.shares;},0);
     var grossSell=bt.trades.filter(function(t){return t.kind==='SELL';}).reduce(function(a,b){return a+b.price*b.shares;},0);
@@ -675,7 +679,7 @@
       maeWorst  = minMae;
     }
 
-    var recDays = recoveryDays(eq);
+    var recDays = recoveryDays(S.eq);
 
     return {
       total:total,totalReturn:totalReturn,annRet:annRet,bestWeek:bestWeek,worstWeek:worstWeek,avgTrade:avgTrade,medTrade:medTrade,payoff:payoff,
@@ -788,7 +792,7 @@
             borderWidth:0,
             stack:'stack0'
           },
-          // 帳面市值紅綠點（以黃色上沿為 baseline）
+          // 帳面市值紅綠點
           {
             type:'line',
             label:'帳面市值（浮盈）',
@@ -826,23 +830,23 @@
                 var label = ctx.dataset.label || '';
                 var idx   = ctx.dataIndex;
 
-                // 對帳面市值紅/綠點，用浮盈/虧 + %
+                // 帳面市值點：顯示浮盈/虧 + % + 總資產
                 if(label.indexOf('帳面市值') !== -1){
                   var fa  = eqSeries.floatAbs[idx];
                   var fp  = eqSeries.floatPct[idx];
-                  var cst = eqSeries.cost[idx];
+                  var eq  = eqSeries.equity[idx];
 
-                  if(fa == null || !isFinite(fa) || !cst || cst <= 0){
+                  if(fa == null || !isFinite(fa) || !isFinite(fp) || !isFinite(eq)){
                     return label + '：—';
                   }
 
                   var dir    = fa >= 0 ? '浮盈' : '浮虧';
                   var absVal = Math.abs(fa);
                   var pctStr = (Math.abs(fp)*100).toFixed(2) + '%';
-                  return dir + '：' + fmtInt(absVal) + ' 元 (' + pctStr + ')，投入成本：' + fmtInt(cst) + ' 元';
+
+                  return dir + '：' + fmtInt(absVal) + ' 元 (' + pctStr + ')，總資產：' + fmtInt(eq) + ' 元';
                 }
 
-                // 其他資料集維持原本顯示方式
                 var v = ctx.parsed.y;
                 return label + '：' + fmtInt(v) + ' 元';
               }
