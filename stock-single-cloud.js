@@ -4,9 +4,9 @@
 // - 回測：模擬現金與持股成本
 // - 圖表：每天一點，直觀顯示：
 //     1) 總資產（現金 + 持股市值）
-//     2) 本金（剩餘現金）
-//     3) 成本
-//     4) 帳面市值（浮盈紅點、浮虧綠點，基準＝已投入本金上沿）
+//     2) 現金（本金部分）
+//     3) 已投入成本
+//     4) 帳面市值浮盈/虧點（以已投入成本上沿為 baseline）
 //     5) 累積已實現損益
 // - KPI：49 指標 + Score（以本金 CFG.capital 為基準）
 
@@ -39,7 +39,7 @@
   }
   refreshChips();
 
-  // ===== Supabase（保留雲端選檔功能） =====
+  // ===== Supabase（雲端選檔） =====
   var SUPABASE_URL  = "https://byhbmmnacezzgkwfkozs.supabase.co";
   var SUPABASE_ANON = "sb_publishable_xVe8fGbqQ0XGwi4DsmjPMg_Y2RBOD3t";
   var BUCKET        = "reports";
@@ -224,7 +224,7 @@
     box.innerHTML = params.join(' ｜ ');
   }
 
-  // ===== 解析交易行（ignore 日線 closeD） =====
+  // ===== 解析交易行（忽略日線 closeD 行） =====
   function toCanon(lines){
     var out = [];
     for(var i=0;i<lines.length;i++){
@@ -400,10 +400,15 @@
   }
 
   // ===== 依日線 closeD 建立「本金 / 成本 / 帳面市值 / 已實現損益 / 總資產」序列 =====
+  // 直條堆疊（由下而上）：
+  //   1) realizedArr（紅） = 累積已實現損益
+  //   2) principal（黑） = 現金的本金部分 = cash - realized
+  //   3) cost（黃） = 未平倉成本
+  // 紅綠點：以「紅+黑+黃」的頂部為 baseline，再加浮盈/虧 uPnL
   function buildEquitySeries(rows, dailyCloses){
     var days = Object.keys(dailyCloses).sort();
     var labels = [];
-    var principal = [];
+    var principal = [];   // 現金本金（cash - realized）
     var cost = [];
     var realizedArr = [];
     var mvUp = [];
@@ -457,27 +462,32 @@
       var closeD = +dailyCloses[day];
       if(!isFinite(closeD)) continue;
 
-      var mv   = shares * closeD;           // 持股市值
-      var uPnL = mv - cumCost;              // 浮盈／虧（相對成本）
-      var equity = cash + mv;               // 總資產
+      var mv     = shares * closeD;      // 持股市值
+      var uPnL   = mv - cumCost;         // 浮盈／虧（相對成本）
+      var equity = cash + mv;            // 總資產
+
+      var principalBase = cash - realized;   // 現金扣掉已實現損益 → 純本金現金
 
       var label = day.slice(0,4)+'/'+day.slice(4,6)+'/'+day.slice(6,8);
       labels.push(label);
-      principal.push(cash);
+      principal.push(principalBase);
       cost.push(cumCost);
       realizedArr.push(realized);
       equityArr.push(equity);
 
-      // 疊高後黃色條頂端 = realized + principal + cost
-      var stackTop = realized + cash + cumCost;
+      // 累積直條頂端 = 紅(實現損益) + 黑(本金現金) + 黃(成本)
+      //               = realized + (cash - realized) + cumCost
+      //               = cash + cumCost
+      var stackTop = principalBase + realized + cumCost;
+
       if(shares > 0 && cumCost > 0){
-        var pointY = stackTop + uPnL;       // 以黃色上沿為 baseline
+        var pointY = stackTop + uPnL;   // 以黃色上沿為 baseline 再加浮盈/虧
         if(uPnL >= 0){
-          mvUp.push(pointY);
+          mvUp.push(pointY);            // 浮盈紅點
           mvDown.push(null);
         }else{
           mvUp.push(null);
-          mvDown.push(pointY);
+          mvDown.push(pointY);          // 浮虧綠點
         }
       }else{
         mvUp.push(null);
@@ -680,7 +690,7 @@
     };
   }
 
-  // ===== 資金結構圖：總資產三色線 + 損益/現金/成本直條 + 帳面市值紅綠點 =====
+  // ===== 資金結構圖：總資產三色線 + 紅/黑/黃直條 + 帳面市值紅綠點 =====
   function renderEquityChart(eqSeries){
     var ctx = $('#chWeekly');
     if(!ctx) return;
@@ -743,7 +753,7 @@
             borderColor:'green',
             spanGaps:true
           },
-          // 直條：底層紅＝累積已實現損益，中間黑＝現金，上層黃＝已投入成本
+          // 累積已實現損益（紅） → 底層
           {
             type:'bar',
             label:'累積已實現損益 (NT$)',
@@ -752,6 +762,7 @@
             borderWidth:0,
             stack:'stack0'
           },
+          // 現金本金（黑） = cash - realized
           {
             type:'bar',
             label:'現金（本金餘額）',
@@ -760,6 +771,7 @@
             borderWidth:0,
             stack:'stack0'
           },
+          // 已投入成本（黃）
           {
             type:'bar',
             label:'已投入成本 (NT$)',
@@ -768,7 +780,7 @@
             borderWidth:0,
             stack:'stack0'
           },
-          // 帳面市值紅綠點（以黃色上沿為 baseline 之後位移）
+          // 帳面市值紅綠點（以黃色上沿為 baseline）
           {
             type:'line',
             label:'帳面市值（浮盈）',
