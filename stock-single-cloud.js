@@ -6,7 +6,7 @@
 //     1) 總資產（現金 + 持股市值）
 //     2) 本金（剩餘現金）
 //     3) 成本
-//     4) 帳面市值（紅點＝浮盈、綠點＝浮虧）
+//     4) 帳面市值（紅線＝浮盈、綠線＝浮虧）
 //     5) 累積已實現損益
 // - KPI：49 指標 + Score（以本金 CFG.capital 為基準）
 
@@ -53,7 +53,7 @@
 
   // ===== UI 綁定 =====
   var fileInput=$('#file'), btnClip=$('#btn-clip'), prefix=$('#cloudPrefix');
-  var btnList=$('#btnCloudList'), pick=$('#cloudSelect'), btnPrev=$('#cloudPreview'), btnImp=$('#btnCloudImport');
+  var btnList=$('#btnCloudList'), pick=$('#cloudSelect'), btnPrev=$('#btnCloudPreview'), btnImp=$('#btnCloudImport');
   var meta=$('#cloudMeta'), prev=$('#cloudPreview');
 
   if(btnClip){
@@ -681,7 +681,7 @@
     };
   }
 
-  // ===== 資金結構圖（全部用線＋點） =====
+  // ===== 資金結構圖：總資產分色線 + 現金/成本/損益直條 + 帳面市值紅/綠線 =====
   function renderEquityChart(eqSeries){
     var ctx = $('#chWeekly');
     if(!ctx) return;
@@ -692,51 +692,118 @@
       return;
     }
 
+    // 以初始資金為分界（預設 1,000,000，可被 URL ?cap= 覆寫）
+    var base = CFG.capital || 1000000;
+
+    // 總資產依 > / = / < 本金 分三條線
+    var eqAbove = [];
+    var eqEqual = [];
+    var eqBelow = [];
+    for (var i = 0; i < eqSeries.equity.length; i++) {
+      var v = eqSeries.equity[i];
+      if (v == null || !isFinite(v)) {
+        eqAbove.push(null);
+        eqEqual.push(null);
+        eqBelow.push(null);
+        continue;
+      }
+      if (v > base + 1e-6) {
+        eqAbove.push(v);
+        eqEqual.push(null);
+        eqBelow.push(null);
+      } else if (Math.abs(v - base) <= 1e-6) {
+        eqAbove.push(null);
+        eqEqual.push(v);
+        eqBelow.push(null);
+      } else {
+        eqAbove.push(null);
+        eqEqual.push(null);
+        eqBelow.push(v);
+      }
+    }
+
     chTrades = new Chart(ctx,{
       data:{
         labels:eqSeries.labels,
         datasets:[
+          // 總資產：紅 / 黑 / 綠 線（無點）
           {
             type:'line',
-            label:'總資產（現金 + 市值）',
-            data:eqSeries.equity || [],
+            label:'總資產（> 本金）',
+            data:eqAbove,
             borderWidth:2,
-            tension:0
+            tension:0,
+            pointRadius:0,
+            borderColor:'red',
+            spanGaps:true
           },
           {
             type:'line',
+            label:'總資產（= 本金）',
+            data:eqEqual,
+            borderWidth:2,
+            tension:0,
+            pointRadius:0,
+            borderColor:'black',
+            spanGaps:true
+          },
+          {
+            type:'line',
+            label:'總資產（< 本金）',
+            data:eqBelow,
+            borderWidth:2,
+            tension:0,
+            pointRadius:0,
+            borderColor:'green',
+            spanGaps:true
+          },
+
+          // 現金 / 已投入成本 / 累積已實現損益：直條圖（同一 stack 疊加）
+          {
+            type:'bar',
             label:'現金（本金餘額）',
             data:eqSeries.principal,
-            borderWidth:1,
-            tension:0
+            backgroundColor:'black',
+            borderWidth:0,
+            stack:'stack0'
           },
           {
-            type:'line',
+            type:'bar',
             label:'已投入成本 (NT$)',
             data:eqSeries.cost,
-            borderWidth:1,
-            tension:0
+            backgroundColor:'rgba(250, 204, 21, 0.8)',
+            borderWidth:0,
+            stack:'stack0'
           },
           {
-            type:'line',
+            type:'bar',
             label:'累積已實現損益 (NT$)',
             data:eqSeries.realized,
-            borderWidth:1,
-            tension:0
+            backgroundColor:'rgba(239, 68, 68, 0.8)',
+            borderWidth:0,
+            stack:'stack0'
           },
+
+          // 帳面市值：線（賺錢紅線／虧錢綠線，起點就在成本附近）
           {
             type:'line',
             label:'帳面市值（浮盈）',
             data:eqSeries.mvUp,
-            showLine:false,
-            pointRadius:4
+            borderWidth:1,
+            tension:0,
+            pointRadius:3,
+            borderColor:'red',
+            spanGaps:true
           },
           {
             type:'line',
             label:'帳面市值（浮虧）',
             data:eqSeries.mvDown,
-            showLine:false,
-            pointRadius:4
+            borderWidth:1,
+            tension:0,
+            pointRadius:3,
+            borderColor:'green',
+            spanGaps:true
           }
         ]
       },
@@ -767,7 +834,7 @@
     });
   }
 
-  // ===== KPI + Score（主表依重要度排序，上方 Improve 小表） =====
+  // ===== KPI + Score（主表依重要性排序，上方 Improve 小表） =====
   function bandTxt(score){
     return score===0 ? 'Strong（強）'
          : score===1 ? 'Adequate（可接受）'
