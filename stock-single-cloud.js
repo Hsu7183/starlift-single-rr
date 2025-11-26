@@ -6,7 +6,7 @@
 //     1) 總資產（現金 + 持股市值）
 //     2) 本金（剩餘現金）
 //     3) 成本
-//     4) 帳面市值（紅線＝浮盈、綠線＝浮虧）
+//     4) 帳面市值（浮盈紅點、浮虧綠點）
 //     5) 累積已實現損益
 // - KPI：49 指標 + Score（以本金 CFG.capital 為基準）
 
@@ -53,7 +53,7 @@
 
   // ===== UI 綁定 =====
   var fileInput=$('#file'), btnClip=$('#btn-clip'), prefix=$('#cloudPrefix');
-  var btnList=$('#btnCloudList'), pick=$('#cloudSelect'), btnPrev=$('#btnCloudPreview'), btnImp=$('#btnCloudImport');
+  var btnList=$('#btnCloudList'), pick=$('#cloudSelect'), btnPrev=$('#cloudPreview'), btnImp=$('#btnCloudImport');
   var meta=$('#cloudMeta'), prev=$('#cloudPreview');
 
   if(btnClip){
@@ -231,7 +231,7 @@
       var l = lines[i];
       if(!l) continue;
 
-      // canonical 形式（不太會用到，保留）
+      // canonical 形式
       var m = l.match(CANON_RE);
       if(m){
         out.push({
@@ -312,7 +312,6 @@
       var act = (parts[3] || '').trim();
       var desc = (parts[4] || '').trim();
 
-      // 動作欄只要包含「日線」，或說明欄有 closeD，就當作日線
       var isDaily = false;
       if(act && act.indexOf('日線') !== -1) isDaily = true;
       if(!isDaily && /closeD/i.test(desc)) isDaily = true;
@@ -411,9 +410,9 @@
     var realizedArr = [];
     var mvUp = [];
     var mvDown = [];
-    var equityArr = [];  // 每天「總資產 = 現金 + 持股市值」
+    var equityArr = [];
 
-    var cash = CFG.capital;   // 剩餘現金（本金餘額）
+    var cash = CFG.capital;   // 剩餘現金
     var shares = 0;
     var cumCost = 0;
     var realized = 0;
@@ -463,11 +462,11 @@
 
       var mv   = shares * closeD;
       var uPnL = mv - cumCost;
-      var equity = cash + mv;  // 每日總資產
+      var equity = cash + mv;
 
       var label = day.slice(0,4)+'/'+day.slice(4,6)+'/'+day.slice(6,8);
       labels.push(label);
-      principal.push(cash);      // 本金＝剩餘現金
+      principal.push(cash);
       cost.push(cumCost);
       realizedArr.push(realized);
       equityArr.push(equity);
@@ -681,7 +680,7 @@
     };
   }
 
-  // ===== 資金結構圖：總資產分色線 + 現金/成本/損益直條 + 帳面市值紅/綠線 =====
+  // ===== 資金結構圖：總資產三色線 + 損益/現金/成本直條 + 帳面市值紅綠點 =====
   function renderEquityChart(eqSeries){
     var ctx = $('#chWeekly');
     if(!ctx) return;
@@ -692,33 +691,22 @@
       return;
     }
 
-    // 以初始資金為分界（預設 1,000,000，可被 URL ?cap= 覆寫）
+    // 用初始資金為分界
     var base = CFG.capital || 1000000;
 
-    // 總資產依 > / = / < 本金 分三條線
-    var eqAbove = [];
-    var eqEqual = [];
-    var eqBelow = [];
+    var eqAbove = [], eqEqual = [], eqBelow = [];
     for (var i = 0; i < eqSeries.equity.length; i++) {
       var v = eqSeries.equity[i];
       if (v == null || !isFinite(v)) {
-        eqAbove.push(null);
-        eqEqual.push(null);
-        eqBelow.push(null);
+        eqAbove.push(null); eqEqual.push(null); eqBelow.push(null);
         continue;
       }
       if (v > base + 1e-6) {
-        eqAbove.push(v);
-        eqEqual.push(null);
-        eqBelow.push(null);
+        eqAbove.push(v); eqEqual.push(null); eqBelow.push(null);
       } else if (Math.abs(v - base) <= 1e-6) {
-        eqAbove.push(null);
-        eqEqual.push(v);
-        eqBelow.push(null);
+        eqAbove.push(null); eqEqual.push(v); eqBelow.push(null);
       } else {
-        eqAbove.push(null);
-        eqEqual.push(null);
-        eqBelow.push(v);
+        eqAbove.push(null); eqEqual.push(null); eqBelow.push(v);
       }
     }
 
@@ -758,7 +746,15 @@
             spanGaps:true
           },
 
-          // 現金 / 已投入成本 / 累積已實現損益：直條圖（同一 stack 疊加）
+          // 直條圖堆疊順序（自下而上）：累積已實現損益 → 現金 → 已投入成本
+          {
+            type:'bar',
+            label:'累積已實現損益 (NT$)',
+            data:eqSeries.realized,
+            backgroundColor:'rgba(239, 68, 68, 0.8)', // 紅
+            borderWidth:0,
+            stack:'stack0'
+          },
           {
             type:'bar',
             label:'現金（本金餘額）',
@@ -771,38 +767,34 @@
             type:'bar',
             label:'已投入成本 (NT$)',
             data:eqSeries.cost,
-            backgroundColor:'rgba(250, 204, 21, 0.8)',
-            borderWidth:0,
-            stack:'stack0'
-          },
-          {
-            type:'bar',
-            label:'累積已實現損益 (NT$)',
-            data:eqSeries.realized,
-            backgroundColor:'rgba(239, 68, 68, 0.8)',
+            backgroundColor:'rgba(250, 204, 21, 0.8)', // 黃
             borderWidth:0,
             stack:'stack0'
           },
 
-          // 帳面市值：線（賺錢紅線／虧錢綠線，起點就在成本附近）
+          // 帳面市值：只顯示點，不畫線
           {
             type:'line',
             label:'帳面市值（浮盈）',
             data:eqSeries.mvUp,
-            borderWidth:1,
+            borderWidth:0,
             tension:0,
             pointRadius:3,
-            borderColor:'red',
+            pointBackgroundColor:'red',
+            pointBorderColor:'red',
+            showLine:false,
             spanGaps:true
           },
           {
             type:'line',
             label:'帳面市值（浮虧）',
             data:eqSeries.mvDown,
-            borderWidth:1,
+            borderWidth:0,
             tension:0,
             pointRadius:3,
-            borderColor:'green',
+            pointBackgroundColor:'green',
+            pointBorderColor:'green',
+            showLine:false,
             spanGaps:true
           }
         ]
@@ -978,13 +970,12 @@
     var score = sumW>0 ? (sumS/sumW*100) : 0;
     setText('#scoreLine','Score：'+score.toFixed(1)+' / 100');
 
-    // === 主表排序：依重要度（weight）由高到低，band 只當次要順序 ===
+    // 主表排序
     rows.sort(function(a,b){
-      if (b.weight !== a.weight) return b.weight - a.weight; // 重要度優先
-      return a.band - b.band;                                // Strong(0) → Adequate(1) → Improve(2)
+      if (b.weight !== a.weight) return b.weight - a.weight;
+      return a.band - b.band;
     });
 
-    // 下方完整 KPI 表
     var table = $('#kpiAll');
     if(table){
       var tb = table.querySelector('tbody');
@@ -1004,11 +995,10 @@
       tb.innerHTML=html;
     }
 
-    // === 上方「需精進 KPI」小表：動態建立在 kpiAll 之上，並複製 Improve ===
+    // 上方「需精進 KPI」小表
     var mainTable = $('#kpiAll');
     var topTable = $('#kpiImprove') || $('#kpiTop');
     if(!topTable && mainTable){
-      // 動態建立一張小卡片在主表前面
       var wrap = mainTable.parentNode;
       var card = document.createElement('div');
       card.className = 'card mb-3';
@@ -1029,7 +1019,6 @@
     if(topTable){
       var tbTop = topTable.querySelector('tbody');
       if(!tbTop){ tbTop=document.createElement('tbody'); topTable.appendChild(tbTop); }
-      // 只抓 band=2 的，依重要度排序
       var improve = rows.filter(function(r){ return r.band===2; })
                         .sort(function(a,b){ return b.weight-a.weight; });
       var htmlTop='';
