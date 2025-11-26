@@ -6,7 +6,7 @@
 //     1) 總資產（現金 + 持股市值）
 //     2) 本金（剩餘現金）
 //     3) 成本
-//     4) 帳面市值（浮盈紅點、浮虧綠點）
+//     4) 帳面市值（浮盈紅點、浮虧綠點，基準＝已投入本金上沿）
 //     5) 累積已實現損益
 // - KPI：49 指標 + Score（以本金 CFG.capital 為基準）
 
@@ -231,7 +231,6 @@
       var l = lines[i];
       if(!l) continue;
 
-      // canonical 形式
       var m = l.match(CANON_RE);
       if(m){
         out.push({
@@ -254,7 +253,6 @@
       if(!isFinite(px)) continue;
 
       var actRaw = (parts[3] || '').trim();
-      // 日線 closeD 行在 extractDailyCloses 處理，這裡略過
       if(actRaw.indexOf('日線') !== -1) continue;
 
       var act = mapAct(actRaw);
@@ -281,7 +279,7 @@
     return out;
   }
 
-  // 只取 MAE% 列表（每遇到一個 MAE% 視為下一筆 SELL 的 MAE）
+  // 只取 MAE% 列表
   function extractMaeList(lines){
     var arr = [];
     for(var i=0;i<lines.length;i++){
@@ -320,7 +318,7 @@
       var px = parseFloat(parts[2]);
       if(!isFinite(px)) continue;
 
-      map[dateRaw] = px; // 同一天多行就以最後一行為準
+      map[dateRaw] = px;
     }
     return map;
   }
@@ -412,7 +410,7 @@
     var mvDown = [];
     var equityArr = [];
 
-    var cash = CFG.capital;   // 剩餘現金
+    var cash = CFG.capital;
     var shares = 0;
     var cumCost = 0;
     var realized = 0;
@@ -421,7 +419,6 @@
     for(var di=0; di<days.length; di++){
       var day = days[di];
 
-      // 先處理這一天（以及之前尚未處理）的所有交易
       while(iTrade < rows.length && rows[iTrade].ts.slice(0,8) <= day){
         var r = rows[iTrade];
 
@@ -460,9 +457,9 @@
       var closeD = +dailyCloses[day];
       if(!isFinite(closeD)) continue;
 
-      var mv   = shares * closeD;
-      var uPnL = mv - cumCost;
-      var equity = cash + mv;
+      var mv   = shares * closeD;           // 持股市值
+      var uPnL = mv - cumCost;              // 浮盈／虧（相對成本）
+      var equity = cash + mv;               // 總資產
 
       var label = day.slice(0,4)+'/'+day.slice(4,6)+'/'+day.slice(6,8);
       labels.push(label);
@@ -471,13 +468,16 @@
       realizedArr.push(realized);
       equityArr.push(equity);
 
-      if(shares > 0){
+      // 疊高後黃色條頂端 = realized + principal + cost
+      var stackTop = realized + cash + cumCost;
+      if(shares > 0 && cumCost > 0){
+        var pointY = stackTop + uPnL;       // 以黃色上沿為 baseline
         if(uPnL >= 0){
-          mvUp.push(mv);
+          mvUp.push(pointY);
           mvDown.push(null);
         }else{
           mvUp.push(null);
-          mvDown.push(mv);
+          mvDown.push(pointY);
         }
       }else{
         mvUp.push(null);
@@ -691,7 +691,6 @@
       return;
     }
 
-    // 用初始資金為分界
     var base = CFG.capital || 1000000;
 
     var eqAbove = [], eqEqual = [], eqBelow = [];
@@ -714,7 +713,6 @@
       data:{
         labels:eqSeries.labels,
         datasets:[
-          // 總資產：紅 / 黑 / 綠 線（無點）
           {
             type:'line',
             label:'總資產（> 本金）',
@@ -745,13 +743,12 @@
             borderColor:'green',
             spanGaps:true
           },
-
-          // 直條圖堆疊順序（自下而上）：累積已實現損益 → 現金 → 已投入成本
+          // 直條：底層紅＝累積已實現損益，中間黑＝現金，上層黃＝已投入成本
           {
             type:'bar',
             label:'累積已實現損益 (NT$)',
             data:eqSeries.realized,
-            backgroundColor:'rgba(239, 68, 68, 0.8)', // 紅
+            backgroundColor:'rgba(239, 68, 68, 0.8)',
             borderWidth:0,
             stack:'stack0'
           },
@@ -767,12 +764,11 @@
             type:'bar',
             label:'已投入成本 (NT$)',
             data:eqSeries.cost,
-            backgroundColor:'rgba(250, 204, 21, 0.8)', // 黃
+            backgroundColor:'rgba(250, 204, 21, 0.8)',
             borderWidth:0,
             stack:'stack0'
           },
-
-          // 帳面市值：只顯示點，不畫線
+          // 帳面市值紅綠點（以黃色上沿為 baseline 之後位移）
           {
             type:'line',
             label:'帳面市值（浮盈）',
@@ -958,7 +954,6 @@
     pushRow('—',{disp:'—',raw:0},'na','—');
     pushRow('—',{disp:'—',raw:0},'na','—');
 
-    // Score
     var sumW=0,sumS=0;
     for(var i=0;i<rows.length;i++){
       var w=rows[i].weight;
@@ -970,7 +965,6 @@
     var score = sumW>0 ? (sumS/sumW*100) : 0;
     setText('#scoreLine','Score：'+score.toFixed(1)+' / 100');
 
-    // 主表排序
     rows.sort(function(a,b){
       if (b.weight !== a.weight) return b.weight - a.weight;
       return a.band - b.band;
@@ -995,7 +989,6 @@
       tb.innerHTML=html;
     }
 
-    // 上方「需精進 KPI」小表
     var mainTable = $('#kpiAll');
     var topTable = $('#kpiImprove') || $('#kpiTop');
     if(!topTable && mainTable){
@@ -1113,7 +1106,6 @@
     var maeList     = extractMaeList(normLines);
     var dailyCloses = extractDailyCloses(normLines);
 
-    // TXT 有 lotShares 時，以之覆蓋 CFG.unit
     var autoUnit = null, i;
     for(i=0;i<canon.length;i++){
       if(canon[i].lotShares && canon[i].lotShares>0){
