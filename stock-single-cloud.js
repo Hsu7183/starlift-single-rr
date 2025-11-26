@@ -3,11 +3,10 @@
 // - 依首行參數設定：FeeRate / MinFee / UnitSharesBase / IsETF / TaxRateOverride
 // - 回測：模擬現金與持股成本
 // - 圖表：每天一點，直觀顯示：
-//     1) 總資產（現金 + 持股市值）
-//     2) 現金（本金部分）
-//     3) 已投入成本
-//     4) 帳面市值浮盈/虧點（以已投入成本上沿為 baseline）
-//     5) 累積已實現損益
+//     1) 總資產（現金 + 持股市值）> / = / < 本金（三色線）
+//     2) 直條：累積已實現損益（紅）＋現金本金（黑）＋已投入成本（黃）
+//     3) 帳面市值：紅點＝浮盈、綠點＝浮虧，以成本上緣為 baseline
+//     4) tooltip 顯示：浮盈/浮虧金額＋百分比＋投入成本
 // - KPI：49 指標 + Score（以本金 CFG.capital 為基準）
 
 (function(){
@@ -402,18 +401,22 @@
   // ===== 依日線 closeD 建立「本金 / 成本 / 帳面市值 / 已實現損益 / 總資產」序列 =====
   // 直條堆疊（由下而上）：
   //   1) realizedArr（紅） = 累積已實現損益
-  //   2) principal（黑） = 現金的本金部分 = cash - realized
+  //   2) principal（黑） = 現金本金 = cash - realized
   //   3) cost（黃） = 未平倉成本
-  // 紅綠點：以「紅+黑+黃」的頂部為 baseline，再加浮盈/虧 uPnL
+  // 紅綠點 tooltip 使用：
+  //   floatAbs = uPnL（浮盈/虧金額）
+  //   floatPct = uPnL / cumCost（浮盈/虧比例）
   function buildEquitySeries(rows, dailyCloses){
     var days = Object.keys(dailyCloses).sort();
     var labels = [];
-    var principal = [];   // 現金本金（cash - realized）
+    var principal = [];
     var cost = [];
     var realizedArr = [];
     var mvUp = [];
     var mvDown = [];
     var equityArr = [];
+    var floatAbs = [];
+    var floatPct = [];
 
     var cash = CFG.capital;
     var shares = 0;
@@ -462,11 +465,11 @@
       var closeD = +dailyCloses[day];
       if(!isFinite(closeD)) continue;
 
-      var mv     = shares * closeD;      // 持股市值
-      var uPnL   = mv - cumCost;         // 浮盈／虧（相對成本）
-      var equity = cash + mv;            // 總資產
+      var mv     = shares * closeD;
+      var uPnL   = mv - cumCost;
+      var equity = cash + mv;
 
-      var principalBase = cash - realized;   // 現金扣掉已實現損益 → 純本金現金
+      var principalBase = cash - realized;   // 現金本金
 
       var label = day.slice(0,4)+'/'+day.slice(4,6)+'/'+day.slice(6,8);
       labels.push(label);
@@ -475,23 +478,26 @@
       realizedArr.push(realized);
       equityArr.push(equity);
 
-      // 累積直條頂端 = 紅(實現損益) + 黑(本金現金) + 黃(成本)
-      //               = realized + (cash - realized) + cumCost
-      //               = cash + cumCost
+      // 累積直條頂端 = realized + (cash - realized) + cumCost = cash + cumCost
       var stackTop = principalBase + realized + cumCost;
 
       if(shares > 0 && cumCost > 0){
-        var pointY = stackTop + uPnL;   // 以黃色上沿為 baseline 再加浮盈/虧
+        var pointY = stackTop + uPnL;
+        floatAbs.push(uPnL);
+        floatPct.push(uPnL / cumCost);
+
         if(uPnL >= 0){
-          mvUp.push(pointY);            // 浮盈紅點
+          mvUp.push(pointY);
           mvDown.push(null);
         }else{
           mvUp.push(null);
-          mvDown.push(pointY);          // 浮虧綠點
+          mvDown.push(pointY);
         }
       }else{
         mvUp.push(null);
         mvDown.push(null);
+        floatAbs.push(null);
+        floatPct.push(null);
       }
     }
 
@@ -502,7 +508,9 @@
       realized: realizedArr,
       mvUp: mvUp,
       mvDown: mvDown,
-      equity: equityArr
+      equity: equityArr,
+      floatAbs: floatAbs,
+      floatPct: floatPct
     };
   }
 
@@ -815,8 +823,28 @@
           tooltip:{
             callbacks:{
               label:function(ctx){
+                var label = ctx.dataset.label || '';
+                var idx   = ctx.dataIndex;
+
+                // 對帳面市值紅/綠點，用浮盈/虧 + %
+                if(label.indexOf('帳面市值') !== -1){
+                  var fa  = eqSeries.floatAbs[idx];
+                  var fp  = eqSeries.floatPct[idx];
+                  var cst = eqSeries.cost[idx];
+
+                  if(fa == null || !isFinite(fa) || !cst || cst <= 0){
+                    return label + '：—';
+                  }
+
+                  var dir    = fa >= 0 ? '浮盈' : '浮虧';
+                  var absVal = Math.abs(fa);
+                  var pctStr = (Math.abs(fp)*100).toFixed(2) + '%';
+                  return dir + '：' + fmtInt(absVal) + ' 元 (' + pctStr + ')，投入成本：' + fmtInt(cst) + ' 元';
+                }
+
+                // 其他資料集維持原本顯示方式
                 var v = ctx.parsed.y;
-                return ctx.dataset.label + '：' + fmtInt(v) + ' 元';
+                return label + '：' + fmtInt(v) + ' 元';
               }
             }
           }
