@@ -1,11 +1,12 @@
 // 0807-single-cloud.js —— 0807 雲端單檔分析（本機 + 雲端 → single.js）
 //
 // 0807 TXT 格式：
-//   line1: BeginTime=84800 EndTime=131000 ForceExitTime=131200 ...
-//   line2+: YYYYMMDDhhmmss 價格 動作
+//   line1: BeginTime=84800 EndTime=131000 ForceExitTime=131200 ...（參數，跳過）
+//   line2+: 20231201093900 17366 新買
 //
 // 本檔負責：
 //   - 從本機選檔 / 剪貼簿 / Supabase 取得 TXT
+//   - 寬鬆解析出「時間 / 價格 / 動作」三欄
 //   - 轉成 canonical：YYYYMMDDhhmmss.000000 價格(6位) 動作
 //   - patch window.SHARED.readAsTextAuto，把 canonical 丟給 single.js 分析
 
@@ -32,37 +33,50 @@
   });
 
   // ===== 0807 TXT → canonical =====
-  const EXTRACT_RE = /^(\d{14})\s+(\d+(?:\.\d+)?)\s*(新買|平賣|新賣|平買|強制平倉)\s*$/;
+  //
+  // 寬鬆版本：只要一行裡有 14 位數字 + 價格數字 + 動作關鍵字，就抓
+  //
+  const EXTRACT_LOOSE_RE =
+    /.*?(\d{14})\D+(\d+(?:\.\d+)?)[^\d新平強]*?(新買|平賣|新賣|平買|強制平倉)/;
 
   function normalizeText(raw){
     let s = raw.replace(/\ufeff/gi,'').replace(/\u200b|\u200c|\u200d/gi,'');
     s = s.replace(/[\x00-\x09\x0B-\x1F\x7F]/g,'');
     s = s.replace(/\r\n?/g,'\n').replace(/\u3000/g,' ');
-    const lines = s.split('\n').map(l=>l.replace(/\s+/g,' ').trim()).filter(Boolean);
+    const lines = s.split('\n').map(l=>l.trim()).filter(Boolean);
     return lines.join('\n');
   }
 
   function canonicalizeFrom0807(raw){
     const norm = normalizeText(raw);
     const out = [];
-    let ok=0, bad=0;
+    let ok = 0, bad = 0;
 
-    for(const line of norm.split('\n')){
-      // 第一行的參數 (BeginTime=...) 會被這條略過
-      if(line.indexOf('BeginTime=')>=0 && line.indexOf('EndTime=')>=0){
+    const lines = norm.split('\n');
+    for(let idx=0; idx<lines.length; idx++){
+      const line = lines[idx];
+
+      // 第一行參數：含 BeginTime 與 EndTime，直接略過
+      if(idx === 0 && line.indexOf('BeginTime=') >= 0 && line.indexOf('EndTime=') >= 0){
         continue;
       }
-      const m = line.match(EXTRACT_RE);
-      if(!m){ bad++; continue; }
 
-      const ts = m[1];
-      const px = Number(m[2]);
-      const px6 = Number.isFinite(px) ? px.toFixed(6) : m[2];
+      const m = line.match(EXTRACT_LOOSE_RE);
+      if(!m){
+        bad++;
+        continue;
+      }
+
+      const ts  = m[1];
+      const pxN = Number(m[2]);
       const act = m[3];
+
+      const px6 = Number.isFinite(pxN) ? pxN.toFixed(6) : m[2];
 
       out.push(`${ts}.000000 ${px6} ${act}`);
       ok++;
     }
+
     return { canon: out.join('\n'), ok, bad };
   }
 
@@ -109,7 +123,7 @@
   }
 
   async function feedToSingle(filename, canonicalText){
-    const input = $('#file');
+    const input = $('#file');   // single.js 用的隱藏 file input
     if(!input){
       setStatus('找不到 #file，single.js 可能尚未載入。', true);
       return;
@@ -123,7 +137,7 @@
     input.dispatchEvent(new Event('change',{ bubbles:true }));
   }
 
-  // ===== 共用：由 raw text 直接跑分析（給本機 / 剪貼簿） =====
+  // ===== 共用：由 raw text 直接跑分析（本機 / 剪貼簿使用） =====
   function runFromRawText(raw, filename, sourceLabel){
     const { canon, ok, bad } = canonicalizeFrom0807(raw);
     if(!ok){
@@ -135,7 +149,7 @@
     feedToSingle(filename || '0807.txt', canon);
   }
 
-  // ===== 本機檔案 =====
+  // ==================== 本機檔案 ====================
   const fileLocal = $('#fileLocal');
   if(fileLocal){
     fileLocal.addEventListener('change', e=>{
@@ -150,7 +164,7 @@
     });
   }
 
-  // ===== 剪貼簿（本機） =====
+  // ==================== 剪貼簿（本機） ====================
   const btnLocalClip = $('#btnLocalClip');
   if(btnLocalClip){
     btnLocalClip.addEventListener('click', async ()=>{
@@ -164,7 +178,7 @@
     });
   }
 
-  // ===== Supabase：列清單 / 預覽 / 匯入 =====
+  // ==================== Supabase：列清單 / 預覽 / 匯入 ====================
   const prefix  = $('#cloudPrefix');
   const btnList = $('#btnCloudList');
   const pick    = $('#cloudSelect');
