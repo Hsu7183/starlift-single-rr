@@ -1,11 +1,11 @@
 // 0807-single-cloud.js
-// - Supabase 自動抓最新 0807 TXT + 基準合併
-// - 也支援本機「選擇檔案」/「剪貼簿貼上」
+// - Supabase 自動抓最新 0807 TXT + 基準檔合併
+// - 支援本機「選擇檔案」/「剪貼簿貼上」
 // - TXT 新格式：
-//   1) 第一行：BeginTime=... EndTime=... ForceExitTime=... FixTP_L=... ... RSI_ShortTh=...
-//   2) 之後每行：YYYYMMDDhhmmss 價格 動作
-// - 本腳本會把新格式轉成 single.js 原來的舊格式：
-//   第一行：84800.000000 131000.000000 131200.000000 250.000000 40.000000 20.000000 2.000000 110.000000 70.000000 7.000000 5.000000 0.250000 0.000000 80.000000 10.000000
+//   第一行：BeginTime=84800 EndTime=131000 ForceExitTime=131200 FixTP_L=250 ...
+//   之後每行：YYYYMMDDhhmmss 價格 動作
+// - 本腳本會轉成 single.js 原本舊格式：
+//   第一行：84800.000000 131000.000000 131200.000000 250.000000 ...
 //   之後每行：20231201093900.000000 17366.000000 新買
 (function () {
   const $ = s => document.querySelector(s);
@@ -16,7 +16,7 @@
   const fileInput= $('#file');
   const btnClip  = $('#btn-clip');
 
-  // Supabase
+  // Supabase 設定
   const SUPABASE_URL = "https://byhbmmnacezzgkwfkozs.supabase.co";
   const SUPABASE_ANON_KEY = "sb_publishable_xVe8fGbqQ0XGwi4DsmjPMg_Y2RBOD3t";
   const BUCKET = "reports";
@@ -133,7 +133,7 @@
     return { paramLine, canonTrades:canon, ok };
   }
 
-  // 身體部分 canonical
+  // 將 body 轉成 canonical 行
   function canonicalize(txt){
     const out=[], lines = txt.split('\n'); let ok=0,bad=0;
     for(const l of lines){
@@ -231,22 +231,29 @@
     input.dispatchEvent(new Event('change', { bubbles:true }));
   }
 
-  // manifest：download（不存在就當 null）
+  // manifest：download（不存在就當 null，不拋錯）
   async function readManifest(){
     try{
       const { data, error } = await sb.storage.from(BUCKET).download(MANIFEST_PATH);
       if (error || !data) return null;
       return JSON.parse(await data.text());
-    }catch{ return null; }
+    }catch{
+      return null;
+    }
   }
+
   async function writeManifest(obj){
-    const blob = new Blob([JSON.stringify(obj,null,2)], { type:'application/json' });
-    const { error } = await sb.storage.from(BUCKET).upload(MANIFEST_PATH, blob, {
-      upsert:true,
-      cacheControl:'0',
-      contentType:'application/json'
-    });
-    if (error) throw new Error(error.message);
+    try{
+      const blob = new Blob([JSON.stringify(obj,null,2)], { type:'application/json' });
+      const { error } = await sb.storage.from(BUCKET).upload(MANIFEST_PATH, blob, {
+        upsert:true,
+        cacheControl:'0',
+        contentType:'application/json'
+      });
+      if (error) throw new Error(error.message);
+    }catch(e){
+      set('寫入基準失敗：' + (e.message||e), true);
+    }
   }
 
   // ===== 本機 TXT：選檔 or 剪貼簿 → 覆蓋分析 =====
@@ -339,12 +346,19 @@
       let mergedCanon = rNew.canonTrades;
       let start8 = '', end8 = '';
       if (base){
-        const baseUrl = base.from==='url' ? base.fullPath : pubUrl(base.fullPath);
-        const rBase   = await fetchSmart(baseUrl);
-        const m       = mergeByBaseline(rBase.canonTrades, rNew.canonTrades);
-        mergedCanon   = m.combined;
-        start8        = m.start8;
-        end8          = m.end8;
+        try{
+          const baseUrl = base.from==='url' ? base.fullPath : pubUrl(base.fullPath);
+          const rBase   = await fetchSmart(baseUrl);
+          const m       = mergeByBaseline(rBase.canonTrades, rNew.canonTrades);
+          mergedCanon   = m.combined;
+          start8        = m.start8;
+          end8          = m.end8;
+        }catch(e){
+          // 基準讀不到就只用最新檔
+          const rows = parseCanon(rNew.canonTrades);
+          start8 = rows.length ? rows[0].ts.slice(0,8) : '';
+          end8   = rows.length ? rows[rows.length-1].ts.slice(0,8) : '';
+        }
       } else {
         const rows = parseCanon(rNew.canonTrades);
         start8 = rows.length ? rows[0].ts.slice(0,8) : '';
@@ -356,20 +370,16 @@
       // 設最新為基準
       btnBase.disabled = false;
       btnBase.onclick = async ()=>{
-        try{
-          const payload = {
-            baseline_path: latest.from==='url' ? latest.fullPath : latest.fullPath,
-            updated_at: new Date().toISOString()
-          };
-          await writeManifest(payload);
-          btnBase.textContent = '已設為基準';
-        }catch(e){
-          set('寫入基準失敗：'+(e.message||e), true);
-        }
+        const payload = {
+          baseline_path: latest.from==='url' ? latest.fullPath : latest.fullPath,
+          updated_at: new Date().toISOString()
+        };
+        await writeManifest(payload);
+        btnBase.textContent = '已設為基準';
       };
 
-      const paramLine = rNew.paramLine || '';  // 用最新檔的參數
-      const decodedText = (paramLine ? paramLine + '\n' : '') + mergedCanon;
+      const paramLine  = rNew.paramLine || '';
+      const decodedText= (paramLine ? paramLine + '\n' : '') + mergedCanon;
 
       set('已從 Supabase 載入（合併後）資料，開始分析…（可用本機檔案覆蓋）');
       await feedToSingle(latest.name, decodedText);
