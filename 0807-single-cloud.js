@@ -1,6 +1,7 @@
-// single-cloud.js —— 0807 雲端單檔分析
+// 0807-single-cloud.js —— 0807 雲端單檔分析
 (function () {
   'use strict';
+  console.log('0807 cloud JS loaded'); // F12 應該看到這行
 
   // ===== 小工具 =====
   const $ = s => document.querySelector(s);
@@ -383,7 +384,7 @@
 
     pick.innerHTML = '';
     data.forEach(it=>{
-      if(it.id === null && !it.metadata) return; // 跳過資料夾
+      if(it.id === null && !it.metadata) return; // 資料夾
       const path   = (fixed || '') + it.name;
       const sizeKB = it.metadata?.size ? (it.metadata.size/1024).toFixed(1) : '-';
       const opt    = document.createElement('option');
