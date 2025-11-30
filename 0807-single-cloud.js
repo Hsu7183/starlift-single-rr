@@ -17,11 +17,9 @@
   let chart = null;
 
   // ===== 解析 0807 TXT =====
-  // 格式：
   // line1: BeginTime=84800 EndTime=131000 ForceExitTime=131200 ...
-  // line2+: YYYYMMDDhhmmss 價格 動作(新買/平賣/新賣/平買/強制平倉)
+  // line2+: YYYYMMDDhhmmss 價格 動作(...)
   function parseTxt(text){
-    // 統一換行、去掉空行
     const lines = text
       .replace(/\r/g,'')
       .split('\n')
@@ -34,21 +32,22 @@
     // --- 第一行：參數（不計算） ---
     const params = {};
     const paramLine = lines[0];
-    paramLine.split(/\s+/).forEach(tok => {
-      if (!tok) return;
-      const eqPos = tok.indexOf('=');
-      if (eqPos <= 0) return;
-      const k = tok.slice(0, eqPos);
-      const v = tok.slice(eqPos + 1);
-      if (k && v !== '') params[k] = v;
-    });
+    if (paramLine.indexOf('=') >= 0) {
+      paramLine.split(/\s+/).forEach(tok=>{
+        if(!tok) return;
+        const eqPos = tok.indexOf('=');
+        if(eqPos <= 0) return;
+        const k = tok.slice(0,eqPos);
+        const v = tok.slice(eqPos+1);
+        if(k && v !== '') params[k]=v;
+      });
+    }
 
     // --- 第二行起：交易紀錄 ---
     const events = [];
     for (let i = 1; i < lines.length; i++) {
       const line = lines[i];
       const parts = line.split(/\s+/).filter(Boolean);
-      // 至少要：時間 價格 動作
       if (parts.length < 3) continue;
       const ts     = parts[0];
       const price  = parseFloat(parts[1]);
@@ -61,7 +60,6 @@
     if (!events.length) {
       throw new Error('找不到任何交易紀錄（第二行起）');
     }
-
     return { params, events };
   }
 
@@ -71,38 +69,59 @@
     let pos = 0;      // 0=無, +1=多, -1=空
     let entry = null; // {ts, price, side}
 
-    events.forEach(ev => {
-      const { ts, price, action } = ev;
+    events.forEach(ev=>{
+      const { ts, price } = ev;
+      const actionRaw = ev.action || '';
+      const action = String(actionRaw).trim();
 
-      if (action === '新買') {
-        if (pos !== 0) return;
+      const isNewBuy   = action.indexOf('新買')   >= 0; // 多開
+      const isNewSell  = action.indexOf('新賣')   >= 0; // 空開
+      const isCloseBuy = action.indexOf('平買')   >= 0; // 平空
+      const isCloseSell= action.indexOf('平賣')   >= 0; // 平多
+      const isForce    = action.indexOf('強制平倉') >= 0; // 強平(多或空皆可)
+
+      // --- 開倉 ---
+      if (isNewBuy) {
+        if (pos !== 0) {
+          // 應該不會發生，保守忽略
+          return;
+        }
         pos   = +1;
         entry = { ts, price, side:'L' };
-      } else if (action === '新賣') {
-        if (pos !== 0) return;
+        return;
+      }
+      if (isNewSell) {
+        if (pos !== 0) {
+          return;
+        }
         pos   = -1;
         entry = { ts, price, side:'S' };
-      } else if (action === '平賣' || action === '平買' || action === '強制平倉') {
-        if (pos === 0 || !entry) return;
-
-        const side   = entry.side;
-        const pnlPts = (side === 'L')
-          ? (price - entry.price)
-          : (entry.price - price);
-
-        trades.push({
-          side,                   // 'L' or 'S'
-          entryTs   : entry.ts,
-          entryPrice: entry.price,
-          exitTs    : ts,
-          exitPrice : price,
-          exitAction: action,
-          pnlPts
-        });
-
-        pos   = 0;
-        entry = null;
+        return;
       }
+
+      // --- 平倉 / 強制平倉 ---
+      const isCloseSignal = isCloseBuy || isCloseSell || isForce;
+      if (!isCloseSignal) return;
+      if (pos === 0 || !entry) return; // 沒部位，跳過
+
+      // 多空由目前部位判斷即可，避免 entry.side 不一致
+      const side = pos > 0 ? 'L' : 'S';
+      const pnlPts = (side === 'L')
+        ? (price - entry.price)
+        : (entry.price - price);
+
+      trades.push({
+        side,
+        entryTs   : entry.ts,
+        entryPrice: entry.price,
+        exitTs    : ts,
+        exitPrice : price,
+        exitAction: action,
+        pnlPts
+      });
+
+      pos   = 0;
+      entry = null;
     });
 
     return trades;
@@ -124,23 +143,23 @@
 
     let wins=0, losses=0, gp=0, gl=0;
 
-    trades.forEach(t => {
+    trades.forEach(t=>{
       eqPts += t.pnlPts;
 
-      if (t.pnlPts > 0){
+      if(t.pnlPts > 0){
         wins++;
         gp += t.pnlPts;
-      } else if (t.pnlPts < 0){
+      }else if(t.pnlPts < 0){
         losses++;
         gl += t.pnlPts;
       }
 
-      if (eqPts > maxEq) maxEq = eqPts;
+      if(eqPts > maxEq) maxEq = eqPts;
       const dd = eqPts - maxEq;
-      if (dd < maxDD) maxDD = dd;
+      if(dd < maxDD) maxDD = dd;
 
-      if (t.side === 'L') longAcc  += t.pnlPts;
-      if (t.side === 'S') shortAcc += t.pnlPts;
+      if(t.side === 'L') longAcc  += t.pnlPts;
+      if(t.side === 'S') shortAcc += t.pnlPts;
 
       labels.push(formatTs(t.exitTs));
       totalPts.push(eqPts);
@@ -175,7 +194,7 @@
 
   // ===== YYYYMMDDhhmmss → YYYY-MM-DD hh:mm =====
   function formatTs(ts){
-    if (!ts || ts.length < 12) return ts || '';
+    if(!ts || ts.length < 12) return ts || '';
     const y  = ts.slice(0,4);
     const m  = ts.slice(4,6);
     const d  = ts.slice(6,8);
@@ -187,44 +206,25 @@
   // ===== 畫 Chart.js 折線圖 =====
   function renderChart(labels, totalPts, longPts, shortPts){
     const ctx = $('#chart').getContext('2d');
-    if (chart) chart.destroy();
+    if(chart) chart.destroy();
 
     chart = new Chart(ctx, {
-      type: 'line',
-      data: {
+      type:'line',
+      data:{
         labels,
-        datasets: [
-          {
-            label: '總績效（點數）',
-            data: totalPts,
-            borderWidth: 2,
-            fill: false
-          },
-          {
-            label: '多單累積（點數）',
-            data: longPts,
-            borderWidth: 1,
-            borderDash: [4,2],
-            fill: false
-          },
-          {
-            label: '空單累積（點數）',
-            data: shortPts,
-            borderWidth: 1,
-            borderDash: [2,2],
-            fill: false
-          }
+        datasets:[
+          { label:'總績效（點數）', data:totalPts, borderWidth:2, fill:false },
+          { label:'多單累積（點數）', data:longPts, borderWidth:1, borderDash:[4,2], fill:false },
+          { label:'空單累積（點數）', data:shortPts,borderWidth:1, borderDash:[2,2], fill:false }
         ]
       },
-      options: {
-        responsive: true,
-        interaction: { mode:'index', intersect:false },
-        plugins: {
-          legend:{ position:'top' }
-        },
-        scales: {
-          x: { display:true, ticks:{ maxRotation:0, autoSkip:true } },
-          y: { display:true, title:{ display:true, text:'點數' } }
+      options:{
+        responsive:true,
+        interaction:{ mode:'index', intersect:false },
+        plugins:{ legend:{ position:'top' } },
+        scales:{
+          x:{ display:true, ticks:{ maxRotation:0, autoSkip:true } },
+          y:{ display:true, title:{ display:true, text:'點數' } }
         }
       }
     });
@@ -239,7 +239,7 @@
 
     const el = $('#kpiAll');
 
-    const fmtPct = v => (v==null || !isFinite(v)) ? '—' : (v*100).toFixed(2) + '%';
+    const fmtPct = v => (v==null || !isFinite(v)) ? '—' : (v*100).toFixed(2)+'%';
     const fmtPts = v => (v==null) ? '—' : v.toFixed(1);
     const fmtNtd = v => (v==null) ? '—' : Math.round(v).toLocaleString();
 
@@ -318,11 +318,11 @@
       const parsed = parseTxt(text);
       const trades = buildTrades(parsed.events);
       if(!trades.length){
-        alert('沒有解析到任何完整交易（新買/新賣 + 平倉/強制平倉）');
+        alert('TXT 已讀取，但沒有任何「新買/新賣 + 平倉/強制平倉」組成完整交易，請再檢查動作欄文字。');
         return;
       }
 
-      const multiplier = parseFloat($('#multiplier').value) || 200;
+      const multiplier = parseFloat($('#multiplier').value) || 200; // 0807 期貨預設 1口=200元/點
       const eq = computeEquity(trades, multiplier);
 
       renderChart(eq.labels, eq.totalPts, eq.longPts, eq.shortPts);
