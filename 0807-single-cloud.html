@@ -35,7 +35,7 @@
       font-size:12px
     }
   </style>
-  <!-- 依賴：single.js 這套就是你原本的 KPI + Stress Scenarios 引擎 -->
+  <!-- 分析引擎依賴 -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="shared.js?v=txfee45tax2"></script>
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
@@ -44,12 +44,26 @@
   <div class="wrap">
     <a class="back-link" href="index.html">← 返回首頁</a>
     <h1>0807 雲端單檔分析</h1>
-    <p class="muted">從 Supabase「reports」中選一個 0807 TXT（3 欄格式），本頁會自動轉成 canonical 交易紀錄，並使用單檔分析引擎輸出 KPI 與 Stress Scenarios。</p>
+    <p class="muted">
+      可從「本機檔案」或 Supabase <code>reports</code> bucket 選取一份 0807 TXT（三欄：時間 價格 動作），
+      本頁會自動轉成 canonical 交易紀錄並交給單檔分析引擎輸出 KPI 與 Stress Scenarios。
+    </p>
 
-    <!-- 雲端選檔區（新的） -->
+    <!-- 本機 / 剪貼簿 -->
     <div class="card">
       <div class="row">
-        <strong>雲端檔案選擇</strong>
+        <strong>本機檔案 / 剪貼簿</strong>
+      </div>
+      <div class="row" style="margin-top:8px;gap:8px">
+        <button id="btnLocalClip" class="btn gray">從剪貼簿貼上 TXT</button>
+        <input id="fileLocal" type="file" accept=".txt" />
+      </div>
+    </div>
+
+    <!-- 雲端選檔區 -->
+    <div class="card">
+      <div class="row">
+        <strong>雲端檔案選擇（Supabase / reports）</strong>
       </div>
       <div class="row" style="margin-top:8px;gap:8px">
         <input id="cloudPrefix" class="ipt" placeholder="篩選資料夾（例：0807/ 或 2025-11-30/）" />
@@ -73,10 +87,10 @@
       <div class="chip">參數：<span id="paramChip">—</span></div>
     </div>
 
-    <!-- 自動流程狀態（顯示目前讀檔、轉換、分析狀態） -->
+    <!-- 自動流程狀態 -->
     <div class="card"><span id="autostatus" class="muted">尚未載入檔案。</span></div>
 
-    <!-- 單檔分析輸出區（完全沿用 single.html 結構） -->
+    <!-- 單檔分析輸出區（沿用 single.html 結構） -->
     <div id="chartBox" class="card"><canvas id="chart"></canvas></div>
     <div id="kpiAll" class="card scroll-x"></div>
     <div id="kpiL"></div><div id="kpiS"></div>
@@ -87,9 +101,9 @@
     </div>
   </div>
 
-  <!-- 單檔分析主引擎（你原本的 single.js） -->
+  <!-- 單檔分析主引擎（原本的 single.js） -->
   <script src="single.js?v=full-table-v14-safe-tx2"></script>
-  <!-- 0807 雲端單檔橋接程式 -->
-  <script src="0807-single-cloud.js?v=cloud-canon-v1"></script>
+  <!-- 0807 雲端單檔橋接程式（含本機 & 雲端選檔） -->
+  <script src="0807-single-cloud.js?v=cloud-canon-v2"></script>
 </body>
 </html>
