@@ -3,44 +3,28 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>0807 雲端單檔分析（交易明細）</title>
+  <title>0807 雲端單檔分析</title>
   <style>
-    body{
-      font-family:ui-sans-serif,system-ui;
-      -webkit-font-smoothing:antialiased;
-      margin:0;
-      padding:16px;
-      background:#f7f7fb;
-    }
+    body{font-family:ui-sans-serif,system-ui;-webkit-font-smoothing:antialiased;margin:0;padding:16px;background:#f7f7fb}
     .wrap{max-width:1440px;margin:0 auto}
-    .row{display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+    .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
     .chip{display:inline-block;background:#eef;padding:6px 10px;border-radius:999px;font-size:12px}
-    .card{
-      background:#fff;
-      border:1px solid #e5e7eb;
-      border-radius:12px;
-      box-shadow:0 2px 10px rgba(0,0,0,.03);
-      padding:12px;
-      margin-bottom:20px
-    }
+    .btn{background:#0d6efd;color:#fff;border:0;border-radius:10px;padding:8px 12px;cursor:pointer;font-size:13px}
+    .btn.gray{background:#6c757d}
+    .btn:disabled{opacity:.5;cursor:not-allowed}
+    .card{background:#fff;border:1px solid #e5e7eb;border-radius:12px;box-shadow:0 2px 10px rgba(0,0,0,.03);padding:12px;margin-bottom:20px}
+    #chartBox{height:520px}
     table{width:100%;border-collapse:collapse;font-size:13px}
-    th,td{
-      padding:4px 6px;
-      border-bottom:1px solid #e5e7eb;
-      text-align:right;
-      white-space:nowrap
-    }
-    th:first-child,td:first-child{text-align:left}
+    th,td{border-bottom:1px solid #eee;padding:6px 8px}
+    th{background:#fafafa;text-align:left}
     .back-link{margin-bottom:12px;display:inline-block}
     .scroll-x{overflow-x:auto}
-    .btn{padding:8px 12px;border:0;border-radius:8px;cursor:pointer;font-size:13px}
-    .btn-primary{background:#0d6efd;color:#fff}
-    .btn-gray{background:#6c757d;color:#fff}
+    .muted{color:#666;font-size:13px}
+    #autostatus{white-space:pre-wrap}
     .sel{min-width:260px;padding:8px;border:1px solid #ddd;border-radius:8px;font-size:13px}
     .ipt{padding:8px;border:1px solid #ddd;border-radius:8px;font-size:13px}
-    .tiny{font-size:12px;color:#666}
     pre.preview{
-      margin-top:10px;
+      margin-top:8px;
       max-height:260px;
       overflow:auto;
       background:#f8f9fa;
@@ -50,62 +34,62 @@
       white-space:pre-wrap;
       font-size:12px
     }
-    h1{margin-top:0}
-    h3{margin:0 0 8px 0}
-
-    .pnl-win{color:#b91c1c;font-weight:600}
-    .pnl-lose{color:#047857;font-weight:600}
   </style>
-
-  <!-- Supabase（雲端選檔用） -->
+  <!-- 依賴：single.js 這套就是你原本的 KPI + Stress Scenarios 引擎 -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="shared.js?v=txfee45tax2"></script>
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 </head>
 <body>
   <div class="wrap">
     <a class="back-link" href="index.html">← 返回首頁</a>
-    <h1>0807 雲端單檔分析（交易明細版）</h1>
+    <h1>0807 雲端單檔分析</h1>
+    <p class="muted">從 Supabase「reports」中選一個 0807 TXT（3 欄格式），本頁會自動轉成 canonical 交易紀錄，並使用單檔分析引擎輸出 KPI 與 Stress Scenarios。</p>
 
-    <!-- 控制列：本機 / 剪貼簿 + 參數 + 點值 -->
-    <div class="row card">
-      <div class="row" style="gap:8px">
-        <button id="btn-clip" class="btn btn-gray">從剪貼簿貼上 TXT</button>
-        <input id="file" type="file" accept=".txt" />
+    <!-- 雲端選檔區（新的） -->
+    <div class="card">
+      <div class="row">
+        <strong>雲端檔案選擇</strong>
       </div>
-      <div class="chip">參數：<span id="paramChip">—</span></div>
-      <div class="row" style="gap:6px">
-        <span class="tiny">每口點值：</span>
-        <input id="multiplier" class="ipt" type="number" value="200" step="1" style="width:90px" />
-        <span class="tiny">元 / 點（台指期預設 200）</span>
-      </div>
-    </div>
-
-    <!-- 雲端檔案（Supabase / reports） -->
-    <div class="card" id="cloudPanel">
-      <h3>從「資料上傳區」讀檔（Supabase / reports）</h3>
-      <div class="row" style="gap:8px">
+      <div class="row" style="margin-top:8px;gap:8px">
         <input id="cloudPrefix" class="ipt" placeholder="篩選資料夾（例：0807/ 或 2025-11-30/）" />
-        <button id="btnCloudList" class="btn btn-primary">載入清單</button>
+        <button id="btnCloudList" class="btn">載入清單</button>
         <select id="cloudSelect" class="sel">
           <option value="">（請先載入清單）</option>
         </select>
-        <button id="btnCloudPreview" class="btn btn-gray">預覽</button>
-        <button id="btnCloudImport" class="btn btn-primary">載入到分析</button>
+        <button id="btnCloudPreview" class="btn gray">預覽</button>
+        <button id="btnCloudImport" class="btn">載入並分析</button>
       </div>
-      <div id="cloudMeta" class="tiny" style="margin-top:6px;"></div>
+      <div id="cloudMeta" class="muted" style="margin-top:6px;"></div>
       <pre id="cloudPreview" class="preview"></pre>
     </div>
 
-    <!-- 交易明細表 -->
+    <!-- 單檔引擎的「隱藏控制列」：交給 single.js 用（不要移除） -->
+    <div class="row card" style="display:none">
+      <div>
+        <button id="btn-clip">從剪貼簿貼上 TXT</button>
+        <input id="file" type="file" accept=".txt" />
+      </div>
+      <div class="chip">參數：<span id="paramChip">—</span></div>
+    </div>
+
+    <!-- 自動流程狀態（顯示目前讀檔、轉換、分析狀態） -->
+    <div class="card"><span id="autostatus" class="muted">尚未載入檔案。</span></div>
+
+    <!-- 單檔分析輸出區（完全沿用 single.html 結構） -->
+    <div id="chartBox" class="card"><canvas id="chart"></canvas></div>
+    <div id="kpiAll" class="card scroll-x"></div>
+    <div id="kpiL"></div><div id="kpiS"></div>
+    <div id="rrLines" class="card scroll-x"></div>
+
     <div class="card scroll-x">
-      <h3>交易明細（0807 TXT → 兩行一組配對）</h3>
-      <table id="tradeTable">
-        <thead></thead>
-        <tbody></tbody>
-      </table>
+      <table id="tradeTable"><thead></thead><tbody></tbody></table>
     </div>
   </div>
 
-  <!-- 主程式：0807 交易明細 + 雲端讀檔 -->
-  <script src="0807-single-cloud.js?v=0807-trades-v1"></script>
+  <!-- 單檔分析主引擎（你原本的 single.js） -->
+  <script src="single.js?v=full-table-v14-safe-tx2"></script>
+  <!-- 0807 雲端單檔橋接程式 -->
+  <script src="0807-single-cloud.js?v=cloud-canon-v1"></script>
 </body>
 </html>
