@@ -31,7 +31,11 @@
   <div class="wrap">
     <a class="back-link" href="index.html">← 返回首頁</a>
     <h1>0807版本</h1>
-    <p class="muted">本頁將自動擷取檔名含 <code>0807</code> 的最新 TXT，並以「基準檔的最前／最後日期」為錨點：實際分析資料＝基準檔全段 + 基準之後的新增。</p>
+    <p class="muted">
+      頁面預設會從 Supabase（reports bucket）抓檔名含 <code>0807</code> 的最新 TXT，
+      並以「基準檔的最前／最後日期」為錨點：實際分析資料＝基準檔全段 + 基準之後的新增。
+      也可以下方「選擇檔案」或「從剪貼簿貼上 TXT」改用本機 TXT 重新分析。
+    </p>
 
     <!-- 期間摘要 -->
     <div class="card" id="diffCard">
@@ -45,13 +49,14 @@
       <div id="periodText" class="muted" style="margin-top:6px;"></div>
     </div>
 
-    <!-- 保留 DOM 給 single.js（隱藏） -->
-    <div class="row card" style="display:none">
+    <!-- 檔案匯入（給 single.js 用，這次要顯示出來） -->
+    <div class="row card">
       <div>
-        <button id="btn-clip">從剪貼簿貼上 TXT</button>
+        <button id="btn-clip" class="btn gray">從剪貼簿貼上 TXT</button>
         <input id="file" type="file" accept=".txt" />
       </div>
       <div class="chip">參數：<span id="paramChip">—</span></div>
+      <div class="muted">（若選擇檔案／貼上 TXT，會覆蓋上方自動抓的結果）</div>
     </div>
 
     <!-- 自動流程狀態 -->
@@ -70,7 +75,7 @@
 
   <!-- 主分析（帶版本號清快取） -->
   <script src="single.js?v=full-table-v14-safe-tx2"></script>
-  <!-- 0807 雲端自動合併/期間摘要（檔名改成 0807-single-cloud.js） -->
-  <script src="0807-single-cloud.js?v=anchored-merge-tx2"></script>
+  <!-- 0807 雲端 + 本機匯入整合腳本 -->
+  <script src="0807-single-cloud.js?v=anchored-merge-local-tx2"></script>
 </body>
 </html>
