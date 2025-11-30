@@ -1,9 +1,14 @@
 // 0807-single-cloud.js —— 0807 雲端單檔分析（期貨用，一口=200元/點）
+// 規則：
+//   - 第一行是參數，不計算。
+//   - 第二行開始：每兩行一組，一奇一偶做一筆交易：
+//       entry = 第 2,4,6,... 行（陣列 index 0,2,4,...）
+//       exit  = 第 3,5,7,... 行（陣列 index 1,3,5,...）
+//   - 方向：entry.action 含「新賣」當空單，其餘當多單。
 (function () {
   'use strict';
   console.log('0807 cloud JS loaded');
 
-  // ===== 小工具 =====
   const $ = s => document.querySelector(s);
 
   const SUPABASE_URL  = "https://byhbmmnacezzgkwfkozs.supabase.co";
@@ -17,8 +22,6 @@
   let chart = null;
 
   // ===== 解析 0807 TXT =====
-  // line1: BeginTime=84800 EndTime=131000 ForceExitTime=131200 ...
-  // line2+: YYYYMMDDhhmmss 價格 動作(...)
   function parseTxt(text){
     const raw = text.replace(/\r/g, '');
     const lines = raw.split('\n')
@@ -27,7 +30,7 @@
 
     if (!lines.length) throw new Error('TXT 沒有內容');
 
-    // --- 第一行：參數（不參與計算） ---
+    // 第一行：參數
     const params = {};
     const paramLine = lines[0];
     if (paramLine.indexOf('=') >= 0) {
@@ -41,25 +44,28 @@
       });
     }
 
-    // --- 第二行起：交易紀錄 ---
+    // 第二行開始：交易紀錄
     const events = [];
     for (let i = 1; i < lines.length; i++) {
       const line = lines[i];
       const parts = line.split(/\s+/).filter(Boolean);
       if (parts.length < 3) continue;
 
-      const ts    = parts[0];
+      const ts = parts[0];
       const price = parseFloat(parts[1]);
-      // 動作直接拿最後一個 token，避免中間多欄位出錯
-      const action = parts[parts.length - 1];
+      const action = parts[parts.length - 1];   // 最後一欄視為動作
 
       if (!/^\d{14}$/.test(ts)) continue;
       if (!isFinite(price)) continue;
 
-      events.push({ ts, price, action: String(action).trim() });
+      events.push({
+        ts,
+        price,
+        action: String(action).trim()
+      });
     }
 
-    console.log('events sample =', events.slice(0, 10));
+    console.log('events length =', events.length, 'sample =', events.slice(0, 10));
 
     if (!events.length) {
       throw new Error('找不到任何交易紀錄（第二行起）');
@@ -67,65 +73,35 @@
     return { params, events };
   }
 
-  // ===== 事件 → 交易（多空 + 強制平倉） =====
+  // ===== 事件 → 交易（奇偶配對版） =====
   function buildTrades(events){
     const trades = [];
-    let pos = 0;      // 0=空手, +1=多, -1=空
-    let entry = null; // { ts, price, side }
 
-    events.forEach(ev => {
-      const { ts, price } = ev;
-      const action = ev.action || '';
+    // 直接用 [0,1] [2,3] ... 配對；如果最後剩一筆孤單 entry 就忽略
+    const n = events.length;
+    const pairCount = Math.floor(n / 2);
 
-      const isNewBuy    = action.indexOf('新買')   >= 0; // 開多
-      const isNewSell   = action.indexOf('新賣')   >= 0; // 開空
-      const isCloseBuy  = action.indexOf('平買')   >= 0; // 平空
-      const isCloseSell = action.indexOf('平賣')   >= 0; // 平多
-      const isForce     = action.indexOf('強制平倉') >= 0; // 多空強平
+    for (let i = 0; i < pairCount; i++) {
+      const entry = events[2*i];
+      const exit  = events[2*i + 1];
 
-      // --- 開倉 ---
-      if (isNewBuy) {
-        if (pos !== 0) {
-          // 理論上不會出現連續新買未平倉，保守先忽略
-          return;
-        }
-        pos   = +1;
-        entry = { ts, price, side: 'L' };
-        return;
-      }
+      const actEntry = entry.action || '';
+      const side = actEntry.indexOf('新賣') >= 0 ? 'S' : 'L';
 
-      if (isNewSell) {
-        if (pos !== 0) {
-          return;
-        }
-        pos   = -1;
-        entry = { ts, price, side: 'S' };
-        return;
-      }
-
-      // --- 平倉 / 強制平倉 ---
-      const isCloseSignal = isCloseBuy || isCloseSell || isForce;
-      if (!isCloseSignal) return;
-      if (pos === 0 || !entry) return; // 沒有持倉，跳過
-
-      const side = (pos > 0 ? 'L' : 'S');
       const pnlPts = (side === 'L')
-        ? (price - entry.price)
-        : (entry.price - price);
+        ? (exit.price - entry.price)
+        : (entry.price - exit.price);
 
       trades.push({
         side,                   // 'L' or 'S'
         entryTs   : entry.ts,
         entryPrice: entry.price,
-        exitTs    : ts,
-        exitPrice : price,
-        exitAction: action,
+        exitTs    : exit.ts,
+        exitPrice : exit.price,
+        exitAction: exit.action,
         pnlPts
       });
-
-      pos   = 0;
-      entry = null;
-    });
+    }
 
     console.log('trades count =', trades.length, 'sample =', trades.slice(0, 10));
     return trades;
@@ -316,13 +292,13 @@
     }).join('');
   }
 
-  // ===== 主流程：由文字跑完整分析 =====
+  // ===== 主流程 =====
   function runAnalysisFromText(text){
     try{
       const parsed = parseTxt(text);
       const trades = buildTrades(parsed.events);
       if(!trades.length){
-        alert('TXT 已讀取，但沒有任何「新買/新賣 + 平倉/強制平倉」組成完整交易，請打開 Console 檢查 events / trades log。');
+        alert('TXT 已讀取，但沒有任何配對成功的交易（請確認第二行起是否成對輸出）。');
         return;
       }
 
@@ -369,7 +345,7 @@
     });
   }
 
-  // ===== Supabase：雲端讀檔（和前面一樣） =====
+  // ===== Supabase：雲端讀檔（保留原本功能） =====
   const prefix   = $('#cloudPrefix');
   const btnList  = $('#btnCloudList');
   const pick     = $('#cloudSelect');
@@ -406,7 +382,7 @@
 
     pick.innerHTML = '';
     data.forEach(it=>{
-      if(it.id === null && !it.metadata) return; // 資料夾
+      if(it.id === null && !it.metadata) return;
       const path   = (fixed || '') + it.name;
       const sizeKB = it.metadata?.size ? (it.metadata.size/1024).toFixed(1) : '-';
       const opt    = document.createElement('option');
