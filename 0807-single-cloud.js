@@ -1,4 +1,4 @@
-// 0807-single-cloud.js — 第5分頁：從 Supabase「資料上傳區」讀檔 → 丟給 #file，交由 shared.js + 0807-single.js 處理
+// 0807-single-cloud.js — 第5分頁：從 Supabase「資料上傳區」讀檔 → 丟給 #file，交由 shared.js + single.js 處理
 (function () {
   'use strict';
 
@@ -14,11 +14,11 @@
   // ===== DOM =====
   const $ = s => document.querySelector(s);
 
-  // 與 single/0807-single 一致的本機匯入元件（交由原本流程處理）
+  // 與 single.html 一致的本機匯入元件（交由原本流程處理）
   const fileInput = $('#file');
   const btnClip   = $('#btn-clip');
 
-  // 雲端 UI（0807 專用分頁）
+  // 第5分頁的雲端 UI
   const prefix   = $('#cloudPrefix');
   const btnList  = $('#btnCloudList');
   const pick     = $('#cloudSelect');
@@ -28,7 +28,7 @@
   const prev     = $('#cloudPreview');
   const cacheTxt = $('#cloudTxt');
 
-  // ===== 剪貼簿 → File → 觸發 #file =====
+  // ===== 公用：剪貼簿 → File → 觸發 #file =====
   if (btnClip) {
     btnClip.addEventListener('click', async ()=>{
       try{
@@ -51,7 +51,7 @@
     btnPrev.addEventListener('click', previewCloud);
   }
 
-  // ===== 雲端：載入到分析（原始位元組 → File → #file） =====
+  // ===== 雲端：載入到分析（用原始位元組 → File → #file） =====
   if (btnImp) {
     btnImp.addEventListener('click', importCloudToAnalysis);
   }
@@ -68,9 +68,9 @@
     const p     = (prefix?.value || '').trim();
     const fixed = p && !p.endsWith('/') ? p + '/' : p;
 
-    const { data, error } = await sb.storage.from(BUCKET).list(fixed, {
-      limit: 1000,
-      sortBy: { column:'name', order:'asc' }
+    const { data, error } = await sb.storage.from(BUCKET).list(fixed,{
+      limit:1000,
+      sortBy:{column:'name',order:'asc'}
     });
 
     if (error) {
@@ -83,13 +83,13 @@
     }
 
     pick.innerHTML = '';
-    data.forEach(it => {
+    data.forEach(it=>{
       // 跳過資料夾（id=null && !metadata）
       if (it.id === null && !it.metadata) return;
 
-      const path  = (fixed || '') + it.name;
-      const opt   = document.createElement('option');
-      const sizeKB = it.metadata?.size ? (it.metadata.size / 1024).toFixed(1) : '-';
+      const path   = (fixed || '') + it.name;
+      const opt    = document.createElement('option');
+      const sizeKB = it.metadata?.size ? (it.metadata.size/1024).toFixed(1) : '-';
 
       opt.value      = path;
       opt.textContent = `${path} (${sizeKB} KB)`;
@@ -111,7 +111,7 @@
       return;
     }
 
-    const r = await fetch(url, { cache:'no-store' });
+    const r = await fetch(url,{cache:'no-store'});
     if (!r.ok) {
       prev.textContent = `HTTP ${r.status}`;
       return;
@@ -125,8 +125,8 @@
 
     const lines = best.txt.split(/\r?\n/);
     prev.textContent =
-      lines.slice(0, 500).join('\n') +
-      (lines.length > 500 ? `\n...（共 ${lines.length} 行）` : ``);
+      lines.slice(0,500).join('\n') +
+      (lines.length>500 ? `\n...（共 ${lines.length} 行）` : ``);
   }
 
   async function importCloudToAnalysis(){
@@ -136,7 +136,7 @@
     const url = await getUrl(path);
     if (!url) return alert('取得連結失敗');
 
-    const r = await fetch(url, { cache:'no-store' });
+    const r = await fetch(url,{cache:'no-store'});
     if (!r.ok) return alert(`HTTP ${r.status}`);
 
     const ab = await r.arrayBuffer();
@@ -149,25 +149,25 @@
     const dt = new DataTransfer();
     dt.items.add(f);
     fileInput.files = dt.files;
-    fileInput.dispatchEvent(new Event('change', { bubbles:true }));
+    fileInput.dispatchEvent(new Event('change',{bubbles:true}));
   }
 
-  // ---------- 輔助：文字 → File → 丟給 #file ----------
+  // ---------- 輔助：File 丟給 #file ----------
   function feedToFile(text, name){
-    const blob = new Blob([text], { type:'text/plain;charset=utf-8' });
-    const f    = new File([blob], name || 'cloud.txt', { type:'text/plain' });
+    const blob = new Blob([text],{type:'text/plain;charset=utf-8'});
+    const f    = new File([blob], name || 'cloud.txt', {type:'text/plain'});
     const dt   = new DataTransfer();
     dt.items.add(f);
     fileInput.files = dt.files;
-    fileInput.dispatchEvent(new Event('change', { bubbles:true }));
+    fileInput.dispatchEvent(new Event('change',{bubbles:true}));
   }
 
   // ---------- 輔助：先簽名再 public（相容 Private/Public bucket） ----------
   async function getUrl(path){
-    try {
+    try{
       const { data } = await sb.storage.from(BUCKET).createSignedUrl(path, 3600);
       if (data?.signedUrl) return data.signedUrl;
-    } catch(e) {}
+    }catch(e){}
     const { data:pub } = sb.storage.from(BUCKET).getPublicUrl(path);
     return pub?.publicUrl || '';
   }
@@ -175,14 +175,14 @@
   // ---------- 輔助：ArrayBuffer → 自動偵測編碼（utf-8 / big5 / gb18030） ----------
   function decodeBest(ab){
     const encs = ['utf-8','big5','gb18030'];
-    let best   = { txt:'', bad:1e9, enc:'' };
+    let best   = {txt:'',bad:1e9,enc:''};
 
-    for (const e of encs) {
-      try {
-        const t = new TextDecoder(e, { fatal:false }).decode(ab);
-        const b = (t.match(/\uFFFD/g) || []).length;
-        if (b < best.bad) best = { txt:t, bad:b, enc:e };
-      } catch {}
+    for (const e of encs){
+      try{
+        const t = new TextDecoder(e,{fatal:false}).decode(ab);
+        const b = (t.match(/\uFFFD/g)||[]).length;
+        if (b < best.bad) best = {txt:t,bad:b,enc:e};
+      }catch{}
     }
     return best;
   }
