@@ -1,10 +1,17 @@
-// 0807-single-cloud.js —— 0807 雲端單檔分析（單檔版）
-// - 從 Supabase reports bucket 選一個 0807 TXT
-// - 將「時間 價格 動作」格式轉成 canonical 交易紀錄
-// - 餵給 single.js 執行完整 KPI + Stress Scenarios
+// 0807-single-cloud.js —— 0807 雲端單檔分析（本機 + 雲端 → single.js）
+//
+// 0807 TXT 格式：
+//   line1: BeginTime=84800 EndTime=131000 ForceExitTime=131200 ...
+//   line2+: YYYYMMDDhhmmss 價格 動作
+//
+// 本檔負責：
+//   - 從本機選檔 / 剪貼簿 / Supabase 取得 TXT
+//   - 轉成 canonical：YYYYMMDDhhmmss.000000 價格(6位) 動作
+//   - patch window.SHARED.readAsTextAuto，把 canonical 丟給 single.js 分析
 
 (function () {
   'use strict';
+  console.log('0807-single-cloud JS loaded');
 
   const $ = s => document.querySelector(s);
   const statusEl = $('#autostatus');
@@ -24,15 +31,7 @@
     global:{ fetch:(u,o={})=>fetch(u,{...o,cache:'no-store'}) }
   });
 
-  // ===== 0807 TXT → canonical 行 =====
-  //
-  // 0807 TXT 原始行例：
-  //   20231201093900 17366 新買
-  //   20231201131200 17407 強制平倉
-  //
-  // canonical 需要：
-  //   20231201093900.000000 17366.000000 新買
-  //
+  // ===== 0807 TXT → canonical =====
   const EXTRACT_RE = /^(\d{14})\s+(\d+(?:\.\d+)?)\s*(新買|平賣|新賣|平買|強制平倉)\s*$/;
 
   function normalizeText(raw){
@@ -49,16 +48,18 @@
     let ok=0, bad=0;
 
     for(const line of norm.split('\n')){
-      // 跳過第一行參數（BeginTime=...）
+      // 第一行的參數 (BeginTime=...) 會被這條略過
       if(line.indexOf('BeginTime=')>=0 && line.indexOf('EndTime=')>=0){
         continue;
       }
       const m = line.match(EXTRACT_RE);
       if(!m){ bad++; continue; }
+
       const ts = m[1];
       const px = Number(m[2]);
       const px6 = Number.isFinite(px) ? px.toFixed(6) : m[2];
       const act = m[3];
+
       out.push(`${ts}.000000 ${px6} ${act}`);
       ok++;
     }
@@ -66,7 +67,7 @@
   }
 
   async function fetchTextSmart(url){
-    const r = await fetch(url, { cache:'no-store' });
+    const r = await fetch(url,{cache:'no-store'});
     if(!r.ok) throw new Error(`HTTP ${r.status} ${r.statusText}`);
     const buf = await r.arrayBuffer();
 
@@ -82,27 +83,26 @@
     return { canon, ok, enc:'utf-8' };
   }
 
-  // ===== 喂給 single.js：patch SHARED.readAsTextAuto + file change =====
+  // ===== 將 canonical 丟給 single.js =====
   function patchSharedReaders(canonicalText){
     if(!window.SHARED) return;
-    // 單次覆寫 readAsTextAuto，讓 single.js 直接拿到我們轉好的 canonical
+
     if(typeof window.SHARED.readAsTextAuto === 'function'){
       const orig = window.SHARED.readAsTextAuto;
       window.SHARED.readAsTextAuto = async function(){
-        // 用完就還原，避免影響其它頁
-        window.SHARED.readAsTextAuto = orig;
+        window.SHARED.readAsTextAuto = orig;  // 用一次就還原
         return canonicalText;
       };
     }
-    // paramsLabel 防護（避免 single.js 對 0807 格式 params 爆掉）
+
     if(typeof window.SHARED.paramsLabel === 'function'){
       const origPL = window.SHARED.paramsLabel;
       window.SHARED.paramsLabel = function(arg){
         try{
           return origPL(arg);
-        }catch(e){
+        }catch{
           const arr = Array.isArray(arg?.raw) ? arg.raw : (Array.isArray(arg)?arg:[]);
-          return (arr.slice(0,2).join(" ｜ ")) || "—";
+          return (arr.slice(0,2).join(' ｜ ')) || '—';
         }
       };
     }
@@ -116,7 +116,6 @@
     }
     patchSharedReaders(canonicalText);
 
-    // 建立一個假的 File 給 single.js（內容其實不重要，真正的文字從 readAsTextAuto 來）
     const file = new File([canonicalText], filename || '0807.txt', { type:'text/plain' });
     const dt = new DataTransfer();
     dt.items.add(file);
@@ -124,7 +123,48 @@
     input.dispatchEvent(new Event('change',{ bubbles:true }));
   }
 
-  // ===== Supabase UI：列清單 / 預覽 / 匯入 =====
+  // ===== 共用：由 raw text 直接跑分析（給本機 / 剪貼簿） =====
+  function runFromRawText(raw, filename, sourceLabel){
+    const { canon, ok, bad } = canonicalizeFrom0807(raw);
+    if(!ok){
+      setStatus(`來源「${sourceLabel}」沒有合法交易行（bad=${bad}）。`, true);
+      alert(`來源「${sourceLabel}」沒有合法交易行，請確認 TXT 格式。`);
+      return;
+    }
+    setStatus(`來源「${sourceLabel}」，已轉換 ${ok} 行交易，送交單檔分析引擎…`, false);
+    feedToSingle(filename || '0807.txt', canon);
+  }
+
+  // ===== 本機檔案 =====
+  const fileLocal = $('#fileLocal');
+  if(fileLocal){
+    fileLocal.addEventListener('change', e=>{
+      const f = e.target.files && e.target.files[0];
+      if(!f) return;
+      const fr = new FileReader();
+      fr.onload = ev => {
+        const txt = ev.target.result;
+        runFromRawText(txt, f.name, '本機檔案');
+      };
+      fr.readAsText(f, 'utf-8');
+    });
+  }
+
+  // ===== 剪貼簿（本機） =====
+  const btnLocalClip = $('#btnLocalClip');
+  if(btnLocalClip){
+    btnLocalClip.addEventListener('click', async ()=>{
+      try{
+        const txt = await navigator.clipboard.readText();
+        if(!txt) return alert('剪貼簿沒有文字');
+        runFromRawText(txt, 'clipboard.txt', '剪貼簿文字');
+      }catch(e){
+        alert('無法讀取剪貼簿內容，請改用「選擇檔案」。');
+      }
+    });
+  }
+
+  // ===== Supabase：列清單 / 預覽 / 匯入 =====
   const prefix  = $('#cloudPrefix');
   const btnList = $('#btnCloudList');
   const pick    = $('#cloudSelect');
@@ -200,7 +240,8 @@
       const norm = normalizeText(txt);
       meta.textContent = `來源：${path}`;
       const lines = norm.split(/\r?\n/);
-      prev.textContent = lines.slice(0,300).join('\n') + (lines.length>300?`\n...（共 ${lines.length} 行）`:``);
+      prev.textContent = lines.slice(0,300).join('\n') +
+        (lines.length>300 ? `\n...（共 ${lines.length} 行）` : ``);
       setStatus('預覽完成。', false);
     }catch(e){
       prev.textContent = '預覽失敗：' + (e.message||e);
@@ -222,28 +263,11 @@
         return;
       }
       setStatus(`已轉換 ${ok} 行交易（編碼=${enc}），送交單檔分析引擎…`, false);
-      await feedToSingle(path.split('/').pop() || '0807.txt', canon);
+      feedToSingle(path.split('/').pop() || '0807.txt', canon);
     }catch(e){
       console.error(e);
       setStatus('下載或轉換失敗：' + (e.message||e), true);
     }
-  }
-
-  async function fetchTextSmart(url){
-    const r = await fetch(url,{cache:'no-store'});
-    if(!r.ok) throw new Error(`HTTP ${r.status} ${r.statusText}`);
-    const buf = await r.arrayBuffer();
-
-    for(const enc of ['utf-8','big5','utf-16le','utf-16be']){
-      try{
-        const td = new TextDecoder(enc,{fatal:false});
-        const { canon, ok } = canonicalizeFrom0807(td.decode(buf));
-        if(ok>0) return { canon, ok, enc };
-      }catch(e){}
-    }
-    const td = new TextDecoder('utf-8');
-    const { canon, ok } = canonicalizeFrom0807(td.decode(buf));
-    return { canon, ok, enc:'utf-8' };
   }
 
 })();
