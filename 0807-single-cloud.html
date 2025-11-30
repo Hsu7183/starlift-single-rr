@@ -46,7 +46,7 @@
     <h1>0807 雲端單檔分析</h1>
     <p class="muted">
       可從「本機檔案」或 Supabase <code>reports</code> bucket 選取一份 0807 TXT（三欄：時間 價格 動作），
-      本頁會自動轉成 canonical 交易紀錄並交給單檔分析引擎輸出 KPI 與 Stress Scenarios。
+      本頁會先轉成 canonical 格式後再交給單檔分析引擎輸出 KPI 與 Stress Scenarios。
     </p>
 
     <!-- 本機 / 剪貼簿 -->
@@ -103,7 +103,7 @@
 
   <!-- 單檔分析主引擎（原本的 single.js） -->
   <script src="single.js?v=full-table-v14-safe-tx2"></script>
-  <!-- 0807 雲端單檔橋接程式（含本機 & 雲端選檔） -->
-  <script src="0807-single-cloud.js?v=cloud-canon-v2"></script>
+  <!-- 0807 雲端單檔橋接程式 -->
+  <script src="0807-single-cloud.js?v=cloud-canon-final"></script>
 </body>
 </html>
