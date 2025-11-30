@@ -1,19 +1,22 @@
-// 0807-single-cloud.js — 0807 專用：
-// 1) 預設從 Supabase「reports」抓最新 0807 TXT + 基準，合併後丟給 single.js。
-// 2) 也可用「選擇檔案」或「從剪貼簿貼上 TXT」改用本機 TXT 重新分析。
-//    支援兩種 TXT：
-//    - 舊：第一行 84800.000000 131000.000000 ... （全數字）
-//    - 新：第一行 BeginTime=84800 EndTime=131000 ...，後面「時間 價格 動作」
+// 0807-single-cloud.js
+// - Supabase 自動抓最新 0807 TXT + 基準合併
+// - 也支援本機「選擇檔案」/「剪貼簿貼上」
+// - TXT 新格式：
+//   1) 第一行：BeginTime=... EndTime=... ForceExitTime=... FixTP_L=... ... RSI_ShortTh=...
+//   2) 之後每行：YYYYMMDDhhmmss 價格 動作
+// - 本腳本會把新格式轉成 single.js 原來的舊格式：
+//   第一行：84800.000000 131000.000000 131200.000000 250.000000 40.000000 20.000000 2.000000 110.000000 70.000000 7.000000 5.000000 0.250000 0.000000 80.000000 10.000000
+//   之後每行：20231201093900.000000 17366.000000 新買
 (function () {
   const $ = s => document.querySelector(s);
-  const status = $('#autostatus'); if (status) status.style.whiteSpace = 'pre-wrap';
+  const status   = $('#autostatus'); if (status) status.style.whiteSpace = 'pre-wrap';
   const elLatest = $('#latestName'), elBase = $('#baseName');
   const elPeriod = $('#periodText');
   const btnBase  = $('#btnSetBaseline');
   const fileInput= $('#file');
   const btnClip  = $('#btn-clip');
 
-  // Supabase（與 upload.html 相同）
+  // Supabase
   const SUPABASE_URL = "https://byhbmmnacezzgkwfkozs.supabase.co";
   const SUPABASE_ANON_KEY = "sb_publishable_xVe8fGbqQ0XGwi4DsmjPMg_Y2RBOD3t";
   const BUCKET = "reports";
@@ -75,20 +78,62 @@
     return lines.join('\n');
   }
 
-  // 把第一行拆出來：若含 "=" 視為新格式 header，其餘行才進 canonicalize
-  function splitHeader(normText){
-    const all = normText.split('\n');
-    if (!all.length) return { header:'', body:'' };
-    const first = all[0].trim();
-    if (first && first.indexOf('=') !== -1) {
-      // 新版：BeginTime=84800 EndTime=... ForceExitTime=...
-      return { header:first, body: all.slice(1).join('\n') };
-    }
-    // 舊版：第一行是數字參數（84800.000000 131000.000000 …）→ 沒有 header，全部當 body
-    return { header:'', body:normText };
+  // 新版 header（含 =) → 轉成舊格式數字 param line
+  function headerToNumeric(line){
+    const kv = {};
+    line.split(/\s+/).forEach(pair=>{
+      const [k,v] = pair.split('=');
+      if(k && v!==undefined) kv[k.trim()] = v.trim();
+    });
+    // 依照舊版順序組成 15 個數字
+    const order = [
+      'BeginTime','EndTime','ForceExitTime',
+      'FixTP_L','FixSL_L','DynTPFactor_L','DynSLFactor_L',
+      'FixTP_S','FixSL_S','DynTPFactor_S','DynSLFactor_S',
+      'BufferATR','CoolDownBars','RSI_LongTh','RSI_ShortTh'
+    ];
+    const nums = order.map(k => {
+      const v = Number(kv[k]);
+      return Number.isFinite(v) ? v : 0;
+    });
+    return nums.map(x => x.toFixed(6)).join(' ');
   }
 
-  // 將「時間 價格 動作」轉成 canonical 行
+  // 舊版（第一行全數字）→ 直接當 param line
+  function isNumericParamLine(line){
+    return /^(\d+(\.\d+)?\s+){4,}\d+(\.\d+)?$/.test(line.trim());
+  }
+
+  // 把整份 TXT 轉成：{ paramLine, canonTrades, ok }
+  function preprocess(raw){
+    const norm  = normalizeText(raw);
+    const lines = norm.split('\n').filter(x=>x.length>0);
+    if(!lines.length) return { paramLine:'', canonTrades:'', ok:0 };
+
+    let paramLine = '';
+    let bodyLines = [];
+
+    const first = lines[0];
+
+    if(first.indexOf('=') !== -1){
+      // 新版 header
+      paramLine = headerToNumeric(first);
+      bodyLines = lines.slice(1);
+    }else if(isNumericParamLine(first)){
+      // 舊版 param 行
+      paramLine = first;
+      bodyLines = lines.slice(1);
+    }else{
+      // 非預期：全部當 body，paramLine 給空
+      paramLine = '';
+      bodyLines = lines;
+    }
+
+    const { canon, ok } = canonicalize(bodyLines.join('\n'));
+    return { paramLine, canonTrades:canon, ok };
+  }
+
+  // 身體部分 canonical
   function canonicalize(txt){
     const out=[], lines = txt.split('\n'); let ok=0,bad=0;
     for(const l of lines){
@@ -109,7 +154,7 @@
     return { canon: out.join('\n'), ok, bad };
   }
 
-  // 下載 + 自動偵測編碼 + 拆 header + canonicalize body
+  // Supabase 下載並 preprocess
   async function fetchSmart(url){
     const res = await fetch(url,{cache:'no-store'});
     if(!res.ok) throw new Error(`${res.status} ${res.statusText}`);
@@ -117,19 +162,16 @@
 
     for (const enc of ['utf-8','big5','utf-16le','utf-16be']){
       try{
-        const td  = new TextDecoder(enc,{fatal:false});
-        const norm= normalizeText(td.decode(buf));
-        const { header, body } = splitHeader(norm);
-        const { canon, ok }    = canonicalize(body);
-        if (ok > 0) return { enc, header, canon, ok };
+        const td   = new TextDecoder(enc,{fatal:false});
+        const text = td.decode(buf);
+        const { paramLine, canonTrades, ok } = preprocess(text);
+        if (ok > 0) return { enc, paramLine, canonTrades, ok };
       }catch(e){}
     }
-    // fallback utf-8
-    const td  = new TextDecoder('utf-8');
-    const norm= normalizeText(td.decode(buf));
-    const { header, body } = splitHeader(norm);
-    const { canon, ok }    = canonicalize(body);
-    return { enc:'utf-8', header, canon, ok };
+    const td   = new TextDecoder('utf-8');
+    const text = td.decode(buf);
+    const { paramLine, canonTrades, ok } = preprocess(text);
+    return { enc:'utf-8', paramLine, canonTrades, ok };
   }
 
   // canonical 解析成 rows（for merge 與期間）
@@ -189,11 +231,13 @@
     input.dispatchEvent(new Event('change', { bubbles:true }));
   }
 
-  // manifest：download（不存在即視為無基準）
+  // manifest：download（不存在就當 null）
   async function readManifest(){
-    const { data } = await sb.storage.from(BUCKET).download(MANIFEST_PATH);
-    if (!data) return null;
-    try{ return JSON.parse(await data.text()); }catch{ return null; }
+    try{
+      const { data, error } = await sb.storage.from(BUCKET).download(MANIFEST_PATH);
+      if (error || !data) return null;
+      return JSON.parse(await data.text());
+    }catch{ return null; }
   }
   async function writeManifest(obj){
     const blob = new Blob([JSON.stringify(obj,null,2)], { type:'application/json' });
@@ -207,14 +251,12 @@
 
   // ===== 本機 TXT：選檔 or 剪貼簿 → 覆蓋分析 =====
   async function handleLocalText(text, filename){
-    const norm = normalizeText(text);
-    const { header, body } = splitHeader(norm);
-    const { canon, ok }    = canonicalize(body);
+    const { paramLine, canonTrades, ok } = preprocess(text);
     if (ok === 0){
       set('本機 TXT 沒有合法的「時間 價格 動作」行。', true);
       return;
     }
-    const decodedText = header ? header + '\n' + canon : canon;
+    const decodedText = (paramLine ? paramLine + '\n' : '') + canonTrades;
     set(`已載入本機檔案 ${filename||''}，共有 ${ok} 筆交易行，開始分析…`);
     await feedToSingle(filename || 'local_0807.txt', decodedText);
   }
@@ -286,7 +328,7 @@
       }
       elBase.textContent = base ? base.name : '（尚無）';
 
-      // 3) 下載 + 解碼
+      // 3) 下載 + preprocess
       const latestUrl = latest.from==='url' ? latest.fullPath : pubUrl(latest.fullPath);
       const rNew = await fetchSmart(latestUrl);
       if (rNew.ok === 0){
@@ -294,17 +336,17 @@
         return;
       }
 
-      let mergedCanon = rNew.canon;
+      let mergedCanon = rNew.canonTrades;
       let start8 = '', end8 = '';
       if (base){
         const baseUrl = base.from==='url' ? base.fullPath : pubUrl(base.fullPath);
         const rBase   = await fetchSmart(baseUrl);
-        const m       = mergeByBaseline(rBase.canon, rNew.canon);
+        const m       = mergeByBaseline(rBase.canonTrades, rNew.canonTrades);
         mergedCanon   = m.combined;
         start8        = m.start8;
         end8          = m.end8;
       } else {
-        const rows = parseCanon(rNew.canon);
+        const rows = parseCanon(rNew.canonTrades);
         start8 = rows.length ? rows[0].ts.slice(0,8) : '';
         end8   = rows.length ? rows[rows.length-1].ts.slice(0,8) : '';
       }
@@ -326,8 +368,8 @@
         }
       };
 
-      const headerLine = rNew.header || '';
-      const decodedText = headerLine ? headerLine + '\n' + mergedCanon : mergedCanon;
+      const paramLine = rNew.paramLine || '';  // 用最新檔的參數
+      const decodedText = (paramLine ? paramLine + '\n' : '') + mergedCanon;
 
       set('已從 Supabase 載入（合併後）資料，開始分析…（可用本機檔案覆蓋）');
       await feedToSingle(latest.name, decodedText);
