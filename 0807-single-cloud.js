@@ -1,4 +1,4 @@
-// 0807-single-cloud.js —— 0807 雲端單檔分析（第一行參數，第二行起才計算）
+// 0807-single-cloud.js —— 0807 雲端單檔分析（期貨用，一口=200元/點）
 (function () {
   'use strict';
   console.log('0807 cloud JS loaded');
@@ -20,26 +20,24 @@
   // line1: BeginTime=84800 EndTime=131000 ForceExitTime=131200 ...
   // line2+: YYYYMMDDhhmmss 價格 動作(...)
   function parseTxt(text){
-    const lines = text
-      .replace(/\r/g,'')
-      .split('\n')
+    const raw = text.replace(/\r/g, '');
+    const lines = raw.split('\n')
       .map(s => s.trim())
       .filter(s => s !== '');
-    if (!lines.length) {
-      throw new Error('TXT 沒有內容');
-    }
 
-    // --- 第一行：參數（不計算） ---
+    if (!lines.length) throw new Error('TXT 沒有內容');
+
+    // --- 第一行：參數（不參與計算） ---
     const params = {};
     const paramLine = lines[0];
     if (paramLine.indexOf('=') >= 0) {
-      paramLine.split(/\s+/).forEach(tok=>{
-        if(!tok) return;
+      paramLine.split(/\s+/).forEach(tok => {
+        if (!tok) return;
         const eqPos = tok.indexOf('=');
-        if(eqPos <= 0) return;
-        const k = tok.slice(0,eqPos);
-        const v = tok.slice(eqPos+1);
-        if(k && v !== '') params[k]=v;
+        if (eqPos <= 0) return;
+        const k = tok.slice(0, eqPos);
+        const v = tok.slice(eqPos + 1);
+        if (k && v !== '') params[k] = v;
       });
     }
 
@@ -49,13 +47,19 @@
       const line = lines[i];
       const parts = line.split(/\s+/).filter(Boolean);
       if (parts.length < 3) continue;
-      const ts     = parts[0];
-      const price  = parseFloat(parts[1]);
-      const action = parts[2];
-      if (!ts || !/^\d{14}$/.test(ts)) continue;
+
+      const ts    = parts[0];
+      const price = parseFloat(parts[1]);
+      // 動作直接拿最後一個 token，避免中間多欄位出錯
+      const action = parts[parts.length - 1];
+
+      if (!/^\d{14}$/.test(ts)) continue;
       if (!isFinite(price)) continue;
-      events.push({ ts, price, action });
+
+      events.push({ ts, price, action: String(action).trim() });
     }
+
+    console.log('events sample =', events.slice(0, 10));
 
     if (!events.length) {
       throw new Error('找不到任何交易紀錄（第二行起）');
@@ -66,52 +70,51 @@
   // ===== 事件 → 交易（多空 + 強制平倉） =====
   function buildTrades(events){
     const trades = [];
-    let pos = 0;      // 0=無, +1=多, -1=空
-    let entry = null; // {ts, price, side}
+    let pos = 0;      // 0=空手, +1=多, -1=空
+    let entry = null; // { ts, price, side }
 
-    events.forEach(ev=>{
+    events.forEach(ev => {
       const { ts, price } = ev;
-      const actionRaw = ev.action || '';
-      const action = String(actionRaw).trim();
+      const action = ev.action || '';
 
-      const isNewBuy   = action.indexOf('新買')   >= 0; // 多開
-      const isNewSell  = action.indexOf('新賣')   >= 0; // 空開
-      const isCloseBuy = action.indexOf('平買')   >= 0; // 平空
-      const isCloseSell= action.indexOf('平賣')   >= 0; // 平多
-      const isForce    = action.indexOf('強制平倉') >= 0; // 強平(多或空皆可)
+      const isNewBuy    = action.indexOf('新買')   >= 0; // 開多
+      const isNewSell   = action.indexOf('新賣')   >= 0; // 開空
+      const isCloseBuy  = action.indexOf('平買')   >= 0; // 平空
+      const isCloseSell = action.indexOf('平賣')   >= 0; // 平多
+      const isForce     = action.indexOf('強制平倉') >= 0; // 多空強平
 
       // --- 開倉 ---
       if (isNewBuy) {
         if (pos !== 0) {
-          // 應該不會發生，保守忽略
+          // 理論上不會出現連續新買未平倉，保守先忽略
           return;
         }
         pos   = +1;
-        entry = { ts, price, side:'L' };
+        entry = { ts, price, side: 'L' };
         return;
       }
+
       if (isNewSell) {
         if (pos !== 0) {
           return;
         }
         pos   = -1;
-        entry = { ts, price, side:'S' };
+        entry = { ts, price, side: 'S' };
         return;
       }
 
       // --- 平倉 / 強制平倉 ---
       const isCloseSignal = isCloseBuy || isCloseSell || isForce;
       if (!isCloseSignal) return;
-      if (pos === 0 || !entry) return; // 沒部位，跳過
+      if (pos === 0 || !entry) return; // 沒有持倉，跳過
 
-      // 多空由目前部位判斷即可，避免 entry.side 不一致
-      const side = pos > 0 ? 'L' : 'S';
+      const side = (pos > 0 ? 'L' : 'S');
       const pnlPts = (side === 'L')
         ? (price - entry.price)
         : (entry.price - price);
 
       trades.push({
-        side,
+        side,                   // 'L' or 'S'
         entryTs   : entry.ts,
         entryPrice: entry.price,
         exitTs    : ts,
@@ -124,6 +127,7 @@
       entry = null;
     });
 
+    console.log('trades count =', trades.length, 'sample =', trades.slice(0, 10));
     return trades;
   }
 
@@ -143,23 +147,23 @@
 
     let wins=0, losses=0, gp=0, gl=0;
 
-    trades.forEach(t=>{
+    trades.forEach(t => {
       eqPts += t.pnlPts;
 
-      if(t.pnlPts > 0){
+      if (t.pnlPts > 0){
         wins++;
         gp += t.pnlPts;
-      }else if(t.pnlPts < 0){
+      }else if (t.pnlPts < 0){
         losses++;
         gl += t.pnlPts;
       }
 
-      if(eqPts > maxEq) maxEq = eqPts;
+      if (eqPts > maxEq) maxEq = eqPts;
       const dd = eqPts - maxEq;
-      if(dd < maxDD) maxDD = dd;
+      if (dd < maxDD) maxDD = dd;
 
-      if(t.side === 'L') longAcc  += t.pnlPts;
-      if(t.side === 'S') shortAcc += t.pnlPts;
+      if (t.side === 'L') longAcc  += t.pnlPts;
+      if (t.side === 'S') shortAcc += t.pnlPts;
 
       labels.push(formatTs(t.exitTs));
       totalPts.push(eqPts);
@@ -247,7 +251,7 @@
     const maxDDNtd = kpi.maxDD * multiplier;
 
     el.innerHTML = `
-      <h3>0807 策略 KPI</h3>
+      <h3>0807 策略 KPI（期貨，一口=${multiplier} 元/點）</h3>
       <table class="kpi-table">
         <tbody>
           <tr>
@@ -256,7 +260,7 @@
           </tr>
           <tr>
             <th>總獲利（點數）</th><td>${fmtPts(kpi.netPts)}</td>
-            <th>總獲利（NT$，1口 × ${multiplier}）</th><td>${fmtNtd(netNtd)}</td>
+            <th>總獲利（NT$）</th><td>${fmtNtd(netNtd)}</td>
           </tr>
           <tr>
             <th>最大回落 MaxDD（點數）</th><td>${fmtPts(kpi.maxDD)}</td>
@@ -318,11 +322,11 @@
       const parsed = parseTxt(text);
       const trades = buildTrades(parsed.events);
       if(!trades.length){
-        alert('TXT 已讀取，但沒有任何「新買/新賣 + 平倉/強制平倉」組成完整交易，請再檢查動作欄文字。');
+        alert('TXT 已讀取，但沒有任何「新買/新賣 + 平倉/強制平倉」組成完整交易，請打開 Console 檢查 events / trades log。');
         return;
       }
 
-      const multiplier = parseFloat($('#multiplier').value) || 200; // 0807 期貨預設 1口=200元/點
+      const multiplier = parseFloat($('#multiplier').value) || 200; // 期貨一口 200 元/點
       const eq = computeEquity(trades, multiplier);
 
       renderChart(eq.labels, eq.totalPts, eq.longPts, eq.shortPts);
@@ -365,7 +369,7 @@
     });
   }
 
-  // ===== Supabase：雲端讀檔 =====
+  // ===== Supabase：雲端讀檔（和前面一樣） =====
   const prefix   = $('#cloudPrefix');
   const btnList  = $('#btnCloudList');
   const pick     = $('#cloudSelect');
@@ -421,7 +425,6 @@
     return pub?.publicUrl || '';
   }
 
-  // ArrayBuffer → 自動偵測編碼（utf-8 / big5 / gb18030）
   function decodeBest(ab){
     const encs = ['utf-8','big5','gb18030'];
     let best   = { txt:'', bad:1e9, enc:'' };
