@@ -1,7 +1,7 @@
 // 0807-single-cloud.js —— 0807 雲端單檔分析
 (function () {
   'use strict';
-  console.log('0807 cloud JS loaded'); // F12 應該看到這行
+  console.log('0807 cloud JS loaded');
 
   // ===== 小工具 =====
   const $ = s => document.querySelector(s);
@@ -21,18 +21,21 @@
     const lines = text.split(/\r?\n/).map(s=>s.trim()).filter(s=>s!=='');
     if(!lines.length) throw new Error('TXT 沒有內容');
 
-    // line 1: BeginTime=84800 EndTime=131000 ...
+    // 第 1 行：BeginTime=84800 EndTime=131000 ...
     const params = {};
     const first = lines[0];
-    first.split(/\s+/).forEach(tok=>{
-      if(!tok) return;
-      const [k,v] = tok.split('=');
-      if(k && v !== undefined) params[k]=v;
-    });
+    // 有可能第一行不是參數（防呆）就略過
+    if(first.indexOf('=') >= 0){
+      first.split(/\s+/).forEach(tok=>{
+        if(!tok) return;
+        const [k,v] = tok.split('=');
+        if(k && v !== undefined) params[k]=v;
+      });
+    }
 
-    // 後面: YYYYMMDDhhmmss 價格 動作
+    // 之後：YYYYMMDDhhmmss 價格 動作
     const events = [];
-    for(let i=1;i<lines.length;i++){
+    for(let i=(first.indexOf('=')>=0?1:0); i<lines.length; i++){
       const parts = lines[i].split(/\s+/).filter(Boolean);
       if(parts.length < 3) continue;
       const ts     = parts[0];
@@ -56,7 +59,7 @@
       const { ts, price, action } = ev;
 
       if(action === '新買'){
-        if(pos !== 0) return; // 安全起見，忽略異常
+        if(pos !== 0) return;
         pos   = +1;
         entry = { ts, price, side:'L' };
       }else if(action === '新賣'){
@@ -288,7 +291,6 @@
           <td>${formatTs(t.entryTs)}</td>
           <td>${t.entryPrice}</td>
           <td>${formatTs(t.exitTs)}</td>
-          <td>${t.exitPrice}</td>
           <td>${t.exitAction}</td>
           <td>${t.pnlPts.toFixed(1)}</td>
           <td>${Math.round(pnlNtd).toLocaleString()}</td>
@@ -321,9 +323,12 @@
 
   // ===== 本機檔案 / 剪貼簿 =====
   const fileInput = $('#file');
+  console.log('fileInput =', fileInput);
+
   if(fileInput){
     fileInput.addEventListener('change', e=>{
       const f = e.target.files && e.target.files[0];
+      console.log('file change', f);
       if(!f) return;
       const fr = new FileReader();
       fr.onload = ev => {
