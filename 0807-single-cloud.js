@@ -6,9 +6,9 @@
 //
 // 本檔負責：
 //   - 從本機選檔 / 剪貼簿 / Supabase 取得 TXT
-//   - "很鬆" 地抓出「時間 / 價格 / 動作」三欄
+//   - 以 split 方式抓出「時間 / 價格 / 動作」三欄
 //   - 轉成 canonical：YYYYMMDDhhmmss.000000 價格(6位) 動作
-//   - patch window.SHARED.readAsTextAuto，把 canonical 丟給 single.js 分析
+//   - 做成新的 File 丟給 #file，讓 single.js 自己分析
 
 (function () {
   'use strict';
@@ -41,7 +41,7 @@
     return lines.join('\n');
   }
 
-  // ===== 0807 TXT → canonical（只看「時間 價格 動作」三欄） =====
+  // ===== 0807 TXT → canonical（用 split 判欄位） =====
   function canonicalizeFrom0807(raw){
     const norm = normalizeText(raw);
     const out = [];
@@ -51,26 +51,24 @@
     for(let idx=0; idx<lines.length; idx++){
       const line = lines[idx];
 
-      // 第一行參數：含 BeginTime 與 EndTime → 直接跳過
+      // 第一行參數：含 BeginTime 與 EndTime → 跳過
       if(idx === 0 && line.indexOf('BeginTime=') >= 0 && line.indexOf('EndTime=') >= 0){
         continue;
       }
 
-      // 先用空白拆欄位
       const parts = line.split(/\s+/).filter(Boolean);
       if(parts.length < 3){
         bad++; continue;
       }
 
-      const ts   = parts[0];            // 20231201093900
-      const pStr = parts[1];            // 17366
-      const act  = parts.slice(2).join(' ').trim();  // 後面全部當動作
+      const ts   = parts[0];
+      const pStr = parts[1];
+      const act  = parts.slice(2).join(' ').trim();
 
-      // 時間一定是 14 位數字
+      // 時間 14 位數字
       if(!/^\d{14}$/.test(ts)){
         bad++; continue;
       }
-
       // 價格是數字
       if(!/^\d+(\.\d+)?$/.test(pStr)){
         bad++; continue;
@@ -103,40 +101,14 @@
     return { canon, ok, enc:'utf-8' };
   }
 
-  // ===== 將 canonical 丟給 single.js =====
-  function patchSharedReaders(canonicalText){
-    if(!window.SHARED) return;
-
-    if(typeof window.SHARED.readAsTextAuto === 'function'){
-      const orig = window.SHARED.readAsTextAuto;
-      window.SHARED.readAsTextAuto = async function(){
-        window.SHARED.readAsTextAuto = orig;  // 用一次就還原
-        return canonicalText;
-      };
-    }
-
-    if(typeof window.SHARED.paramsLabel === 'function'){
-      const origPL = window.SHARED.paramsLabel;
-      window.SHARED.paramsLabel = function(arg){
-        try{
-          return origPL(arg);
-        }catch{
-          const arr = Array.isArray(arg?.raw) ? arg.raw : (Array.isArray(arg)?arg:[]);
-          return (arr.slice(0,2).join(' ｜ ')) || '—';
-        }
-      };
-    }
-  }
-
-  async function feedToSingle(filename, canonicalText){
+  // ===== 把 canonical 丟給 single.js（完全不用 patch SHARED） =====
+  async function feedToSingleWithCanonical(filename, canonicalText){
     const input = $('#file');   // single.js 用的隱藏 file input
     if(!input){
       setStatus('找不到 #file，single.js 可能尚未載入。', true);
       return;
     }
-    patchSharedReaders(canonicalText);
-
-    const file = new File([canonicalText], filename || '0807.txt', { type:'text/plain' });
+    const file = new File([canonicalText], filename || '0807_canon.txt', { type:'text/plain' });
     const dt = new DataTransfer();
     dt.items.add(file);
     input.files = dt.files;
@@ -152,8 +124,8 @@
       alert(`來源「${sourceLabel}」沒有合法交易行，請確認 TXT 格式。`);
       return;
     }
-    setStatus(`來源「${sourceLabel}」，已轉換 ${ok} 行交易，送交單檔分析引擎…`, false);
-    feedToSingle(filename || '0807.txt', canon);
+    setStatus(`來源「${sourceLabel}」，已轉換 ${ok} 行交易，交給 single.js 分析…`, false);
+    feedToSingleWithCanonical(filename || '0807_canon.txt', canon);
   }
 
   // ==================== 本機檔案 ====================
@@ -165,7 +137,7 @@
       const fr = new FileReader();
       fr.onload = ev => {
         const txt = ev.target.result;
-        runFromRawText(txt, f.name, '本機檔案');
+        runFromRawText(txt, f.name.replace(/\.txt$/i,'_canon.txt'), '本機檔案');
       };
       fr.readAsText(f, 'utf-8');
     });
@@ -178,7 +150,7 @@
       try{
         const txt = await navigator.clipboard.readText();
         if(!txt) return alert('剪貼簿沒有文字');
-        runFromRawText(txt, 'clipboard.txt', '剪貼簿文字');
+        runFromRawText(txt, 'clipboard_canon.txt', '剪貼簿文字');
       }catch(e){
         alert('無法讀取剪貼簿內容，請改用「選擇檔案」。');
       }
@@ -279,12 +251,13 @@
     setStatus('下載並轉換為 canonical 格式…', false);
     try{
       const { canon, ok, enc } = await fetchTextSmart(url);
+      console.log('[0807 cloud] ok=', ok, 'enc=', enc);
       if(!ok){
         setStatus(`沒有合法交易行（編碼=${enc}）。`, true);
         return;
       }
-      setStatus(`已轉換 ${ok} 行交易（編碼=${enc}），送交單檔分析引擎…`, false);
-      feedToSingle(path.split('/').pop() || '0807.txt', canon);
+      setStatus(`已轉換 ${ok} 行交易（編碼=${enc}），交給 single.js 分析…`, false);
+      feedToSingleWithCanonical(path.split('/').pop().replace(/\.txt$/i,'_canon.txt'), canon);
     }catch(e){
       console.error(e);
       setStatus('下載或轉換失敗：' + (e.message||e), true);
