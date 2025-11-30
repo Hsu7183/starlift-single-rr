@@ -1,10 +1,17 @@
-// 0807-single-cloud.js — 以「基準最後日」為錨合併：分析資料＝基準全段 + 最新檔的新增；摘要只顯示期間
+// 0807-single-cloud.js — 0807 專用：
+// 1) 預設從 Supabase「reports」抓最新 0807 TXT + 基準，合併後丟給 single.js。
+// 2) 也可用「選擇檔案」或「從剪貼簿貼上 TXT」改用本機 TXT 重新分析。
+//    支援兩種 TXT：
+//    - 舊：第一行 84800.000000 131000.000000 ... （全數字）
+//    - 新：第一行 BeginTime=84800 EndTime=131000 ...，後面「時間 價格 動作」
 (function () {
   const $ = s => document.querySelector(s);
   const status = $('#autostatus'); if (status) status.style.whiteSpace = 'pre-wrap';
   const elLatest = $('#latestName'), elBase = $('#baseName');
   const elPeriod = $('#periodText');
-  const btnBase = $('#btnSetBaseline');
+  const btnBase  = $('#btnSetBaseline');
+  const fileInput= $('#file');
+  const btnClip  = $('#btn-clip');
 
   // Supabase（與 upload.html 相同）
   const SUPABASE_URL = "https://byhbmmnacezzgkwfkozs.supabase.co";
@@ -17,11 +24,15 @@
   const WANT = /0807/i;
   const MANIFEST_PATH = "manifests/0807.json";
 
-  // canonical：我們自己產生的格式
   const CANON_RE   = /^(\d{14})\.0{6}\s+(\d+\.\d{6})\s+(新買|平賣|新賣|平買|強制平倉)\s*$/;
   const EXTRACT_RE = /.*?(\d{14})(?:\.0{1,6})?\s+(\d+(?:\.\d{1,6})?)\s*(新買|平賣|新賣|平買|強制平倉)\s*$/;
 
-  function set(msg, bad=false){ if(status){ status.textContent=msg; status.style.color = bad?'#c62828':'#666'; } }
+  function set(msg, bad=false){
+    if(status){
+      status.textContent = msg;
+      status.style.color = bad ? '#c62828' : '#666';
+    }
+  }
 
   function pubUrl(path){
     const { data } = sb.storage.from(BUCKET).getPublicUrl(path);
@@ -57,7 +68,7 @@
 
   // ===== 文字前處理 =====
   function normalizeText(raw){
-    let s = raw.replace(/\ufeff/gi,'').replace(/\u200b|\u200c|\u200d/gi,'');
+    let s = (raw || '').replace(/\ufeff/gi,'').replace(/\u200b|\u200c|\u200d/gi,'');
     s = s.replace(/[\x00-\x09\x0B-\x1F\x7F]/g,'');   // 控制碼
     s = s.replace(/\r\n?/g,'\n').replace(/\u3000/g,' ');
     const lines = s.split('\n').map(l=>l.replace(/\s+/g,' ').trim());
@@ -77,7 +88,7 @@
     return { header:'', body:normText };
   }
 
-  // 將「時間 價格 動作」轉成 canonical 行（我們後續 merge / parse 都吃這個）
+  // 將「時間 價格 動作」轉成 canonical 行
   function canonicalize(txt){
     const out=[], lines = txt.split('\n'); let ok=0,bad=0;
     for(const l of lines){
@@ -194,7 +205,46 @@
     if (error) throw new Error(error.message);
   }
 
-  // ===== 主流程 =====
+  // ===== 本機 TXT：選檔 or 剪貼簿 → 覆蓋分析 =====
+  async function handleLocalText(text, filename){
+    const norm = normalizeText(text);
+    const { header, body } = splitHeader(norm);
+    const { canon, ok }    = canonicalize(body);
+    if (ok === 0){
+      set('本機 TXT 沒有合法的「時間 價格 動作」行。', true);
+      return;
+    }
+    const decodedText = header ? header + '\n' + canon : canon;
+    set(`已載入本機檔案 ${filename||''}，共有 ${ok} 筆交易行，開始分析…`);
+    await feedToSingle(filename || 'local_0807.txt', decodedText);
+  }
+
+  if (fileInput){
+    fileInput.addEventListener('change', async (ev)=>{
+      const f = ev.target.files && ev.target.files[0];
+      if(!f) return;
+      try{
+        const txt = await f.text();
+        await handleLocalText(txt, f.name);
+      }catch(e){
+        set('讀取本機檔案失敗：' + (e.message||e), true);
+      }
+    });
+  }
+
+  if (btnClip){
+    btnClip.addEventListener('click', async ()=>{
+      try{
+        const txt = await navigator.clipboard.readText();
+        if(!txt){ alert('剪貼簿沒有文字'); return; }
+        await handleLocalText(txt, 'clipboard.txt');
+      }catch(e){
+        alert('無法讀取剪貼簿內容，請改用「選擇檔案」。');
+      }
+    });
+  }
+
+  // ===== Supabase 自動流程 =====
   async function boot(){
     try{
       const url = new URL(location.href);
@@ -220,7 +270,7 @@
         latest = list[0];
       }
       if(!latest){
-        set('找不到檔名含「0807」的 TXT（可用 ?file= 指定）。', true);
+        set('找不到檔名含「0807」的 TXT（可用 ?file= 指定），也可以直接選擇本機檔案。', true);
         return;
       }
       elLatest.textContent = latest.name;
@@ -236,7 +286,7 @@
       }
       elBase.textContent = base ? base.name : '（尚無）';
 
-      // 3) 下載 + 解碼（新格式 / 舊格式都行）
+      // 3) 下載 + 解碼
       const latestUrl = latest.from==='url' ? latest.fullPath : pubUrl(latest.fullPath);
       const rNew = await fetchSmart(latestUrl);
       if (rNew.ok === 0){
@@ -259,10 +309,9 @@
         end8   = rows.length ? rows[rows.length-1].ts.slice(0,8) : '';
       }
 
-      // 4) 期間摘要
       elPeriod.textContent = `期間：${start8 || '—'} 開始到 ${end8 || '—'} 結束`;
 
-      // 5) 設最新為基準
+      // 設最新為基準
       btnBase.disabled = false;
       btnBase.onclick = async ()=>{
         try{
@@ -277,14 +326,10 @@
         }
       };
 
-      // 6) 組給 single.js 用的文字：
-      //    若是新格式，rNew.header = "BeginTime=..."; 舊格式則 header = ""
       const headerLine = rNew.header || '';
-      const decodedText = headerLine
-        ? headerLine + '\n' + mergedCanon
-        : mergedCanon;
+      const decodedText = headerLine ? headerLine + '\n' + mergedCanon : mergedCanon;
 
-      set('已載入（合併後）資料，開始分析…');
+      set('已從 Supabase 載入（合併後）資料，開始分析…（可用本機檔案覆蓋）');
       await feedToSingle(latest.name, decodedText);
 
     }catch(err){
