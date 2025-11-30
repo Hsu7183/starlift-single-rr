@@ -6,7 +6,7 @@
 //
 // 本檔負責：
 //   - 從本機選檔 / 剪貼簿 / Supabase 取得 TXT
-//   - 寬鬆解析出「時間 / 價格 / 動作」三欄
+//   - 逐行 split 判斷「時間 / 價格 / 動作」三欄是否合法
 //   - 轉成 canonical：YYYYMMDDhhmmss.000000 價格(6位) 動作
 //   - patch window.SHARED.readAsTextAuto，把 canonical 丟給 single.js 分析
 
@@ -32,21 +32,16 @@
     global:{ fetch:(u,o={})=>fetch(u,{...o,cache:'no-store'}) }
   });
 
-  // ===== 0807 TXT → canonical =====
-  //
-  // 寬鬆版本：只要一行裡有 14 位數字 + 價格數字 + 動作關鍵字，就抓
-  //
-  const EXTRACT_LOOSE_RE =
-    /.*?(\d{14})\D+(\d+(?:\.\d+)?)[^\d新平強]*?(新買|平賣|新賣|平買|強制平倉)/;
-
+  // ===== 清理文字 =====
   function normalizeText(raw){
     let s = raw.replace(/\ufeff/gi,'').replace(/\u200b|\u200c|\u200d/gi,'');
-    s = s.replace(/[\x00-\x09\x0B-\x1F\x7F]/g,'');
+    s = s.replace(/[\x00-\x09\x0B-\x1F\x7F]/g,'');    // 控制碼
     s = s.replace(/\r\n?/g,'\n').replace(/\u3000/g,' ');
     const lines = s.split('\n').map(l=>l.trim()).filter(Boolean);
     return lines.join('\n');
   }
 
+  // ===== 0807 TXT → canonical（用 split 判斷三欄） =====
   function canonicalizeFrom0807(raw){
     const norm = normalizeText(raw);
     const out = [];
@@ -56,22 +51,37 @@
     for(let idx=0; idx<lines.length; idx++){
       const line = lines[idx];
 
-      // 第一行參數：含 BeginTime 與 EndTime，直接略過
+      // 第一行參數：含 BeginTime 與 EndTime → 直接跳過
       if(idx === 0 && line.indexOf('BeginTime=') >= 0 && line.indexOf('EndTime=') >= 0){
         continue;
       }
 
-      const m = line.match(EXTRACT_LOOSE_RE);
-      if(!m){
-        bad++;
-        continue;
+      const parts = line.split(/\s+/).filter(Boolean);
+      if(parts.length < 3){
+        bad++; continue;
       }
 
-      const ts  = m[1];
-      const pxN = Number(m[2]);
-      const act = m[3];
+      const ts   = parts[0];
+      const pStr = parts[1];
+      const actRaw = parts[2];
 
-      const px6 = Number.isFinite(pxN) ? pxN.toFixed(6) : m[2];
+      // 檢查時間 / 價格格式
+      if(!/^\d{14}$/.test(ts)){
+        bad++; continue;
+      }
+      if(!/^\d+(\.\d+)?$/.test(pStr)){
+        bad++; continue;
+      }
+
+      // 動作只要包含關鍵字即可
+      const mAct = actRaw.match(/(新買|平賣|新賣|平買|強制平倉)/);
+      if(!mAct){
+        bad++; continue;
+      }
+      const act = mAct[1];
+
+      const px = Number(pStr);
+      const px6 = Number.isFinite(px) ? px.toFixed(6) : pStr;
 
       out.push(`${ts}.000000 ${px6} ${act}`);
       ok++;
@@ -137,7 +147,7 @@
     input.dispatchEvent(new Event('change',{ bubbles:true }));
   }
 
-  // ===== 共用：由 raw text 直接跑分析（本機 / 剪貼簿使用） =====
+  // ===== 共用：由 raw text 直接跑分析（本機 / 剪貼簿） =====
   function runFromRawText(raw, filename, sourceLabel){
     const { canon, ok, bad } = canonicalizeFrom0807(raw);
     if(!ok){
