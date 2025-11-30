@@ -1,5 +1,5 @@
-// 0807-single-cloud.js —— 0807 雲端單檔分析
-(function(){
+// single-cloud.js —— 0807 雲端單檔分析
+(function () {
   'use strict';
 
   // ===== 小工具 =====
@@ -15,12 +15,12 @@
 
   let chart = null;
 
-  // ===== 解析 0807 TXT =====
+  // ===== 解析 0807 TXT 格式 =====
   function parseTxt(text){
     const lines = text.split(/\r?\n/).map(s=>s.trim()).filter(s=>s!=='');
     if(!lines.length) throw new Error('TXT 沒有內容');
 
-    // 第 1 行：BeginTime=... EndTime=... ...
+    // line 1: BeginTime=84800 EndTime=131000 ...
     const params = {};
     const first = lines[0];
     first.split(/\s+/).forEach(tok=>{
@@ -29,7 +29,7 @@
       if(k && v !== undefined) params[k]=v;
     });
 
-    // 之後每行：YYYYMMDDhhmmss 價格 動作
+    // 後面: YYYYMMDDhhmmss 價格 動作
     const events = [];
     for(let i=1;i<lines.length;i++){
       const parts = lines[i].split(/\s+/).filter(Boolean);
@@ -45,35 +45,33 @@
     return { params, events };
   }
 
-  // ===== 事件 → 交易（多空判斷 + 強制平倉） =====
+  // ===== 事件 → 交易（多空 + 強制平倉） =====
   function buildTrades(events){
     const trades = [];
-    let pos = 0;        // 0=空手, +1=多, -1=空
-    let entry = null;   // { ts, price, side }
+    let pos = 0;      // 0=無, +1=多, -1=空
+    let entry = null; // {ts, price, side}
 
     events.forEach(ev=>{
       const { ts, price, action } = ev;
 
       if(action === '新買'){
-        // 開多
-        if(pos !== 0) return;  // 保守一點，忽略異常
+        if(pos !== 0) return; // 安全起見，忽略異常
         pos   = +1;
         entry = { ts, price, side:'L' };
       }else if(action === '新賣'){
-        // 開空
         if(pos !== 0) return;
         pos   = -1;
         entry = { ts, price, side:'S' };
       }else if(action === '平賣' || action === '平買' || action === '強制平倉'){
         if(pos === 0 || !entry) return;
 
-        const side = entry.side;   // L / S
+        const side   = entry.side;
         const pnlPts = (side === 'L')
           ? (price - entry.price)
           : (entry.price - price);
 
         trades.push({
-          side,                   // 'L' / 'S'
+          side,                   // 'L' or 'S'
           entryTs   : entry.ts,
           entryPrice: entry.price,
           exitTs    : ts,
@@ -155,7 +153,7 @@
     };
   }
 
-  // ===== 格式化時間 YYYYMMDDhhmmss → YYYY-MM-DD hh:mm =====
+  // ===== YYYYMMDDhhmmss → YYYY-MM-DD hh:mm =====
   function formatTs(ts){
     if(!ts || ts.length < 12) return ts || '';
     const y  = ts.slice(0,4);
@@ -166,7 +164,7 @@
     return `${y}-${m}-${d} ${hh}:${mm}`;
   }
 
-  // ===== 繪圖 =====
+  // ===== 畫 Chart.js 折線圖 =====
   function renderChart(labels, totalPts, longPts, shortPts){
     const ctx = $('#chart').getContext('2d');
     if(chart) chart.destroy();
@@ -298,7 +296,7 @@
     }).join('');
   }
 
-  // ===== 主流程：從文字跑整個分析 =====
+  // ===== 主流程：由文字跑完整分析 =====
   function runAnalysisFromText(text){
     try{
       const parsed = parseTxt(text);
@@ -320,7 +318,7 @@
     }
   }
 
-  // ===== File / 剪貼簿 =====
+  // ===== 本機檔案 / 剪貼簿 =====
   const fileInput = $('#file');
   if(fileInput){
     fileInput.addEventListener('change', e=>{
@@ -348,7 +346,7 @@
     });
   }
 
-  // ===== Supabase：雲端讀檔（reports bucket） =====
+  // ===== Supabase：雲端讀檔 =====
   const prefix   = $('#cloudPrefix');
   const btnList  = $('#btnCloudList');
   const pick     = $('#cloudSelect');
@@ -357,15 +355,9 @@
   const meta     = $('#cloudMeta');
   const prev     = $('#cloudPreview');
 
-  if(btnList){
-    btnList.addEventListener('click', listCloud);
-  }
-  if(btnPrev){
-    btnPrev.addEventListener('click', previewCloud);
-  }
-  if(btnImp){
-    btnImp.addEventListener('click', importCloudToAnalysis);
-  }
+  if(btnList) btnList.addEventListener('click', listCloud);
+  if(btnPrev) btnPrev.addEventListener('click', previewCloud);
+  if(btnImp)  btnImp.addEventListener('click', importCloudToAnalysis);
 
   async function listCloud(){
     prev.textContent = '';
@@ -375,8 +367,8 @@
     const p     = (prefix?.value || '').trim();
     const fixed = p && !p.endsWith('/') ? p + '/' : p;
 
-    const { data, error } = await sb.storage.from(BUCKET).list(fixed, {
-      limit: 1000,
+    const { data, error } = await sb.storage.from(BUCKET).list(fixed,{
+      limit:1000,
       sortBy:{ column:'name', order:'asc' }
     });
 
@@ -391,12 +383,11 @@
 
     pick.innerHTML = '';
     data.forEach(it=>{
-      // 跳過資料夾
-      if(it.id === null && !it.metadata) return;
-      const path = (fixed || '') + it.name;
-      const sizeKB = it.metadata?.size ? (it.metadata.size / 1024).toFixed(1) : '-';
-      const opt = document.createElement('option');
-      opt.value = path;
+      if(it.id === null && !it.metadata) return; // 跳過資料夾
+      const path   = (fixed || '') + it.name;
+      const sizeKB = it.metadata?.size ? (it.metadata.size/1024).toFixed(1) : '-';
+      const opt    = document.createElement('option');
+      opt.value    = path;
       opt.textContent = `${path} (${sizeKB} KB)`;
       pick.appendChild(opt);
     });
@@ -411,15 +402,14 @@
     return pub?.publicUrl || '';
   }
 
-  // 自動偵測 utf-8 / big5 / gb18030
+  // ArrayBuffer → 自動偵測編碼（utf-8 / big5 / gb18030）
   function decodeBest(ab){
     const encs = ['utf-8','big5','gb18030'];
     let best   = { txt:'', bad:1e9, enc:'' };
-
     for(const e of encs){
       try{
-        const t = new TextDecoder(e, { fatal:false }).decode(ab);
-        const b = (t.match(/\uFFFD/g) || []).length;
+        const t = new TextDecoder(e,{fatal:false}).decode(ab);
+        const b = (t.match(/\uFFFD/g)||[]).length;
         if(b < best.bad) best = { txt:t, bad:b, enc:e };
       }catch(_){}
     }
@@ -438,7 +428,7 @@
       return;
     }
 
-    const r = await fetch(url, { cache:'no-store' });
+    const r = await fetch(url,{cache:'no-store'});
     if(!r.ok){
       prev.textContent = `HTTP ${r.status}`;
       return;
@@ -450,7 +440,7 @@
     meta.textContent = `來源：${path}（編碼：${best.enc}）`;
     const lines      = best.txt.split(/\r?\n/);
     prev.textContent = lines.slice(0,500).join('\n') +
-      (lines.length > 500 ? `\n...（共 ${lines.length} 行）` : '');
+      (lines.length>500 ? `\n...（共 ${lines.length} 行）` : '');
   }
 
   async function importCloudToAnalysis(){
@@ -460,7 +450,7 @@
     const url = await getUrl(path);
     if(!url) return alert('取得連結失敗');
 
-    const r = await fetch(url, { cache:'no-store' });
+    const r = await fetch(url,{cache:'no-store'});
     if(!r.ok) return alert(`HTTP ${r.status}`);
 
     const txt = await r.text();
