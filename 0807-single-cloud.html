@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>0807 雲端單檔分析</title>
+  <style>
+    body{font-family:ui-sans-serif,system-ui;-webkit-font-smoothing:antialiased;margin:0;padding:16px;background:#f7f7fb}
+    .wrap{max-width:1440px;margin:0 auto}
+    .row{display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+    .chip{display:inline-block;background:#eef;padding:6px 10px;border-radius:999px;font-size:12px}
+    .card{background:#fff;border:1px solid #e5e7eb;border-radius:12px;box-shadow:0 2px 10px rgba(0,0,0,.03);padding:12px;margin-bottom:20px}
+    #chartBox{height:520px}
+    table{width:100%;border-collapse:collapse;font-size:13px}
+    th,td{padding:4px 6px;border-bottom:1px solid #e5e7eb;text-align:right;white-space:nowrap}
+    th:first-child,td:first-child{text-align:left}
+    .back-link{margin-bottom:12px;display:inline-block}
+    .scroll-x{overflow-x:auto}
+    .btn{padding:8px 12px;border:0;border-radius:8px;cursor:pointer;font-size:13px}
+    .btn-primary{background:#0d6efd;color:#fff}
+    .btn-gray{background:#6c757d;color:#fff}
+    .sel{min-width:320px;padding:8px;border:1px solid #ddd;border-radius:8px;font-size:13px}
+    .ipt{padding:8px;border:1px solid #ddd;border-radius:8px;font-size:13px}
+    .tiny{font-size:12px;color:#666}
+    pre.preview{margin-top:10px;max-height:280px;overflow:auto;background:#f8f9fa;padding:10px;border:1px solid #eee;border-radius:8px;white-space:pre-wrap;font-size:12px}
+    h1{margin-top:0}
+    h3{margin:0 0 8px 0}
+
+    .pnl-win{color:#b91c1c;font-weight:600}
+    .pnl-lose{color:#047857;font-weight:600}
+    .kpi-table th{background:#f3f4ff;font-weight:600}
+  </style>
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Supabase -->
+  <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+</head>
+<body>
+  <div class="wrap">
+    <a class="back-link" href="index.html">← 返回首頁</a>
+    <h1>0807 雲端單檔分析</h1>
+
+    <!-- 控制列：本機檔案 / 剪貼簿 + 乘數 -->
+    <div class="row card">
+      <div class="row" style="gap:8px">
+        <button id="btn-clip" class="btn btn-gray">從剪貼簿貼上 TXT</button>
+        <input id="file" type="file" accept=".txt" />
+      </div>
+      <div class="row" style="gap:8px">
+        <label class="tiny">每口乘數（台指期預設 200）：</label>
+        <input id="multiplier" class="ipt" type="number" value="200" step="1" style="width:120px" />
+      </div>
+      <div class="chip">參數：<span id="paramChip">—</span></div>
+    </div>
+
+    <!-- 雲端檔案（Supabase / reports） -->
+    <div class="card" id="cloudPanel">
+      <h3>從「資料上傳區」讀檔（Supabase / reports）</h3>
+      <div class="row">
+        <input id="cloudPrefix" class="ipt" placeholder="篩選資料夾（例：0807/ 或 2025-11-30/）" />
+        <button id="btnCloudList" class="btn btn-primary">載入清單</button>
+        <select id="cloudSelect" class="sel">
+          <option value="">（請先載入清單）</option>
+        </select>
+        <button id="btnCloudPreview" class="btn btn-gray">預覽</button>
+        <button id="btnCloudImport" class="btn btn-primary">載入到分析</button>
+      </div>
+      <div id="cloudMeta" class="tiny" style="margin-top:6px;"></div>
+      <pre id="cloudPreview" class="preview"></pre>
+    </div>
+
+    <!-- 資產曲線圖 -->
+    <div id="chartBox" class="card">
+      <h3>資產曲線（點數）</h3>
+      <canvas id="chart"></canvas>
+    </div>
+
+    <!-- KPI（合併表格） -->
+    <div id="kpiAll" class="card scroll-x"></div>
+
+    <!-- Risk-Return 表（預留未用） -->
+    <div id="rrLines" class="card scroll-x">
+      <div class="tiny">（0807 版暫不顯示 Risk-Return 圖，可之後再擴充）</div>
+    </div>
+
+    <!-- 交易明細表 -->
+    <div class="card scroll-x">
+      <h3>交易明細</h3>
+      <table id="tradeTable">
+        <thead></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- 主程式：0807 雲端單檔分析 -->
+  <script src="0807-single-cloud.js"></script>
+</body>
+</html>
