@@ -1,4 +1,4 @@
-// 0807-single-cloud.js —— 0807 雲端單檔分析
+// 0807-single-cloud.js —— 0807 雲端單檔分析（第一行參數，第二行起才計算）
 (function () {
   'use strict';
   console.log('0807 cloud JS loaded');
@@ -16,36 +16,52 @@
 
   let chart = null;
 
-  // ===== 解析 0807 TXT 格式 =====
+  // ===== 解析 0807 TXT =====
+  // 格式：
+  // line1: BeginTime=84800 EndTime=131000 ForceExitTime=131200 ...
+  // line2+: YYYYMMDDhhmmss 價格 動作(新買/平賣/新賣/平買/強制平倉)
   function parseTxt(text){
-    const lines = text.split(/\r?\n/).map(s=>s.trim()).filter(s=>s!=='');
-    if(!lines.length) throw new Error('TXT 沒有內容');
-
-    // 第 1 行：BeginTime=84800 EndTime=131000 ...
-    const params = {};
-    const first = lines[0];
-    // 有可能第一行不是參數（防呆）就略過
-    if(first.indexOf('=') >= 0){
-      first.split(/\s+/).forEach(tok=>{
-        if(!tok) return;
-        const [k,v] = tok.split('=');
-        if(k && v !== undefined) params[k]=v;
-      });
+    // 統一換行、去掉空行
+    const lines = text
+      .replace(/\r/g,'')
+      .split('\n')
+      .map(s => s.trim())
+      .filter(s => s !== '');
+    if (!lines.length) {
+      throw new Error('TXT 沒有內容');
     }
 
-    // 之後：YYYYMMDDhhmmss 價格 動作
+    // --- 第一行：參數（不計算） ---
+    const params = {};
+    const paramLine = lines[0];
+    paramLine.split(/\s+/).forEach(tok => {
+      if (!tok) return;
+      const eqPos = tok.indexOf('=');
+      if (eqPos <= 0) return;
+      const k = tok.slice(0, eqPos);
+      const v = tok.slice(eqPos + 1);
+      if (k && v !== '') params[k] = v;
+    });
+
+    // --- 第二行起：交易紀錄 ---
     const events = [];
-    for(let i=(first.indexOf('=')>=0?1:0); i<lines.length; i++){
-      const parts = lines[i].split(/\s+/).filter(Boolean);
-      if(parts.length < 3) continue;
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i];
+      const parts = line.split(/\s+/).filter(Boolean);
+      // 至少要：時間 價格 動作
+      if (parts.length < 3) continue;
       const ts     = parts[0];
       const price  = parseFloat(parts[1]);
       const action = parts[2];
-      if(!ts || !isFinite(price)) continue;
+      if (!ts || !/^\d{14}$/.test(ts)) continue;
+      if (!isFinite(price)) continue;
       events.push({ ts, price, action });
     }
 
-    if(!events.length) throw new Error('找不到任何交易紀錄行');
+    if (!events.length) {
+      throw new Error('找不到任何交易紀錄（第二行起）');
+    }
+
     return { params, events };
   }
 
@@ -55,19 +71,19 @@
     let pos = 0;      // 0=無, +1=多, -1=空
     let entry = null; // {ts, price, side}
 
-    events.forEach(ev=>{
+    events.forEach(ev => {
       const { ts, price, action } = ev;
 
-      if(action === '新買'){
-        if(pos !== 0) return;
+      if (action === '新買') {
+        if (pos !== 0) return;
         pos   = +1;
         entry = { ts, price, side:'L' };
-      }else if(action === '新賣'){
-        if(pos !== 0) return;
+      } else if (action === '新賣') {
+        if (pos !== 0) return;
         pos   = -1;
         entry = { ts, price, side:'S' };
-      }else if(action === '平賣' || action === '平買' || action === '強制平倉'){
-        if(pos === 0 || !entry) return;
+      } else if (action === '平賣' || action === '平買' || action === '強制平倉') {
+        if (pos === 0 || !entry) return;
 
         const side   = entry.side;
         const pnlPts = (side === 'L')
@@ -108,23 +124,23 @@
 
     let wins=0, losses=0, gp=0, gl=0;
 
-    trades.forEach(t=>{
+    trades.forEach(t => {
       eqPts += t.pnlPts;
 
-      if(t.pnlPts > 0){
+      if (t.pnlPts > 0){
         wins++;
         gp += t.pnlPts;
-      }else if(t.pnlPts < 0){
+      } else if (t.pnlPts < 0){
         losses++;
         gl += t.pnlPts;
       }
 
-      if(eqPts > maxEq) maxEq = eqPts;
+      if (eqPts > maxEq) maxEq = eqPts;
       const dd = eqPts - maxEq;
-      if(dd < maxDD) maxDD = dd;
+      if (dd < maxDD) maxDD = dd;
 
-      if(t.side === 'L') longAcc  += t.pnlPts;
-      if(t.side === 'S') shortAcc += t.pnlPts;
+      if (t.side === 'L') longAcc  += t.pnlPts;
+      if (t.side === 'S') shortAcc += t.pnlPts;
 
       labels.push(formatTs(t.exitTs));
       totalPts.push(eqPts);
@@ -159,7 +175,7 @@
 
   // ===== YYYYMMDDhhmmss → YYYY-MM-DD hh:mm =====
   function formatTs(ts){
-    if(!ts || ts.length < 12) return ts || '';
+    if (!ts || ts.length < 12) return ts || '';
     const y  = ts.slice(0,4);
     const m  = ts.slice(4,6);
     const d  = ts.slice(6,8);
@@ -171,7 +187,7 @@
   // ===== 畫 Chart.js 折線圖 =====
   function renderChart(labels, totalPts, longPts, shortPts){
     const ctx = $('#chart').getContext('2d');
-    if(chart) chart.destroy();
+    if (chart) chart.destroy();
 
     chart = new Chart(ctx, {
       type: 'line',
@@ -208,10 +224,7 @@
         },
         scales: {
           x: { display:true, ticks:{ maxRotation:0, autoSkip:true } },
-          y: {
-            display:true,
-            title:{ display:true, text:'點數' }
-          }
+          y: { display:true, title:{ display:true, text:'點數' } }
         }
       }
     });
@@ -317,7 +330,7 @@
       renderTrades(trades, multiplier);
     }catch(e){
       console.error(e);
-      alert('解析 TXT 時發生錯誤：' + e.message);
+      alert('解析或繪圖時發生錯誤：' + e.message);
     }
   }
 
@@ -444,7 +457,7 @@
     const best = decodeBest(ab);
 
     meta.textContent = `來源：${path}（編碼：${best.enc}）`;
-    const lines      = best.txt.split(/\r?\n/);
+    const lines      = best.txt.split('\n');
     prev.textContent = lines.slice(0,500).join('\n') +
       (lines.length>500 ? `\n...（共 ${lines.length} 行）` : '');
   }
