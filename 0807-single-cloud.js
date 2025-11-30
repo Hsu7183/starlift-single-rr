@@ -6,7 +6,7 @@
 //
 // 本檔負責：
 //   - 從本機選檔 / 剪貼簿 / Supabase 取得 TXT
-//   - 逐行 split 判斷「時間 / 價格 / 動作」三欄是否合法
+//   - "很鬆" 地抓出「時間 / 價格 / 動作」三欄
 //   - 轉成 canonical：YYYYMMDDhhmmss.000000 價格(6位) 動作
 //   - patch window.SHARED.readAsTextAuto，把 canonical 丟給 single.js 分析
 
@@ -41,7 +41,7 @@
     return lines.join('\n');
   }
 
-  // ===== 0807 TXT → canonical（用 split 判斷三欄） =====
+  // ===== 0807 TXT → canonical（只看「時間 價格 動作」三欄） =====
   function canonicalizeFrom0807(raw){
     const norm = normalizeText(raw);
     const out = [];
@@ -56,31 +56,27 @@
         continue;
       }
 
+      // 先用空白拆欄位
       const parts = line.split(/\s+/).filter(Boolean);
       if(parts.length < 3){
         bad++; continue;
       }
 
-      const ts   = parts[0];
-      const pStr = parts[1];
-      const actRaw = parts[2];
+      const ts   = parts[0];            // 20231201093900
+      const pStr = parts[1];            // 17366
+      const act  = parts.slice(2).join(' ').trim();  // 後面全部當動作
 
-      // 檢查時間 / 價格格式
+      // 時間一定是 14 位數字
       if(!/^\d{14}$/.test(ts)){
         bad++; continue;
       }
+
+      // 價格是數字
       if(!/^\d+(\.\d+)?$/.test(pStr)){
         bad++; continue;
       }
 
-      // 動作只要包含關鍵字即可
-      const mAct = actRaw.match(/(新買|平賣|新賣|平買|強制平倉)/);
-      if(!mAct){
-        bad++; continue;
-      }
-      const act = mAct[1];
-
-      const px = Number(pStr);
+      const px  = Number(pStr);
       const px6 = Number.isFinite(px) ? px.toFixed(6) : pStr;
 
       out.push(`${ts}.000000 ${px6} ${act}`);
@@ -150,6 +146,7 @@
   // ===== 共用：由 raw text 直接跑分析（本機 / 剪貼簿） =====
   function runFromRawText(raw, filename, sourceLabel){
     const { canon, ok, bad } = canonicalizeFrom0807(raw);
+    console.log('[0807] source=', sourceLabel, 'ok=', ok, 'bad=', bad);
     if(!ok){
       setStatus(`來源「${sourceLabel}」沒有合法交易行（bad=${bad}）。`, true);
       alert(`來源「${sourceLabel}」沒有合法交易行，請確認 TXT 格式。`);
