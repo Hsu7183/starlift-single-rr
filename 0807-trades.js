@@ -1,8 +1,11 @@
 // 0807-trades.js
 // - 讀 0807 KPI 版 TF_1m（事件行：時間 價格 中文；持倉行：... INPOS）
-// - 解析交易，計算理論淨損益（不含滑點）與實際淨損益（含滑點）
-// - 本金 / 滑點 可調，滑點只影響「實際」兩欄
-// - 計算期貨機構級 KPI，並依評等標示顏色＆整理出「建議優化指標」
+// - 解析交易，算出：
+//   * theoNet  = 理論淨損益（不含滑價）
+//   * actualNet= 實際淨損益（含滑價）
+// - 交易明細：理論 vs 含滑價 並列
+// - KPI：理論一組、含滑價一組；評等以「含滑價」為準
+// - 建議優化指標卡片：顯示所有評等 = Improve 的 KPI（含滑價版）
 
 (function () {
   'use strict';
@@ -48,7 +51,6 @@
     return n > 0 ? 'num-pos' : 'num-neg';
   };
 
-  // 20240102130100.000000 → Date
   function tsToDate(ts) {
     if (!ts) return null;
     const clean = ts.replace(/\D/g, '');
@@ -124,7 +126,7 @@
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
-      const ps = line.split(/\s+/);
+      const ps   = line.split(/\s+/);
       if (ps.length < 2) continue;
 
       const ts = ps[0];
@@ -154,7 +156,7 @@
           const taxOut= Math.round(exitPx  * CFG.pointValue * CFG.taxRate);
           const tax   = taxIn + taxOut;
 
-          const theoNet = gross - fee - tax;  // 理論淨損益（不含滑點）
+          const theoNet = gross - fee - tax; // 理論淨損益（不含滑點）
 
           const entryAction = dir > 0 ? '新買' : '新賣';
           const exitAction  = dir > 0 ? '平賣' : '平買';
@@ -188,66 +190,66 @@
     switch (key) {
       case 'maxdd_pct':   // 越小越好
         ref = '≦ 20% 強；20–30% 可接受；>30% 需優化';
-        if (value <= 0.2)         { label = 'Strong';  css = 'rating-strong';  }
-        else if (value <= 0.3)    { label = 'Adequate';}
-        else                      { label = 'Improve'; css = 'rating-improve'; }
+        if (value <= 0.20)       { label = 'Strong';  css = 'rating-strong';  }
+        else if (value <= 0.30)  { label = 'Adequate'; }
+        else                     { label = 'Improve'; css = 'rating-improve'; }
         break;
 
       case 'total_return':
       case 'cagr':
         ref = '≥ 15% 強；5–15% 可接受；<5% 需優化';
-        if (value >= 0.15)        { label = 'Strong';  css = 'rating-strong';  }
-        else if (value >= 0.05)   { label = 'Adequate';}
-        else                      { label = 'Improve'; css = 'rating-improve'; }
+        if (value >= 0.15)       { label = 'Strong';  css = 'rating-strong';  }
+        else if (value >= 0.05)  { label = 'Adequate'; }
+        else                     { label = 'Improve'; css = 'rating-improve'; }
         break;
 
       case 'pf':
         ref = '≥ 1.5 強；1.1–1.5 可接受；<1.1 需優化';
-        if (value >= 1.5)         { label = 'Strong';  css = 'rating-strong';  }
-        else if (value >= 1.1)    { label = 'Adequate';}
-        else                      { label = 'Improve'; css = 'rating-improve'; }
+        if (value >= 1.5)        { label = 'Strong';  css = 'rating-strong';  }
+        else if (value >= 1.1)   { label = 'Adequate'; }
+        else                     { label = 'Improve'; css = 'rating-improve'; }
         break;
 
       case 'winrate':
         ref = '≥ 55% 強；45–55% 可接受；<45% 需優化';
-        if (value >= 0.55)        { label = 'Strong';  css = 'rating-strong';  }
-        else if (value >= 0.45)   { label = 'Adequate';}
-        else                      { label = 'Improve'; css = 'rating-improve'; }
+        if (value >= 0.55)       { label = 'Strong';  css = 'rating-strong';  }
+        else if (value >= 0.45)  { label = 'Adequate'; }
+        else                     { label = 'Improve'; css = 'rating-improve'; }
         break;
 
       case 'sharpe':
         ref = '≥ 1.5 強；0.8–1.5 可接受；<0.8 需優化';
-        if (value >= 1.5)         { label = 'Strong';  css = 'rating-strong';  }
-        else if (value >= 0.8)    { label = 'Adequate';}
-        else                      { label = 'Improve'; css = 'rating-improve'; }
+        if (value >= 1.5)        { label = 'Strong';  css = 'rating-strong';  }
+        else if (value >= 0.8)   { label = 'Adequate'; }
+        else                     { label = 'Improve'; css = 'rating-improve'; }
         break;
 
       case 'sortino':
         ref = '≥ 2 強；1–2 可接受；<1 需優化';
-        if (value >= 2)           { label = 'Strong';  css = 'rating-strong';  }
-        else if (value >= 1)      { label = 'Adequate';}
-        else                      { label = 'Improve'; css = 'rating-improve'; }
+        if (value >= 2)          { label = 'Strong';  css = 'rating-strong';  }
+        else if (value >= 1)     { label = 'Adequate'; }
+        else                     { label = 'Improve'; css = 'rating-improve'; }
         break;
 
       case 'calmar':
         ref = '≥ 0.5 強；0.2–0.5 可接受；<0.2 需優化';
-        if (value >= 0.5)         { label = 'Strong';  css = 'rating-strong';  }
-        else if (value >= 0.2)    { label = 'Adequate';}
-        else                      { label = 'Improve'; css = 'rating-improve'; }
+        if (value >= 0.5)        { label = 'Strong';  css = 'rating-strong';  }
+        else if (value >= 0.2)   { label = 'Adequate'; }
+        else                     { label = 'Improve'; css = 'rating-improve'; }
         break;
 
       case 'risk_ruin':
         ref = '≦ 5% 強；5–20% 可接受；>20% 需優化';
-        if (value <= 0.05)        { label = 'Strong';  css = 'rating-strong';  }
-        else if (value <= 0.2)    { label = 'Adequate';}
-        else                      { label = 'Improve'; css = 'rating-improve'; }
+        if (value <= 0.05)       { label = 'Strong';  css = 'rating-strong';  }
+        else if (value <= 0.20)  { label = 'Adequate'; }
+        else                     { label = 'Improve'; css = 'rating-improve'; }
         break;
 
       case 'cost_ratio':
         ref = '≦ 20% 強；20–40% 可接受；>40% 需優化';
-        if (value <= 0.2)         { label = 'Strong';  css = 'rating-strong';  }
-        else if (value <= 0.4)    { label = 'Adequate';}
-        else                      { label = 'Improve'; css = 'rating-improve'; }
+        if (value <= 0.20)       { label = 'Strong';  css = 'rating-strong';  }
+        else if (value <= 0.40)  { label = 'Adequate'; }
+        else                     { label = 'Improve'; css = 'rating-improve'; }
         break;
 
       default:
@@ -256,12 +258,11 @@
     return { label, cssClass: css, ref };
   }
 
-  // ===== KPI 計算 =====
-  function calcKpi(trades, pnls, equity) {
+  // ===== KPI 計算（單一版本：給理論 or 含滑價用） =====
+  function calcKpi(trades, pnls, equity, slipPerSide) {
     const n = pnls.length;
     if (!n) return null;
 
-    // 基本統計
     let sum = 0;
     let sumSq = 0;
     let grossProfit = 0;
@@ -356,7 +357,6 @@
       ? (cagr / maxDdPct)
       : null;
 
-    // 回神時間（以筆數）
     const timeToRecoveryTrades =
       maxDdEndIdx > maxDdStartIdx ? (maxDdEndIdx - maxDdStartIdx) : 0;
 
@@ -370,8 +370,8 @@
       const ddPct = peakNav > 0 ? (peakNav - v) / peakNav : 0;
       sumDdSq += ddPct * ddPct;
     }
-    const ulcerIndex = nav.length ? Math.sqrt(sumDdSq / nav.length) : null;
-    const recoveryFactor = maxDd > 0 ? totalNet / maxDd : null;
+    const ulcerIndex    = nav.length ? Math.sqrt(sumDdSq / nav.length) : null;
+    const recoveryFactor= maxDd > 0 ? totalNet / maxDd : null;
 
     // 日 / 週損益
     const dayMap = {};
@@ -432,7 +432,7 @@
     let totalFee  = 0;
     let totalTax  = 0;
     let notionalTraded = 0;
-    const slipPerTradeMoney = CFG.pointValue * CFG.slipPerSide * 2;
+    const slipPerTradeMoney = CFG.pointValue * slipPerSide * 2;
     trades.forEach(t => {
       totalFee  += t.fee;
       totalTax  += t.tax;
@@ -444,7 +444,6 @@
     const turnover      = CFG.capital > 0 ? (notionalTraded / CFG.capital) : null;
     const costRatio     = totalGrossAbs > 0 ? (totalCost / totalGrossAbs) : null;
 
-    // 交易天數 / 筆數 / 持倉時間
     const tradingDays = Object.keys(dayMap).length;
     const tradesPerDay= tradingDays > 0 ? n / tradingDays : null;
 
@@ -524,268 +523,257 @@
     };
   }
 
-  // ===== KPI 呈現 =====
-  function renderKpi(kpi) {
-    const tbody = $('#kpiBody');
+  // ===== KPI 呈現（理論 + 含滑價） =====
+  function renderKpi(kpiTheo, kpiAct) {
+    const tbody   = $('#kpiBody');
     const badBody = $('#kpiBadBody');
     if (!tbody || !badBody) return;
-    tbody.innerHTML = '';
+    tbody.innerHTML   = '';
     badBody.innerHTML = '';
 
-    if (!kpi) {
+    if (!kpiAct) {
       badBody.innerHTML =
-        '<tr><td colspan="3" style="color:#777;">尚未載入資料。</td></tr>';
+        '<tr><td colspan="5" style="color:#777;">尚未載入資料。</td></tr>';
       return;
     }
 
     const badList = [];
 
+    const toStr = (fmt, v) => {
+      if (v == null || !isFinite(v)) return '—';
+      if (fmt === 'pct')  return fmtPct(v);
+      if (fmt === 'f2')   return fmtFloat(v, 2);
+      if (fmt === 'f3')   return fmtFloat(v, 3);
+      if (fmt === 'f4')   return fmtFloat(v, 4);
+      return fmtInt(v);
+    };
+
     const addSection = (title) => {
       const tr = document.createElement('tr');
-      tr.innerHTML = `<td class="kpi-section" colspan="5">${title}</td>`;
+      tr.innerHTML = `<td class="kpi-section" colspan="6">${title}</td>`;
       tbody.appendChild(tr);
     };
 
-    const addRow = (key, name, valueStr, numValue, desc) => {
-      const rating = key ? rateMetric(key, numValue) : null;
+    const addRow = (key, name, fmt, vTheo, vAct, desc) => {
+      const sTheo = toStr(fmt, vTheo);
+      const sAct  = toStr(fmt, vAct);
+
+      const rating = key ? rateMetric(key, vAct) : null;
       const ratingLabel = rating ? rating.label : '—';
       const ratingClass = rating ? rating.cssClass : '';
       const refRange    = rating ? rating.ref      : '—';
 
       if (rating && rating.label === 'Improve') {
-        badList.push({ name, valueStr, desc });
+        badList.push({
+          name,
+          valueStr: sAct,
+          ratingLabel,
+          ratingClass,
+          refRange
+        });
       }
 
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td class="kpi-name">${name}</td>
-        <td>${valueStr}</td>
+        <td class="num">${sTheo}</td>
+        <td class="num">${sAct}</td>
         <td class="kpi-desc">${desc}</td>
-        <td class="${ratingClass}">${ratingLabel}</td>
-        <td>${refRange}</td>
+        <td class="center ${ratingClass}">${ratingLabel}</td>
+        <td class="center">${refRange}</td>
       `;
       tbody.appendChild(tr);
     };
 
+    // 方便存取
+    const t = kpiTheo || {};
+    const a = kpiAct;
+
     // ---- Tier 1 ----
     addSection('Tier 1．生存與尾端風險（Risk / Survival）');
     addRow('maxdd_pct', '最大回撤率 Max Drawdown %',
-      fmtPct(kpi.maxDdPct),
-      kpi.maxDdPct,
+      'pct', t.maxDdPct, a.maxDdPct,
       '以本金為基準的最大淨值跌幅');
     addRow(null, '最大回撤金額 Max Drawdown',
-      fmtInt(kpi.maxDd),
-      null,
-      '累積實際淨損益的最大跌幅金額');
+      'int', t.maxDd, a.maxDd,
+      '累積淨損益的最大下跌金額');
     addRow('risk_ruin', '破產風險 Risk of Ruin（近似）',
-      kpi.riskOfRuin != null ? fmtPct(kpi.riskOfRuin) : '—',
-      kpi.riskOfRuin,
-      '依勝率 / 賺賠比 / 平均虧損粗估的長期破產機率');
+      'pct', t.riskOfRuin, a.riskOfRuin,
+      '依勝率 / 賺賠比 / 平均虧損粗估長期破產機率');
     addRow(null, '最差單日損益 Worst Day PnL',
-      fmtInt(kpi.worstDayPnl),
-      null,
+      'int', t.worstDayPnl, a.worstDayPnl,
       '以出場日統計的單日最差實際損益');
     addRow(null, '最差單週損益 Worst Week PnL',
-      fmtInt(kpi.worstWeekPnl),
-      null,
+      'int', t.worstWeekPnl, a.worstWeekPnl,
       '以出場週統計的單週最差實際損益');
     addRow(null, '95% VaR（單筆）',
-      kpi.varLoss != null ? fmtInt(kpi.varLoss) : '—',
-      null,
+      'int', t.varLoss, a.varLoss,
       '以單筆損益分布估算的 95% Value-at-Risk 左尾損失門檻');
     addRow(null, '95% CVaR（單筆）',
-      kpi.cvarLoss != null ? fmtInt(kpi.cvarLoss) : '—',
-      null,
+      'int', t.cvarLoss, a.cvarLoss,
       'VaR 左尾區間平均損失，衡量尾端風險嚴重度');
     addRow(null, '回神時間 Time to Recovery（筆）',
-      fmtInt(kpi.timeToRecoveryTrades),
-      null,
+      'int', t.timeToRecoveryTrades, a.timeToRecoveryTrades,
       '最大回撤發生至重新創新高所需交易筆數');
     addRow(null, 'Ulcer Index',
-      fmtFloat(kpi.ulcerIndex, 4),
-      null,
+      'f4', t.ulcerIndex, a.ulcerIndex,
       '以 NAV 下跌深度與持續時間綜合計算之痛苦指標');
     addRow(null, 'Recovery Factor',
-      fmtFloat(kpi.recoveryFactor, 2),
-      null,
+      'f2', t.recoveryFactor, a.recoveryFactor,
       '總淨利 / 最大回撤，衡量從虧損中恢復能力');
 
     // ---- Tier 2 ----
     addSection('Tier 2．報酬與風險調整後報酬（Return / Risk-Adjusted）');
     addRow(null, '總淨利 Net Profit',
-      fmtInt(kpi.totalNet),
-      null,
-      '全部實際淨損益加總（含成本與滑點）');
+      'int', t.totalNet, a.totalNet,
+      '全部實際淨損益加總');
     addRow('total_return', '總報酬率 Total Return',
-      fmtPct(kpi.totalReturnPct),
-      kpi.totalReturnPct,
+      'pct', t.totalReturnPct, a.totalReturnPct,
       '總淨利 / 本金，未年化');
     addRow('cagr', '年化報酬率 CAGR',
-      fmtPct(kpi.cagr),
-      kpi.cagr,
+      'pct', t.cagr, a.cagr,
       '以第一筆與最後一筆出場日期估算年化報酬率');
     addRow(null, '單筆波動（交易級 Volatility）',
-      fmtInt(kpi.volPerTrade),
-      null,
+      'int', t.volPerTrade, a.volPerTrade,
       '單筆實際損益標準差，未年化');
     addRow('sharpe', 'Sharpe Ratio（交易級）',
-      fmtFloat(kpi.sharpeTrade, 2),
-      kpi.sharpeTrade,
+      'f2', t.sharpeTrade, a.sharpeTrade,
       '以單筆期望 / 單筆波動估算 Sharpe（sqrt(N) 已折算）');
     addRow('sortino', 'Sortino Ratio（交易級）',
-      fmtFloat(kpi.sortinoTrade, 2),
-      kpi.sortinoTrade,
+      'f2', t.sortinoTrade, a.sortinoTrade,
       '只用負報酬計算下行風險的 Sharpe 變形');
     addRow('calmar', 'Calmar Ratio',
-      fmtFloat(kpi.calmar, 2),
-      kpi.calmar,
+      'f2', t.calmar, a.calmar,
       '年化報酬率 / 最大回撤率');
 
     // ---- Tier 3 ----
     addSection('Tier 3．交易品質與結構（Trade Quality / Structure）');
     addRow(null, '交易筆數 #Trades',
-      fmtInt(kpi.nTrades),
-      null,
+      'int', t.nTrades, a.nTrades,
       '完整進出場筆數');
     addRow('winrate', '勝率 Hit Rate',
-      fmtPct(kpi.winRate),
-      kpi.winRate,
+      'pct', t.winRate, a.winRate,
       '獲利筆數 / 總筆數');
     addRow(null, '平均單筆損益 Avg Trade PnL',
-      fmtInt(kpi.avg),
-      null,
-      '實際淨損益的平均值');
+      'int', t.avg, a.avg,
+      '實際淨損益平均值');
     addRow(null, '平均獲利 Avg Win',
-      fmtInt(kpi.avgWin),
-      null,
-      '所有獲利單平均實際損益');
+      'int', t.avgWin, a.avgWin,
+      '所有獲利單平均損益');
     addRow(null, '平均虧損 Avg Loss',
-      fmtInt(kpi.avgLoss),
-      null,
-      '所有虧損單平均實際損益');
+      'int', t.avgLoss, a.avgLoss,
+      '所有虧損單平均損益');
     addRow(null, '賺賠比 Payoff Ratio',
-      kpi.payoff != null ? fmtFloat(kpi.payoff, 2) : '—',
-      null,
+      'f2', t.payoff, a.payoff,
       '平均獲利 / |平均虧損|，需與勝率一起看');
     addRow(null, '單筆期望值 Expectancy',
-      fmtInt(kpi.expectancy),
-      null,
-      '每筆交易的期望損益');
+      'int', t.expectancy, a.expectancy,
+      '每筆交易期望損益');
     addRow('pf', '獲利因子 Profit Factor',
-      kpi.pf != null ? fmtFloat(kpi.pf, 2) : '—',
-      kpi.pf,
+      'f2', t.pf, a.pf,
       '總獲利 / |總虧損|');
     addRow(null, '總獲利 Gross Profit',
-      fmtInt(kpi.grossProfit),
-      null,
+      'int', t.grossProfit, a.grossProfit,
       '所有獲利單損益加總');
     addRow(null, '總虧損 Gross Loss',
-      fmtInt(kpi.grossLoss),
-      null,
+      'int', t.grossLoss, a.grossLoss,
       '所有虧損單損益加總');
     addRow(null, '最大獲利單 Largest Win',
-      fmtInt(kpi.largestWin),
-      null,
+      'int', t.largestWin, a.largestWin,
       '單筆最大實際獲利');
     addRow(null, '最大虧損單 Largest Loss',
-      fmtInt(kpi.largestLoss),
-      null,
+      'int', t.largestLoss, a.largestLoss,
       '單筆最大實際虧損');
     addRow(null, 'Kelly Fraction（理論值）',
-      kpi.kelly != null ? fmtFloat(kpi.kelly, 2) : '—',
-      null,
+      'f2', t.kelly, a.kelly,
       '依勝率與賺賠比估算之 Kelly 槓桿（僅供參考）');
 
     // ---- Tier 4 ----
     addSection('Tier 4．路徑與穩定度（Path / Stability）');
     addRow(null, 'Equity Stability R²',
-      fmtFloat(kpi.stabilityR2, 3),
-      null,
+      'f3', t.stabilityR2, a.stabilityR2,
       '以 NAV 對時間做線性回歸的 R²，越接近 1 越平滑');
     addRow(null, 'Alpha / Beta / Correlation',
-      '—',
-      null,
+      'int', null, null,
       '需額外提供基準指數報酬序列才可計算');
 
     // ---- Tier 5 ----
     addSection('Tier 5．成本、槓桿與執行（Cost / Turnover / Execution）');
     addRow(null, '交易天數 Trading Days',
-      fmtInt(kpi.tradingDays),
-      null,
+      'int', t.tradingDays, a.tradingDays,
       '有出場交易的日期數');
     addRow(null, '平均每日交易數 Trades / Day',
-      fmtFloat(kpi.tradesPerDay, 2),
-      null,
+      'f2', t.tradesPerDay, a.tradesPerDay,
       '交易筆數 / 交易天數');
     addRow(null, '平均持倉時間 Avg Holding Time（分鐘）',
-      fmtFloat(kpi.avgHoldMin, 1),
-      null,
+      'f1', t.avgHoldMin, a.avgHoldMin,
       '進場到出場的平均持有時間');
     addRow(null, '名目週轉率 Turnover（Notional / Capital）',
-      fmtFloat(kpi.turnover, 2),
-      null,
+      'f2', t.turnover, a.turnover,
       '所有進場合約名目價值 / 本金');
     addRow('cost_ratio', '成本佔交易金額比 Transaction Cost Ratio',
-      kpi.costRatio != null ? fmtPct(kpi.costRatio) : '—',
-      kpi.costRatio,
-      '手續費 + 稅 + 滑價成本 / (總獲利+|總虧損|)');
+      'pct', t.costRatio, a.costRatio,
+      '手續費 + 稅 + 滑價 / (總獲利+|總虧損|)');
     addRow(null, '手續費總額 Total Commission',
-      fmtInt(kpi.totalFee),
-      null,
+      'int', t.totalFee, a.totalFee,
       '所有交易手續費加總');
     addRow(null, '交易稅總額 Total Tax',
-      fmtInt(kpi.totalTax),
-      null,
+      'int', t.totalTax, a.totalTax,
       '所有期交稅加總');
     addRow(null, '滑價成本總額 Slippage Cost',
-      fmtInt(kpi.totalSlipCost),
-      null,
-      '依設定滑點換算的總滑價成本');
+      'int', t.totalSlipCost, a.totalSlipCost,
+      '依設定滑點換算之總滑價成本');
     addRow(null, '總交易成本 Total Trading Cost',
-      fmtInt(kpi.totalCost),
-      null,
+      'int', t.totalCost, a.totalCost,
       '手續費 + 稅 + 滑價總和');
 
     // ===== 建議優化指標卡片 =====
     if (!badList.length) {
       badBody.innerHTML =
-        '<tr><td colspan="3" style="color:#777;">目前沒有需要特別優化的指標。</td></tr>';
+        '<tr><td colspan="5" style="color:#777;">目前沒有需要特別優化的指標。</td></tr>';
     } else {
       badList.forEach(item => {
         const tr = document.createElement('tr');
         tr.innerHTML = `
           <td class="kpi-name">${item.name}</td>
-          <td>${item.valueStr}</td>
-          <td class="kpi-desc">${item.desc}</td>
+          <td class="num center">${item.valueStr}</td>
+          <td class="center">建議優化</td>
+          <td class="center ${item.ratingClass}">${item.ratingLabel}</td>
+          <td class="center">${item.refRange}</td>
         `;
         badBody.appendChild(tr);
       });
     }
   }
 
-  // ===== 畫交易明細表格（理論 vs 含滑點 並列） =====
+  // ===== 畫交易明細表格（理論 vs 含滑價） =====
   function renderTrades(parsed) {
     const tbody = $('#tradesBody');
     tbody.innerHTML = '';
-    renderKpi(null);
+    renderKpi(null, null);
 
     if (!parsed || !parsed.trades.length) return;
 
-    let cumTheo   = 0; // 不含滑點
-    let cumActual = 0; // 含滑點
+    let cumTheo   = 0;
+    let cumActual = 0;
 
-    const pnls   = [];
-    const equity = [];
+    const theoPnls   = [];
+    const theoEquity = [];
+    const actPnls    = [];
+    const actEquity  = [];
 
     const slipCostPerTrade = CFG.pointValue * CFG.slipPerSide * 2;
 
     parsed.trades.forEach((t, idx) => {
-      cumTheo   += t.theoNet;                     // 理論累積
-      const actualNet = t.theoNet - slipCostPerTrade; // 含滑點
+      cumTheo   += t.theoNet;
+      const actualNet = t.theoNet - slipCostPerTrade;
       cumActual += actualNet;
 
-      pnls.push(actualNet);
-      equity.push(cumActual);
+      theoPnls.push(t.theoNet);
+      theoEquity.push(cumTheo);
+
+      actPnls.push(actualNet);
+      actEquity.push(cumActual);
 
       const tr1 = document.createElement('tr');
       const tr2 = document.createElement('tr');
@@ -805,7 +793,7 @@
         <td>—</td>
       `;
 
-      // 出場列：理論 vs 含滑點 並列
+      // 出場列：理論 vs 含滑價
       tr2.innerHTML = `
         <td>${formatTs(t.exit.ts)}</td>
         <td>${fmtInt(t.exit.px)}</td>
@@ -823,8 +811,10 @@
       tbody.appendChild(tr2);
     });
 
-    const kpi = calcKpi(parsed.trades, pnls, equity);
-    renderKpi(kpi);
+    // KPI：理論 vs 含滑價
+    const kpiTheo = calcKpi(parsed.trades, theoPnls, theoEquity, 0);
+    const kpiAct  = calcKpi(parsed.trades, actPnls,  actEquity,  CFG.slipPerSide);
+    renderKpi(kpiTheo, kpiAct);
   }
 
   // ===== 事件 =====
