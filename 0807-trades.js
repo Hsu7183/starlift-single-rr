@@ -1,15 +1,15 @@
 // 0807-trades.js
-// 讀取 0807 KPI 版 TF_1m，產生交易明細表（雙列一筆交易）
+// 讀取 0807 KPI 版 TF_1m（中文：新買/平賣 + INPOS），產生交易明細表
 
 (function () {
   'use strict';
 
-  // ===== 參數設定（之後要改很方便） =====
+  // ===== 參數設定 =====
   const CFG = {
     pointValue: 200,    // 每點金額
     feePerSide: 45,     // 單邊手續費（進 45 + 出 45 = 90）
-    taxRate: 0.00002,   // 期交稅率（單邊），這裡會用雙邊合計
-    slipPointsRT: 0     // 一 round-trip 的滑價點數（先設 0）
+    taxRate: 0.00002,   // 期交稅率（單邊），這裡用雙邊合計
+    slipPointsRT: 0     // 一 round-trip 滑價點數（先 0）
   };
 
   // ===== 小工具 =====
@@ -42,159 +42,87 @@
     return `${y}/${parseInt(m, 10)}/${parseInt(d, 10)} ${hh}:${mm}`;
   }
 
-  // 從後面的 INPOS 行抓方向（+1 多 / -1 空）
-  function getDirFromInpos(lines, startIdx) {
-    const limit = Math.min(startIdx + 300, lines.length);
-    for (let j = startIdx + 1; j < limit; j++) {
-      const ps = lines[j].split(/\s+/);
-      if (!ps.length) continue;
-
-      // INPOS 格式：ts mid low dir entry INPOS
-      if (ps.length >= 6 && ps[ps.length - 1] === 'INPOS') {
-        const dir = parseInt(ps[3], 10);
-        if (dir === 1 || dir === -1) return dir;
-      }
-
-      // 遇到出場或下一筆事件就停
-      if (ps.length === 2) break;
-
-      if (ps.length >= 3 && ps[ps.length - 1] !== 'INPOS') {
-        const flag = ps[2];
-        // flag 不是 s/sR 就視為出場類型（R、亂碼等等）
-        if (flag !== 's' && flag !== 'sR') break;
-      }
-    }
-    // 找不到就當多單（理論上不太會發生）
-    return 1;
-  }
-
-  // ===== 解析 TXT：0807 KPI 版 TF_1m =====
+  // ===== 解析 TXT：新買/新賣/平買/平賣/強制平倉 + INPOS =====
   function parseTxt(text) {
-    const rawLines = text.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
-    if (!rawLines.length) return { header: null, trades: [] };
+    const lines = text.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+    if (!lines.length) return { header: null, trades: [] };
 
-    const header = rawLines[0]; // BeginTime=...,EndTime=...
+    const header = lines[0]; // BeginTime=...,EndTime=...,ForceExitTime=...
 
-    const lines = rawLines.slice(1); // 之後才是資料行
-    const trades = [];
+    const actionRe = /(新買|新賣|平買|平賣|強制平倉)$/;
+    const events = [];
 
-    let open = null; // { ts, px, dir }
-
-    for (let i = 0; i < lines.length; i++) {
+    for (let i = 1; i < lines.length; i++) {
       const line = lines[i];
-      const ps = line.split(/\s+/);
-      if (ps.length < 2) continue;
+      const parts = line.split(/\s+/);
+      if (parts.length < 3) continue;
 
-      const ts = ps[0];
-      const px = parseFloat(ps[1]);
+      const last = parts[parts.length - 1];
+
+      // INPOS 行：時間 價格 High Low dir entry INPOS  → 直接略過
+      if (last === 'INPOS') continue;
+
+      // 只抓最後一欄是 新買/新賣/平買/平賣/強制平倉 的行
+      if (!actionRe.test(last)) continue;
+
+      const ts = parts[0];
+      const px = parseFloat(parts[1]);
       if (!isFinite(px)) continue;
 
-      const hasThird = ps.length >= 3;
-      const token3 = hasThird ? ps[2] : null;
+      events.push({
+        ts,
+        px,
+        action: last
+      });
+    }
 
-      const isInpos = hasThird && ps[ps.length - 1] === 'INPOS';
+    // 把事件串成 round-trip
+    const trades = [];
+    let open = null;
 
-      // 1) INPOS 行：直接跳過（只是持倉追蹤）
-      if (isInpos) continue;
+    const isEntry = (a) => (a === '新買' || a === '新賣');
+    const isExit  = (a) => (a === '平買' || a === '平賣' || a === '強制平倉');
 
-      // 2) 判斷是不是「事件行」
-      //   - 兩欄：一定是出場
-      //   - 三欄以上：第三欄
-      //       * s / sR → 進場
-      //       * 其他（R、亂碼）→ 出場
-      if (ps.length === 2) {
-        // 出場
-        if (open) {
-          const dir = open.dir;
-          const entryPx = open.px;
-          const exitPx = px;
+    for (const ev of events) {
+      if (isEntry(ev.action)) {
+        // 若前一筆還沒平倉，就直接覆蓋（理論上不會發生）
+        open = {
+          ts: ev.ts,
+          px: ev.px,
+          action: ev.action,
+          dir: (ev.action === '新買') ? +1 : -1
+        };
+      } else if (isExit(ev.action) && open) {
+        const dir = open.dir;
+        const entryPx = open.px;
+        const exitPx  = ev.px;
 
-          const points = dir > 0
-            ? (exitPx - entryPx)
-            : (entryPx - exitPx);
+        const points = dir > 0
+          ? (exitPx - entryPx)
+          : (entryPx - exitPx);
 
-          const gross = points * CFG.pointValue;
+        const gross = points * CFG.pointValue;
 
-          const fee = CFG.feePerSide * 2; // 進 + 出
-          const taxBase = (entryPx + exitPx) * CFG.pointValue;
-          const tax = Math.round(taxBase * CFG.taxRate);
+        const fee = CFG.feePerSide * 2; // 進 + 出
+        const taxBase = (entryPx + exitPx) * CFG.pointValue;
+        const tax = Math.round(taxBase * CFG.taxRate);
 
-          const theoNet = gross - fee - tax;
-          const slipCost = CFG.slipPointsRT * CFG.pointValue;
-          const actualNet = theoNet - slipCost;
+        const theoNet = gross - fee - tax;
+        const slipCost = CFG.slipPointsRT * CFG.pointValue;
+        const actualNet = theoNet - slipCost;
 
-          trades.push({
-            entry: {
-              ts: open.ts,
-              px: open.px,
-              action: open.dir > 0 ? '新買' : '新賣'
-            },
-            exit: {
-              ts,
-              px,
-              action: open.dir > 0 ? '平賣' : '平買'
-            },
-            dir,
-            points,
-            fee,
-            tax,
-            theoNet,
-            actualNet
-          });
+        trades.push({
+          entry: { ts: open.ts, px: open.px, action: open.action },
+          exit:  { ts: ev.ts,   px: ev.px,   action: ev.action },
+          dir,
+          points,
+          fee,
+          tax,
+          theoNet,
+          actualNet
+        });
 
-          open = null;
-        }
-        continue;
-      }
-
-      // ps.length >= 3，而且不是 INPOS
-      if (token3 === 's' || token3 === 'sR') {
-        // 進場
-        const dir = getDirFromInpos(lines, i); // 從後面 INPOS 抓 +1/-1
-        open = { ts, px, dir };
-      } else {
-        // 其他非 INPOS（R / 亂碼）：出場
-        if (open) {
-          const dir = open.dir;
-          const entryPx = open.px;
-          const exitPx = px;
-
-          const points = dir > 0
-            ? (exitPx - entryPx)
-            : (entryPx - exitPx);
-
-          const gross = points * CFG.pointValue;
-
-          const fee = CFG.feePerSide * 2;
-          const taxBase = (entryPx + exitPx) * CFG.pointValue;
-          const tax = Math.round(taxBase * CFG.taxRate);
-
-          const theoNet = gross - fee - tax;
-          const slipCost = CFG.slipPointsRT * CFG.pointValue;
-          const actualNet = theoNet - slipCost;
-
-          trades.push({
-            entry: {
-              ts: open.ts,
-              px: open.px,
-              action: open.dir > 0 ? '新買' : '新賣'
-            },
-            exit: {
-              ts,
-              px,
-              // 這裡先不區分 R / 強平，一律用平買/平賣
-              action: open.dir > 0 ? '平賣' : '平買'
-            },
-            dir,
-            points,
-            fee,
-            tax,
-            theoNet,
-            actualNet
-          });
-
-          open = null;
-        }
+        open = null;
       }
     }
 
@@ -210,7 +138,7 @@
     let cumActual = 0;
 
     parsed.trades.forEach((t, idx) => {
-      cumTheo += t.theoNet;
+      cumTheo   += t.theoNet;
       cumActual += t.actualNet;
 
       const tr1 = document.createElement('tr');
@@ -244,7 +172,6 @@
         <td class="${clsForNumber(t.actualNet)}">${fmtInt(t.actualNet)}</td>
         <td class="${clsForNumber(cumActual)}">${fmtInt(cumActual)}</td>
       `;
-
       tbody.appendChild(tr1);
       tbody.appendChild(tr2);
     });
@@ -261,7 +188,7 @@
       const parsed = parseTxt(text);
       renderTrades(parsed);
     };
-    reader.readAsText(file); // 這份檔是 UTF-8，直接讀就好
+    reader.readAsText(file);  // Big5 也沒關係，中文壞掉沒影響，我們只用數字跟「新買/平賣」關鍵字
   });
 
 })();
