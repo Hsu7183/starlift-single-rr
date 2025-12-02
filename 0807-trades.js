@@ -5,7 +5,7 @@
 //   * actualNet= 實際淨損益（含滑價）
 // - 交易明細：理論 vs 含滑價 並列
 // - KPI：理論一組、含滑價一組；評等以「含滑價」為準
-// - 建議優化指標卡片：顯示所有評等 = Improve 的 KPI（含滑價版）
+// - Risk of Ruin：改用 Brownian 近似公式，不再一律 100%
 
 (function () {
   'use strict';
@@ -405,7 +405,7 @@
     }
     const cvarLoss = tailCnt > 0 ? -(tailSum / tailCnt) : null;
 
-    // Expectancy / Kelly / Risk of Ruin (近似)
+    // Expectancy / Kelly / Risk of Ruin (Brownian 近似)
     const expectancy = avg;
     let kelly = null;
     if (payoff != null && payoff > 0 && winRate > 0 && winRate < 1) {
@@ -415,17 +415,16 @@
     }
 
     let riskOfRuin = null;
-    if (avgLoss < 0 && payoff != null && payoff > 0 && winRate > 0 && winRate < 1) {
-      const p = winRate;
-      const q = 1 - p;
-      const unitRisk = Math.abs(avgLoss);
-      const N = Math.max(1, Math.floor(CFG.capital / unitRisk));
-      if (p > 0.5 && N > 0) {
-        const r = q / p;
-        riskOfRuin = Math.pow(r, N);
-      } else if (p <= 0.5) {
-        riskOfRuin = 1;
-      }
+    if (varT <= 0) {
+      riskOfRuin = null;  // 資料太少、不算
+    } else if (avg <= 0) {
+      riskOfRuin = 1;     // 單筆期望<=0，長期一定破產
+    } else {
+      const mu     = avg;
+      const sigma2 = varT;
+      const exponent = -2 * mu * CFG.capital / sigma2;
+      const r = Math.exp(exponent);
+      riskOfRuin = Math.min(1, Math.max(0, r));
     }
 
     // 成本 / 週轉
@@ -585,7 +584,6 @@
       tbody.appendChild(tr);
     };
 
-    // 方便存取
     const t = kpiTheo || {};
     const a = kpiAct;
 
@@ -599,7 +597,7 @@
       '累積淨損益的最大下跌金額');
     addRow('risk_ruin', '破產風險 Risk of Ruin（近似）',
       'pct', t.riskOfRuin, a.riskOfRuin,
-      '依勝率 / 賺賠比 / 平均虧損粗估長期破產機率');
+      '以 Brownian 近似計算的長期觸及破產線機率（僅供參考）');
     addRow(null, '最差單日損益 Worst Day PnL',
       'int', t.worstDayPnl, a.worstDayPnl,
       '以出場日統計的單日最差實際損益');
