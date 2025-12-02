@@ -1,6 +1,7 @@
 // 0807-trades.js
 // 讀取 0807 KPI 版 TF_1m（事件行：時間 價格 中文；持倉行：... INPOS）
 // 不看中文字，純靠欄位數 + INPOS 判斷進出場。
+// 新增：本金 / 滑點（每邊點數）可輸入，滑點會影響實際淨損益。
 
 (function () {
   'use strict';
@@ -10,8 +11,11 @@
     pointValue: 200,    // 每點金額
     feePerSide: 45,     // 單邊手續費
     taxRate: 0.00002,   // 期交稅率（單邊）
-    slipPointsRT: 0     // 一 round-trip 滑價點數（先 0）
+    slipPerSide: 0,     // 每邊滑點（點數），例如 2 → round-trip 扣 4 點
+    capital: 1000000    // 本金（先存起來，之後算報酬率用）
   };
+
+  let gParsed = null;   // 目前已解析的結果（給調整滑點時重畫）
 
   // ===== 小工具 =====
   const $ = (s) => document.querySelector(s);
@@ -93,9 +97,7 @@
         continue;
       }
 
-      // 事件行：
-      //   時間 價格 [中文]  → 3 欄
-      //   （目前檔案裡進場/出場都符合這種格式）
+      // 事件行：時間 價格 [中文] → 3 欄
       if (ps.length === 3) {
         if (!open) {
           // 進場
@@ -117,9 +119,7 @@
           const taxBase = (entryPx + exitPx) * CFG.pointValue;
           const tax = Math.round(taxBase * CFG.taxRate);
 
-          const theoNet   = gross - fee - tax;
-          const slipCost  = CFG.slipPointsRT * CFG.pointValue;
-          const actualNet = theoNet - slipCost;
+          const theoNet = gross - fee - tax;
 
           // 用 dir 還原中文標籤（不依賴原始檔中文字）
           const entryAction = dir > 0 ? '新買' : '新賣';
@@ -132,15 +132,14 @@
             points,
             fee,
             tax,
-            theoNet,
-            actualNet
+            theoNet
           });
 
           open = null;
         }
       }
 
-      // 其他欄位數（例如將來多了東西）先忽略
+      // 其他欄位數先忽略
     }
 
     return { header, trades };
@@ -151,12 +150,18 @@
     const tbody = $('#tradesBody');
     tbody.innerHTML = '';
 
+    if (!parsed || !parsed.trades.length) return;
+
     let cumTheo = 0;
     let cumActual = 0;
 
+    const slipCost = CFG.slipPerSide * 2 * CFG.pointValue; // 每筆 round-trip 扣的金額
+
     parsed.trades.forEach((t, idx) => {
-      cumTheo   += t.theoNet;
-      cumActual += t.actualNet;
+      cumTheo += t.theoNet;
+
+      const actualNet = t.theoNet - slipCost;
+      cumActual += actualNet;
 
       const tr1 = document.createElement('tr');
       const tr2 = document.createElement('tr');
@@ -166,7 +171,7 @@
         <td rowspan="2">${idx + 1}</td>
         <td>${formatTs(t.entry.ts)}</td>
         <td>${fmtInt(t.entry.px)}</td>
-        <td>${t.entry.action}</td>
+        <td style="text-align:right;">${t.entry.action}</td>
         <td>—</td>
         <td>—</td>
         <td>—</td>
@@ -180,13 +185,13 @@
       tr2.innerHTML = `
         <td>${formatTs(t.exit.ts)}</td>
         <td>${fmtInt(t.exit.px)}</td>
-        <td>${t.exit.action}</td>
+        <td style="text-align:right;">${t.exit.action}</td>
         <td class="${clsForNumber(t.points)}">${fmtSignedInt(t.points)}</td>
         <td>${fmtInt(t.fee)}</td>
         <td>${fmtInt(t.tax)}</td>
         <td class="${clsForNumber(t.theoNet)}">${fmtInt(t.theoNet)}</td>
         <td class="${clsForNumber(cumTheo)}">${fmtInt(cumTheo)}</td>
-        <td class="${clsForNumber(t.actualNet)}">${fmtInt(t.actualNet)}</td>
+        <td class="${clsForNumber(actualNet)}">${fmtInt(actualNet)}</td>
         <td class="${clsForNumber(cumActual)}">${fmtInt(cumActual)}</td>
       `;
 
@@ -204,11 +209,28 @@
     reader.onload = function (e) {
       const text = e.target.result || '';
       const parsed = parseTxt(text);
+      gParsed = parsed;
       renderTrades(parsed);
     };
-    // 不指定編碼，瀏覽器會用 UTF-8 讀 Big5，
-    // 中文雖然會壞掉，但我們已經不看中文字了，完全沒差。
+    // Big5 也沒關係，我們完全不看原始中文字
     reader.readAsText(file);
+  });
+
+  // ===== 本金 / 滑點輸入事件 =====
+  $('#capitalInput').addEventListener('change', function () {
+    const v = Number(this.value);
+    if (isFinite(v) && v > 0) {
+      CFG.capital = v;
+      // 目前先不影響表格，之後要算報酬率再用
+    }
+  });
+
+  $('#slipInput').addEventListener('change', function () {
+    const v = Number(this.value);
+    CFG.slipPerSide = isFinite(v) ? v : 0;
+    if (gParsed) {
+      renderTrades(gParsed); // 重新套用滑點重畫
+    }
   });
 
 })();
