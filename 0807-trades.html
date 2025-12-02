@@ -15,34 +15,49 @@
     h1 {
       font-size: 16px;
       margin: 0 0 6px 0;
+      text-align: center;
     }
 
     /* 工具列 */
     .toolbar {
-      margin-bottom: 6px;
+      margin: 0 auto 6px auto;
       display: flex;
       flex-wrap: wrap;
       gap: 4px 8px;
       align-items: center;
+      justify-content: center;   /* ★ 置中 */
       font-size: 12px;
+      max-width: 1100px;
+    }
+    .toolbar label {
+      white-space: nowrap;
     }
     .toolbar input[type="number"] {
       width: 80px;
       font-size: 12px;
       padding: 1px 2px;
+      margin-left: 3px;
     }
     .toolbar input[type="file"] {
       font-size: 12px;
     }
+    .toolbar button {
+      font-size: 12px;
+      padding: 2px 10px;
+      cursor: pointer;
+    }
+    .toolbar .hint {
+      font-size: 11px;
+      color: #777;
+      white-space: nowrap;
+    }
 
-    /* 表格 —— 關鍵：不設 width、不設欄寬，完全吃內容 */
+    /* 表格 —— 不設定 width，讓內容決定寬度，再整張表置中 */
     table {
       border-collapse: collapse;
       background: #fff;
       font-size: 12px;
-      margin-top: 4px;
-      /* 不要 width:100%; 讓表格維持內容寬度 */
-      /* 不要 table-layout: fixed; 用 auto 讓欄位照內容伸縮 */
+      margin: 4px auto 0 auto;   /* ★ 整張表置中 */
     }
 
     thead {
@@ -53,9 +68,9 @@
     }
 
     th, td {
-      padding: 3px 6px;        /* 上下保留一點高度，左右一點點就好 */
+      padding: 3px 6px;
       border-bottom: 1px solid #eee;
-      white-space: nowrap;     /* ★ 不要換行 */
+      white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
       line-height: 1.3;
@@ -83,11 +98,6 @@
 
   <div class="toolbar">
     <label>
-      載入 TXT：
-      <input type="file" id="fileInput" accept=".txt,.TF_1m">
-    </label>
-
-    <label>
       本金：
       <input type="number" id="capitalInput" value="1000000" step="10000">
     </label>
@@ -97,8 +107,15 @@
       <input type="number" id="slipInput" value="0" step="0.1">
     </label>
 
-    <span style="font-size:11px;color:#777;">
-      1 點 = 200 元｜手續費 45 元｜期交稅率 0.002%（雙邊）
+    <label>
+      TXT 檔：
+      <input type="file" id="fileInput" accept=".txt,.TF_1m">
+    </label>
+
+    <button id="runBtn">計算</button>
+
+    <span class="hint">
+      步驟：先輸入本金／滑點 → 選 TXT → 按「計算」
     </span>
   </div>
 
