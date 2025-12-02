@@ -17,6 +17,7 @@
   };
 
   let gParsed = null;   // 目前已解析的結果（給調整滑點時重畫）
+  let gFile = null;     // 目前選擇的檔案
 
   // ===== 小工具 =====
   const $ = (s) => document.querySelector(s);
@@ -78,7 +79,7 @@
     const allLines = text.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
     if (!allLines.length) return { header: null, trades: [] };
 
-    const header = allLines[0];       // BeginTime=...,EndTime=...
+    const header = allLines[0];     // BeginTime=...,EndTime=...
     const lines  = allLines.slice(1); // 之後才是資料
 
     const trades = [];
@@ -115,9 +116,7 @@
             : (entryPx - exitPx);
 
           const gross = points * CFG.pointValue;
-
           const fee = CFG.feePerSide * 2; // 進 + 出
-
           // ★ 正確作法：兩邊各自計稅後四捨五入，再相加
           const taxEntry = Math.round(entryPx * CFG.pointValue * CFG.taxRate);
           const taxExit  = Math.round(exitPx  * CFG.pointValue * CFG.taxRate);
@@ -204,20 +203,10 @@
     });
   }
 
-  // ===== 檔案載入事件 =====
+  // ===== 檔案選擇事件：只記住檔案，不解析 =====
   $('#fileInput').addEventListener('change', function (ev) {
     const file = ev.target.files && ev.target.files[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = function (e) {
-      const text = e.target.result || '';
-      const parsed = parseTxt(text);
-      gParsed = parsed;
-      renderTrades(parsed);
-    };
-    // Big5 也沒關係，我們完全不看原始中文字
-    reader.readAsText(file);
+    gFile = file || null;
   });
 
   // ===== 本金 / 滑點輸入事件 =====
@@ -235,6 +224,24 @@
     if (gParsed) {
       renderTrades(gParsed); // 重新套用滑點重畫
     }
+  });
+
+  // ===== 「計算」按鈕：讀檔 + 解析 + 畫表 =====
+  $('#runBtn').addEventListener('click', function () {
+    if (!gFile) {
+      alert('請先選擇 TXT 檔案');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = function (e) {
+      const text = e.target.result || '';
+      const parsed = parseTxt(text);
+      gParsed = parsed;
+      renderTrades(parsed);
+    };
+    // Big5 也沒關係，我們完全不看原始中文字
+    reader.readAsText(gFile);
   });
 
 })();
