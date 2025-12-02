@@ -37,26 +37,16 @@
       padding: 6px 8px;
       border-bottom: 1px solid #eee;
       white-space: nowrap;
-      text-align: right;
-    }
-    th:first-child,
-    td:first-child,
-    th:nth-child(2),
-    td:nth-child(2),
-    th:nth-child(3),
-    td:nth-child(3),
-    th:nth-child(4),
-    td:nth-child(4) {
-      text-align: left;
+      text-align: right;   /* ✅ 所有欄位靠右 */
     }
     tbody tr:nth-child(even) {
       background: #fcfcfc;
     }
     .num-pos {
-      color: #e74c3c; /* 紅色：獲利 */
+      color: #e60000;      /* ✅ 獲利紅色 */
     }
     .num-neg {
-      color: #1abc9c; /* 綠色：虧損 */
+      color: #008800;      /* ✅ 虧損綠色 */
     }
     .muted {
       color: #999;
