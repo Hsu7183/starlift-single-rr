@@ -7,6 +7,7 @@
 // - KPI：理論一組、含滑價一組；評等以「含滑價」為準
 // - Risk of Ruin：使用 Brownian 近似，視為「相對排序用 KPI」
 //   小於 0.01% 時，畫面顯示 "<0.01%"，避免誤解為真正 0%
+// - 圖表：畫出理論/含滑價 NAV 曲線
 
 (function () {
   'use strict';
@@ -22,6 +23,7 @@
 
   let gParsed = null;
   let gFile   = null;
+  let gChart  = null;   // Chart.js 線圖
 
   // ===== 小工具 =====
   const $ = (s) => document.querySelector(s);
@@ -122,7 +124,7 @@
     const header = allLines[0];
     const lines  = allLines.slice(1);
 
-    const trades = [];
+       const trades = [];
     let open = null;
 
     for (let i = 0; i < lines.length; i++) {
@@ -543,7 +545,7 @@
       if (v == null || !isFinite(v)) return '—';
       if (fmt === 'pct') {
         if (v < 0) return '—';
-        if (v < 0.0001) return '<0.01%';   // ★ 小於 0.01% 顯示為 "<0.01%"
+        if (v < 0.0001) return '<0.01%';   // 小於 0.01% 顯示為 "<0.01%"
         return fmtPct(v);
       }
       if (fmt === 'f2')   return fmtFloat(v, 2);
@@ -581,7 +583,7 @@
       tr.innerHTML = `
         <td class="kpi-name">${name}</td>
         <td class="num">${sTheo}</td>
-        <td class="num">${sAct}</td>
+        <td class="num ${ratingClass}">${sAct}</td>
         <td class="kpi-desc">${desc}</td>
         <td class="center ${ratingClass}">${ratingLabel}</td>
         <td class="center">${refRange}</td>
@@ -739,7 +741,7 @@
         const tr = document.createElement('tr');
         tr.innerHTML = `
           <td class="kpi-name">${item.name}</td>
-          <td class="num center">${item.valueStr}</td>
+          <td class="num center ${item.ratingClass}">${item.valueStr}</td>
           <td class="center">建議優化</td>
           <td class="center ${item.ratingClass}">${item.ratingLabel}</td>
           <td class="center">${item.refRange}</td>
@@ -749,13 +751,95 @@
     }
   }
 
+  // ===== 資產曲線圖 =====
+  function renderEquityChart(navTheo, navAct) {
+    const canvas = document.getElementById('equityChart');
+    if (!canvas || !window.Chart) return;
+    const ctx = canvas.getContext('2d');
+    const labels = navTheo.map((_, i) => i + 1);
+
+    if (gChart) {
+      gChart.destroy();
+      gChart = null;
+    }
+
+    gChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          {
+            label: '含滑價 NAV',
+            data: navAct,
+            borderColor: 'rgba(0,0,0,1)',
+            backgroundColor: 'rgba(0,0,0,0)',
+            borderWidth: 2,
+            tension: 0,
+            pointRadius: 0
+          },
+          {
+            label: '理論 NAV',
+            data: navTheo,
+            borderColor: 'rgba(120,120,120,0.8)',
+            backgroundColor: 'rgba(0,0,0,0)',
+            borderWidth: 1,
+            borderDash: [4, 3],
+            tension: 0,
+            pointRadius: 0
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: {
+          mode: 'index',
+          intersect: false
+        },
+        plugins: {
+          legend: {
+            display: true,
+            position: 'top'
+          },
+          tooltip: {
+            callbacks: {
+              label: function(ctx) {
+                const v = ctx.parsed.y;
+                return `${ctx.dataset.label}: ${fmtInt(v)}`;
+              }
+            }
+          }
+        },
+        scales: {
+          x: {
+            display: true,
+            title: {
+              display: true,
+              text: '交易筆數'
+            }
+          },
+          y: {
+            display: true,
+            title: {
+              display: true,
+              text: 'NAV（金額）'
+            }
+          }
+        }
+      }
+    });
+  }
+
   // ===== 畫交易明細表格（理論 vs 含滑價） =====
   function renderTrades(parsed) {
     const tbody = $('#tradesBody');
     tbody.innerHTML = '';
     renderKpi(null, null);
 
-    if (!parsed || !parsed.trades.length) return;
+    if (!parsed || !parsed.trades.length) {
+      if (gChart) { gChart.destroy(); gChart = null; }
+      return;
+    }
 
     let cumTheo   = 0;
     let cumActual = 0;
@@ -818,6 +902,11 @@
     const kpiTheo = calcKpi(parsed.trades, theoPnls, theoEquity, 0);
     const kpiAct  = calcKpi(parsed.trades, actPnls,  actEquity,  CFG.slipPerSide);
     renderKpi(kpiTheo, kpiAct);
+
+    // 圖表：NAV = 本金 + 累積損益
+    const navTheo = theoEquity.map(v => CFG.capital + v);
+    const navAct  = actEquity.map(v  => CFG.capital + v);
+    renderEquityChart(navTheo, navAct);
   }
 
   // ===== 事件 =====
