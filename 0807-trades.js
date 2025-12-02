@@ -5,7 +5,8 @@
 //   * actualNet= 實際淨損益（含滑價）
 // - 交易明細：理論 vs 含滑價 並列
 // - KPI：理論一組、含滑價一組；評等以「含滑價」為準
-// - Risk of Ruin：改用 Brownian 近似公式，不再一律 100%
+// - Risk of Ruin：使用 Brownian 近似，視為「相對排序用 KPI」
+//   小於 0.01% 時，畫面顯示 "<0.01%"，避免誤解為真正 0%
 
 (function () {
   'use strict';
@@ -540,7 +541,11 @@
 
     const toStr = (fmt, v) => {
       if (v == null || !isFinite(v)) return '—';
-      if (fmt === 'pct')  return fmtPct(v);
+      if (fmt === 'pct') {
+        if (v < 0) return '—';
+        if (v < 0.0001) return '<0.01%';   // ★ 小於 0.01% 顯示為 "<0.01%"
+        return fmtPct(v);
+      }
       if (fmt === 'f2')   return fmtFloat(v, 2);
       if (fmt === 'f3')   return fmtFloat(v, 3);
       if (fmt === 'f4')   return fmtFloat(v, 4);
@@ -597,7 +602,7 @@
       '累積淨損益的最大下跌金額');
     addRow('risk_ruin', '破產風險 Risk of Ruin（近似）',
       'pct', t.riskOfRuin, a.riskOfRuin,
-      '以 Brownian 近似計算的長期觸及破產線機率（僅供參考）');
+      '以 Brownian 近似估算的長期觸及破產線機率（相對排序用，非實際年度機率）');
     addRow(null, '最差單日損益 Worst Day PnL',
       'int', t.worstDayPnl, a.worstDayPnl,
       '以出場日統計的單日最差實際損益');
