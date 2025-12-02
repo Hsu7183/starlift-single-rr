@@ -1,13 +1,6 @@
 // 0807-trades.js
-// - 讀 0807 KPI 版 TF_1m（事件行：時間 價格 中文；持倉行：... INPOS）
-// - 解析交易，算出：
-//   * theoNet  = 理論淨損益（不含滑價）
-//   * actualNet= 實際淨損益（含滑價）
-// - 交易明細：理論 vs 含滑價 並列
-// - KPI：理論一組、含滑價一組；評等以「含滑價」為準
-// - Risk of Ruin：使用 Brownian 近似，視為「相對排序用 KPI」
-//   小於 0.01% 時，畫面顯示 "<0.01%"，避免誤解為真正 0%
-// - 圖表：畫出理論/含滑價 NAV 曲線
+// - 台指期單檔分析：KPI + 圖表 + 交易明細
+// - 理論與含滑價分開計算，圖表起點為 0（累積損益）
 
 (function () {
   'use strict';
@@ -18,12 +11,12 @@
     feePerSide: 45,     // 單邊手續費
     taxRate: 0.00002,   // 期交稅率（單邊）
     slipPerSide: 0,     // 每邊滑點（點數）
-    capital: 1000000    // 本金
+    capital: 1000000    // 本金（KPI 用）
   };
 
   let gParsed = null;
   let gFile   = null;
-  let gChart  = null;   // Chart.js 線圖
+  let gChart  = null;
 
   // ===== 小工具 =====
   const $ = (s) => document.querySelector(s);
@@ -124,7 +117,7 @@
     const header = allLines[0];
     const lines  = allLines.slice(1);
 
-       const trades = [];
+    const trades = [];
     let open = null;
 
     for (let i = 0; i < lines.length; i++) {
@@ -191,7 +184,7 @@
     let ref   = '—';
 
     switch (key) {
-      case 'maxdd_pct':   // 越小越好
+      case 'maxdd_pct':
         ref = '≦ 20% 強；20–30% 可接受；>30% 需優化';
         if (value <= 0.20)       { label = 'Strong';  css = 'rating-strong';  }
         else if (value <= 0.30)  { label = 'Adequate'; }
@@ -419,9 +412,9 @@
 
     let riskOfRuin = null;
     if (varT <= 0) {
-      riskOfRuin = null;  // 資料太少、不算
+      riskOfRuin = null;
     } else if (avg <= 0) {
-      riskOfRuin = 1;     // 單筆期望<=0，長期一定破產
+      riskOfRuin = 1;
     } else {
       const mu     = avg;
       const sigma2 = varT;
@@ -545,7 +538,7 @@
       if (v == null || !isFinite(v)) return '—';
       if (fmt === 'pct') {
         if (v < 0) return '—';
-        if (v < 0.0001) return '<0.01%';   // 小於 0.01% 顯示為 "<0.01%"
+        if (v < 0.0001) return '<0.01%';
         return fmtPct(v);
       }
       if (fmt === 'f2')   return fmtFloat(v, 2);
@@ -604,7 +597,7 @@
       '累積淨損益的最大下跌金額');
     addRow('risk_ruin', '破產風險 Risk of Ruin（近似）',
       'pct', t.riskOfRuin, a.riskOfRuin,
-      '以 Brownian 近似估算的長期觸及破產線機率（相對排序用，非實際年度機率）');
+      '以 Brownian 近似估算的長期觸及破產線機率（相對排序用）');
     addRow(null, '最差單日損益 Worst Day PnL',
       'int', t.worstDayPnl, a.worstDayPnl,
       '以出場日統計的單日最差實際損益');
@@ -752,11 +745,14 @@
   }
 
   // ===== 資產曲線圖 =====
-  function renderEquityChart(navTheo, navAct) {
+  function renderEquityChart(dates, totalTheo, totalAct,
+                             longTheo, longAct, shortTheo, shortAct) {
     const canvas = document.getElementById('equityChart');
     if (!canvas || !window.Chart) return;
     const ctx = canvas.getContext('2d');
-    const labels = navTheo.map((_, i) => i + 1);
+
+    // labels 用 index，刻度文字用日期
+    const labels = totalAct.map((_, i) => i + 1);
 
     if (gChart) {
       gChart.destroy();
@@ -768,19 +764,63 @@
       data: {
         labels,
         datasets: [
+          // 含滑價總損益：黑實線
           {
-            label: '含滑價 NAV',
-            data: navAct,
+            label: '含滑價總損益',
+            data: totalAct,
             borderColor: 'rgba(0,0,0,1)',
             backgroundColor: 'rgba(0,0,0,0)',
             borderWidth: 2,
             tension: 0,
             pointRadius: 0
           },
+          // 理論總損益：黑虛線
           {
-            label: '理論 NAV',
-            data: navTheo,
-            borderColor: 'rgba(120,120,120,0.8)',
+            label: '理論總損益',
+            data: totalTheo,
+            borderColor: 'rgba(0,0,0,0.5)',
+            backgroundColor: 'rgba(0,0,0,0)',
+            borderWidth: 1,
+            borderDash: [4, 3],
+            tension: 0,
+            pointRadius: 0
+          },
+          // 多頭含滑價：紅實線
+          {
+            label: '多頭含滑價',
+            data: longAct,
+            borderColor: 'rgba(220,0,0,1)',
+            backgroundColor: 'rgba(0,0,0,0)',
+            borderWidth: 1.5,
+            tension: 0,
+            pointRadius: 0
+          },
+          // 多頭理論：紅虛線
+          {
+            label: '多頭理論',
+            data: longTheo,
+            borderColor: 'rgba(220,0,0,0.5)',
+            backgroundColor: 'rgba(0,0,0,0)',
+            borderWidth: 1,
+            borderDash: [4, 3],
+            tension: 0,
+            pointRadius: 0
+          },
+          // 空頭含滑價：綠實線
+          {
+            label: '空頭含滑價',
+            data: shortAct,
+            borderColor: 'rgba(0,150,0,1)',
+            backgroundColor: 'rgba(0,0,0,0)',
+            borderWidth: 1.5,
+            tension: 0,
+            pointRadius: 0
+          },
+          // 空頭理論：綠虛線
+          {
+            label: '空頭理論',
+            data: shortTheo,
+            borderColor: 'rgba(0,150,0,0.5)',
             backgroundColor: 'rgba(0,0,0,0)',
             borderWidth: 1,
             borderDash: [4, 3],
@@ -803,6 +843,14 @@
           },
           tooltip: {
             callbacks: {
+              title: function(items) {
+                const idx = items[0].dataIndex;
+                const d   = dates[idx];
+                if (!d) return '';
+                const ymdd = `${d.getFullYear()}/${(d.getMonth()+1)
+                  .toString().padStart(2,'0')}/${d.getDate().toString().padStart(2,'0')}`;
+                return ymdd;
+              },
               label: function(ctx) {
                 const v = ctx.parsed.y;
                 return `${ctx.dataset.label}: ${fmtInt(v)}`;
@@ -815,14 +863,27 @@
             display: true,
             title: {
               display: true,
-              text: '交易筆數'
+              text: '日期（月）'
+            },
+            ticks: {
+              callback: function(value, index) {
+                const d = dates[index];
+                if (!d) return '';
+                const ym = `${d.getFullYear()}/${(d.getMonth()+1)
+                  .toString().padStart(2,'0')}`;
+                if (index === 0) return ym;
+                const prev = dates[index - 1];
+                const prevYm = `${prev.getFullYear()}/${(prev.getMonth()+1)
+                  .toString().padStart(2,'0')}`;
+                return ym === prevYm ? '' : ym;
+              }
             }
           },
           y: {
             display: true,
             title: {
               display: true,
-              text: 'NAV（金額）'
+              text: '累積損益（金額）'
             }
           }
         }
@@ -848,6 +909,8 @@
     const theoEquity = [];
     const actPnls    = [];
     const actEquity  = [];
+    const dirs       = [];
+    const exitDates  = [];
 
     const slipCostPerTrade = CFG.pointValue * CFG.slipPerSide * 2;
 
@@ -861,6 +924,9 @@
 
       actPnls.push(actualNet);
       actEquity.push(cumActual);
+
+      dirs.push(t.dir);
+      exitDates.push(tsToDate(t.exit.ts));
 
       const tr1 = document.createElement('tr');
       const tr2 = document.createElement('tr');
@@ -903,10 +969,41 @@
     const kpiAct  = calcKpi(parsed.trades, actPnls,  actEquity,  CFG.slipPerSide);
     renderKpi(kpiTheo, kpiAct);
 
-    // 圖表：NAV = 本金 + 累積損益
-    const navTheo = theoEquity.map(v => CFG.capital + v);
-    const navAct  = actEquity.map(v  => CFG.capital + v);
-    renderEquityChart(navTheo, navAct);
+    // 圖表：累積損益（起點 0） & 多頭/空頭拆線
+    const totalTheo = [0];
+    const totalAct  = [0];
+    theoEquity.forEach(v => totalTheo.push(v));
+    actEquity.forEach(v  => totalAct.push(v));
+
+    const longTheo  = [0];
+    const longAct   = [0];
+    const shortTheo = [0];
+    const shortAct  = [0];
+
+    let cumLT = 0, cumLA = 0, cumST = 0, cumSA = 0;
+    for (let i = 0; i < theoPnls.length; i++) {
+      const dir   = dirs[i];
+      const tPnL  = theoPnls[i];
+      const aPnL  = actPnls[i];
+
+      if (dir > 0) {
+        cumLT += tPnL;
+        cumLA += aPnL;
+      } else if (dir < 0) {
+        cumST += tPnL;
+        cumSA += aPnL;
+      }
+      longTheo.push(cumLT);
+      longAct.push(cumLA);
+      shortTheo.push(cumST);
+      shortAct.push(cumSA);
+    }
+
+    const datesForChart = [exitDates[0] || new Date()];
+    exitDates.forEach(d => datesForChart.push(d || exitDates[0]));
+
+    renderEquityChart(datesForChart, totalTheo, totalAct,
+                      longTheo, longAct, shortTheo, shortAct);
   }
 
   // ===== 事件 =====
