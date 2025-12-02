@@ -52,9 +52,9 @@
       white-space: nowrap;
     }
 
-    /* KPI 區塊 */
+    /* KPI 區塊共用 */
     .kpi-wrapper {
-      margin: 4px auto 4px auto;
+      margin: 4px auto;
       max-width: 1100px;
     }
     .kpi-table {
@@ -73,23 +73,41 @@
     }
     .kpi-table th {
       background: #fafafa;
-      text-align: left;
     }
     .kpi-table td:nth-child(2) {
       text-align: right;
       font-variant-numeric: tabular-nums;
     }
-    .kpi-name {
-      font-weight: 600;
+    .kpi-table td:nth-child(3) {
+      text-align: left;
     }
-    .kpi-desc {
-      color: #777;
-      font-size: 11px;
+    .kpi-table td:nth-child(4),
+    .kpi-table th:nth-child(4),
+    .kpi-table td:nth-child(5),
+    .kpi-table th:nth-child(5) {
+      text-align: center;
     }
+    .kpi-name { font-weight: 600; }
+    .kpi-desc { color: #777; font-size: 11px; }
+
     .kpi-section {
       background: #f0f0f0;
       font-weight: 700;
     }
+
+    /* 建議優化指標卡片 */
+    .kpi-bad-card .kpi-table {
+      background: #fff5f5;
+      border: 1px solid #ffd0d0;
+    }
+    .kpi-bad-card thead th {
+      background: #ffe5e5;
+    }
+
+    /* 評語顏色：好的紅色，不行的綠色（照你習慣） */
+    .rating-strong  { color: #e60000; font-weight: 600; }  /* 好的 KPI */
+    .rating-adequate{ color: #cc7a00; font-weight: 600; }  /* 中立 */
+    .rating-improve { color: #008000; font-weight: 600; }  /* 需優化 KPI */
 
     /* 交易明細表格 —— 不設定 width，讓內容決定寬度，再整張表置中 */
     table.trade-table {
@@ -159,14 +177,34 @@
     </span>
   </div>
 
-  <!-- KPI 區塊：輸入區下方、交易明細上方 -->
+  <!-- 建議優化指標卡片：把評等為 Improve 的 KPI 放這裡 -->
+  <div class="kpi-wrapper kpi-bad-card">
+    <table class="kpi-table">
+      <thead>
+        <tr>
+          <th style="width: 180px;">建議優化指標</th>
+          <th style="width: 120px;">數值</th>
+          <th>說明</th>
+        </tr>
+      </thead>
+      <tbody id="kpiBadBody">
+        <tr>
+          <td colspan="3" style="color:#777;">目前沒有需要特別優化的指標。</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 全部 KPI 明細 -->
   <div class="kpi-wrapper">
     <table class="kpi-table">
       <thead>
         <tr>
-          <th style="width: 190px;">KPI</th>
+          <th style="width: 190px;">指標</th>
           <th style="width: 130px;">數值</th>
           <th>說明</th>
+          <th style="width: 90px;">機構評語</th>
+          <th style="width: 120px;">參考區間</th>
         </tr>
       </thead>
       <tbody id="kpiBody">
