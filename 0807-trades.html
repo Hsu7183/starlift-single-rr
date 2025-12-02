@@ -99,10 +99,21 @@
       background: #ffe5e5;
     }
 
-    /* 評語顏色：好的紅色，不行的綠色 */
-    .rating-strong  { color: #e60000; font-weight: 600; }  /* Strong */
-    .rating-adequate{ color: #cc7a00; font-weight: 600; }  /* Adequate */
-    .rating-improve { color: #008000; font-weight: 600; }  /* Improve */
+    /* 評語顏色：強=紅，Adequate=黃，Improve=綠 */
+    .rating-strong  { color: #e60000; font-weight: 600; }   /* Strong → 紅 */
+    .rating-adequate{ color: #c9a500; font-weight: 600; }   /* Adequate → 黃 */
+    .rating-improve { color: #008000; font-weight: 600; }   /* Improve → 綠 */
+
+    /* 圖表區塊 */
+    .chart-wrapper {
+      max-width: 1100px;
+      height: 420px;
+      margin: 8px auto;
+      background: #fff;
+      border: 1px solid #eee;
+      border-radius: 4px;
+      padding: 8px;
+    }
 
     /* 交易明細表格 —— 不設定 width，讓內容決定寬度，再整張表置中 */
     table.trade-table {
@@ -211,6 +222,11 @@
     </table>
   </div>
 
+  <!-- 圖表區：參考 0807 主頁的資產曲線 -->
+  <div class="chart-wrapper">
+    <canvas id="equityChart"></canvas>
+  </div>
+
   <!-- 交易明細表格：理論 vs 含滑價 並列 -->
   <table class="trade-table">
     <thead class="trade-head">
@@ -233,6 +249,8 @@
     </tbody>
   </table>
 
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="0807-trades.js"></script>
 </body>
 </html>
