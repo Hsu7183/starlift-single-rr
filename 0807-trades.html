@@ -10,69 +10,90 @@
       background: #f5f5f5;
       padding: 16px;
     }
+
     h1 {
-      font-size: 20px;
-      margin-bottom: 12px;
+      font-size: 18px;           /* ★ 更緊湊 */
+      margin-bottom: 10px;
     }
+
+    /* ---- 工具區 ---- */
     .toolbar {
-      margin-bottom: 12px;
+      margin-bottom: 10px;
       display: flex;
       flex-wrap: wrap;
-      gap: 8px 16px;
+      gap: 6px 12px;
       align-items: center;
-      font-size: 14px;
+      font-size: 13px;           /* ★ 更緊湊 */
     }
     .toolbar label {
-      font-size: 14px;
       white-space: nowrap;
     }
-    .toolbar input[type="file"] {
-      font-size: 13px;
-    }
     .toolbar input[type="number"] {
-      width: 100px;
-      font-size: 13px;
-      padding: 2px 4px;
-      margin-left: 4px;
+      width: 90px;               /* ★ 遞小 */
+      font-size: 12px;           /* ★ 緊湊 */
+      padding: 2px 3px;
+      margin-left: 3px;
     }
+    .toolbar input[type="file"] {
+      font-size: 12px;
+    }
+
+    /* ---- 表格 ---- */
     table {
       width: 100%;
       border-collapse: collapse;
       background: #fff;
-      font-size: 13px;
+      font-size: 12px;          /* ★ 再緊一級 */
+      table-layout: fixed;      /* ★ 讓欄寬自動壓縮 */
     }
+
     thead {
       background: #fafafa;
       position: sticky;
       top: 0;
       z-index: 1;
     }
+
     th, td {
-      padding: 6px 8px;
+      padding: 3px 4px;         /* ★ 超緊湊 padding */
       border-bottom: 1px solid #eee;
       white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;  /* ★ 避免撐開 */
     }
+
     th {
-      text-align: center;    /* ✅ 表頭置中 */
+      text-align: center;
       font-weight: 600;
     }
     td {
-      text-align: right;     /* ✅ 內容靠右 */
+      text-align: right;
     }
+
+    /* ---- 欄位寬度調整 ---- */
+    th:nth-child(1), td:nth-child(1) { width: 24px;  } /* # */
+    th:nth-child(2), td:nth-child(2) { width: 105px; } /* 日期時間 */
+    th:nth-child(3), td:nth-child(3) { width: 70px;  } /* 成交點位 */
+    th:nth-child(4), td:nth-child(4) { width: 46px;  } /* 類別 */
+    th:nth-child(5), td:nth-child(5) { width: 46px;  } /* 點數 */
+    th:nth-child(6), td:nth-child(6) { width: 50px;  } /* 手續費 */
+    th:nth-child(7), td:nth-child(7) { width: 50px;  } /* 交易稅 */
+    th:nth-child(8), td:nth-child(8) { width: 80px;  } /* 理論損益 */
+    th:nth-child(9), td:nth-child(9) { width: 95px;  } /* 累積理論 */
+    th:nth-child(10), td:nth-child(10) { width: 90px; } /* 實際損益 */
+    th:nth-child(11), td:nth-child(11) { width: 110px;} /* 累積實際 */
+
     tbody tr:nth-child(even) {
       background: #fcfcfc;
     }
-    .num-pos {
-      color: #e60000;        /* ✅ 獲利紅色 */
-    }
-    .num-neg {
-      color: #008800;        /* ✅ 虧損綠色 */
-    }
-    .muted {
-      color: #999;
-    }
+
+    /* ---- 配色：紅 / 綠 ---- */
+    .num-pos { color: #e60000; }
+    .num-neg { color: #0a7f00; }
+
   </style>
 </head>
+
 <body>
   <h1>0807 交易明細</h1>
 
@@ -92,8 +113,8 @@
       <input type="number" id="slipInput" value="0" step="0.1">
     </label>
 
-    <span class="muted">
-      1 點 = 200 元，單邊手續費 45 元，期交稅率 0.002%（雙邊計）。
+    <span class="muted" style="font-size:12px;color:#777;">
+      1 點 = 200 元｜手續費 45 元｜期交稅率 0.002%（雙邊）
     </span>
   </div>
 
@@ -109,8 +130,8 @@
         <th>交易稅</th>
         <th>理論淨損益</th>
         <th>累積理論淨損益</th>
-        <th>實際淨損益(含滑價)</th>
-        <th>累積實際淨損益(含滑價)</th>
+        <th>實際淨損益</th>
+        <th>累積實際淨損益</th>
       </tr>
     </thead>
     <tbody id="tradesBody">
