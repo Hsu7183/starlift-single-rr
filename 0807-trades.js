@@ -1,5 +1,6 @@
 // 0807-trades.js
-// 讀取 0807 KPI 版 TF_1m（中文：新買/平賣 + INPOS），產生交易明細表
+// 讀取 0807 KPI 版 TF_1m（事件行：時間 價格 中文；持倉行：... INPOS）
+// 不看中文字，純靠欄位數 + INPOS 判斷進出場。
 
 (function () {
   'use strict';
@@ -7,8 +8,8 @@
   // ===== 參數設定 =====
   const CFG = {
     pointValue: 200,    // 每點金額
-    feePerSide: 45,     // 單邊手續費（進 45 + 出 45 = 90）
-    taxRate: 0.00002,   // 期交稅率（單邊），這裡用雙邊合計
+    feePerSide: 45,     // 單邊手續費
+    taxRate: 0.00002,   // 期交稅率（單邊）
     slipPointsRT: 0     // 一 round-trip 滑價點數（先 0）
   };
 
@@ -42,94 +43,110 @@
     return `${y}/${parseInt(m, 10)}/${parseInt(d, 10)} ${hh}:${mm}`;
   }
 
-  // ===== 解析 TXT：新買/新賣/平買/平賣/強制平倉 + INPOS =====
+  // 往後掃第一行 INPOS，抓方向 dir（+1 多 / -1 空）
+  function getDirFromInpos(lines, startIdx) {
+    const maxLookAhead = 300;
+    const total = lines.length;
+
+    for (let j = startIdx + 1; j < total && j <= startIdx + maxLookAhead; j++) {
+      const line = lines[j];
+      const ps = line.split(/\s+/);
+      if (!ps.length) continue;
+
+      // INPOS：時間 mid low dir entry INPOS
+      if (ps.length >= 6 && ps[ps.length - 1] === 'INPOS') {
+        const dir = parseInt(ps[3], 10);
+        if (dir === 1 || dir === -1) return dir;
+      }
+
+      // 遇到下一個事件行，就不再往後找
+      if (ps.length === 3 && ps[ps.length - 1] !== 'INPOS') {
+        break;
+      }
+    }
+    // 找不到就預設多單（理論上不會發生）
+    return 1;
+  }
+
+  // ===== 解析 TXT =====
   function parseTxt(text) {
-    const lines = text.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
-    if (!lines.length) return { header: null, trades: [] };
+    const allLines = text.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+    if (!allLines.length) return { header: null, trades: [] };
 
-    const header = lines[0]; // BeginTime=...,EndTime=...,ForceExitTime=...
+    const header = allLines[0];       // BeginTime=...,EndTime=...
+    const lines  = allLines.slice(1); // 之後才是資料
 
-    const actionRe = /(新買|新賣|平買|平賣|強制平倉)$/;
-    const events = [];
+    const trades = [];
+    let open = null; // { ts, px, dir }
 
-    for (let i = 1; i < lines.length; i++) {
+    for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
-      const parts = line.split(/\s+/);
-      if (parts.length < 3) continue;
+      const ps = line.split(/\s+/);
+      if (ps.length < 2) continue;
 
-      const last = parts[parts.length - 1];
-
-      // INPOS 行：時間 價格 High Low dir entry INPOS  → 直接略過
-      if (last === 'INPOS') continue;
-
-      // 只抓最後一欄是 新買/新賣/平買/平賣/強制平倉 的行
-      if (!actionRe.test(last)) continue;
-
-      const ts = parts[0];
-      const px = parseFloat(parts[1]);
+      const ts = ps[0];
+      const px = parseFloat(ps[1]);
       if (!isFinite(px)) continue;
 
-      events.push({
-        ts,
-        px,
-        action: last
-      });
-    }
-
-    // 把事件串成 round-trip
-    const trades = [];
-    let open = null;
-
-    const isEntry = (a) => (a === '新買' || a === '新賣');
-    const isExit  = (a) => (a === '平買' || a === '平賣' || a === '強制平倉');
-
-    for (const ev of events) {
-      if (isEntry(ev.action)) {
-        // 若前一筆還沒平倉，就直接覆蓋（理論上不會發生）
-        open = {
-          ts: ev.ts,
-          px: ev.px,
-          action: ev.action,
-          dir: (ev.action === '新買') ? +1 : -1
-        };
-      } else if (isExit(ev.action) && open) {
-        const dir = open.dir;
-        const entryPx = open.px;
-        const exitPx  = ev.px;
-
-        const points = dir > 0
-          ? (exitPx - entryPx)
-          : (entryPx - exitPx);
-
-        const gross = points * CFG.pointValue;
-
-        const fee = CFG.feePerSide * 2; // 進 + 出
-        const taxBase = (entryPx + exitPx) * CFG.pointValue;
-        const tax = Math.round(taxBase * CFG.taxRate);
-
-        const theoNet = gross - fee - tax;
-        const slipCost = CFG.slipPointsRT * CFG.pointValue;
-        const actualNet = theoNet - slipCost;
-
-        trades.push({
-          entry: { ts: open.ts, px: open.px, action: open.action },
-          exit:  { ts: ev.ts,   px: ev.px,   action: ev.action },
-          dir,
-          points,
-          fee,
-          tax,
-          theoNet,
-          actualNet
-        });
-
-        open = null;
+      // INPOS 行：最後一欄一定是 INPOS
+      if (ps[ps.length - 1] === 'INPOS') {
+        continue;
       }
+
+      // 事件行：
+      //   時間 價格 [中文]  → 3 欄
+      //   （目前檔案裡進場/出場都符合這種格式）
+      if (ps.length === 3) {
+        if (!open) {
+          // 進場
+          const dir = getDirFromInpos(lines, i);
+          open = { ts, px, dir };
+        } else {
+          // 出場
+          const dir = open.dir;
+          const entryPx = open.px;
+          const exitPx  = px;
+
+          const points = dir > 0
+            ? (exitPx - entryPx)
+            : (entryPx - exitPx);
+
+          const gross = points * CFG.pointValue;
+
+          const fee = CFG.feePerSide * 2; // 進 + 出
+          const taxBase = (entryPx + exitPx) * CFG.pointValue;
+          const tax = Math.round(taxBase * CFG.taxRate);
+
+          const theoNet   = gross - fee - tax;
+          const slipCost  = CFG.slipPointsRT * CFG.pointValue;
+          const actualNet = theoNet - slipCost;
+
+          // 用 dir 還原中文標籤（不依賴原始檔中文字）
+          const entryAction = dir > 0 ? '新買' : '新賣';
+          const exitAction  = dir > 0 ? '平賣' : '平買';
+
+          trades.push({
+            entry: { ts: open.ts, px: open.px, action: entryAction },
+            exit:  { ts,         px,         action: exitAction },
+            dir,
+            points,
+            fee,
+            tax,
+            theoNet,
+            actualNet
+          });
+
+          open = null;
+        }
+      }
+
+      // 其他欄位數（例如將來多了東西）先忽略
     }
 
     return { header, trades };
   }
 
-  // ===== 畫交易明細表 =====
+  // ===== 畫表格 =====
   function renderTrades(parsed) {
     const tbody = $('#tradesBody');
     tbody.innerHTML = '';
@@ -172,6 +189,7 @@
         <td class="${clsForNumber(t.actualNet)}">${fmtInt(t.actualNet)}</td>
         <td class="${clsForNumber(cumActual)}">${fmtInt(cumActual)}</td>
       `;
+
       tbody.appendChild(tr1);
       tbody.appendChild(tr2);
     });
@@ -188,7 +206,9 @@
       const parsed = parseTxt(text);
       renderTrades(parsed);
     };
-    reader.readAsText(file);  // Big5 也沒關係，中文壞掉沒影響，我們只用數字跟「新買/平賣」關鍵字
+    // 不指定編碼，瀏覽器會用 UTF-8 讀 Big5，
+    // 中文雖然會壞掉，但我們已經不看中文字了，完全沒差。
+    reader.readAsText(file);
   });
 
 })();
