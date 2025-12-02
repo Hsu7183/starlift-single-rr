@@ -8,34 +8,34 @@
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans TC",
                    "Microsoft JhengHei", sans-serif;
       background: #f5f5f5;
-      padding: 16px;
+      padding: 8px;                 /* ★ 整體再縮一點 */
     }
 
     h1 {
-      font-size: 18px;           /* ★ 更緊湊 */
-      margin-bottom: 10px;
+      font-size: 16px;              /* ★ 再小一級 */
+      margin: 0 0 6px 0;
     }
 
     /* ---- 工具區 ---- */
     .toolbar {
-      margin-bottom: 10px;
+      margin-bottom: 6px;           /* ★ 間距再縮 */
       display: flex;
       flex-wrap: wrap;
-      gap: 6px 12px;
+      gap: 4px 8px;                 /* ★ 工具列間距縮小 */
       align-items: center;
-      font-size: 13px;           /* ★ 更緊湊 */
+      font-size: 12px;              /* ★ 再緊湊 */
     }
     .toolbar label {
       white-space: nowrap;
     }
     .toolbar input[type="number"] {
-      width: 90px;               /* ★ 遞小 */
-      font-size: 12px;           /* ★ 緊湊 */
-      padding: 2px 3px;
+      width: 80px;                  /* ★ 再縮窄一點 */
+      font-size: 11px;
+      padding: 1px 2px;
       margin-left: 3px;
     }
     .toolbar input[type="file"] {
-      font-size: 12px;
+      font-size: 11px;
     }
 
     /* ---- 表格 ---- */
@@ -43,8 +43,8 @@
       width: 100%;
       border-collapse: collapse;
       background: #fff;
-      font-size: 12px;          /* ★ 再緊一級 */
-      table-layout: fixed;      /* ★ 讓欄寬自動壓縮 */
+      font-size: 11px;              /* ★ 表格字再小一點 */
+      table-layout: fixed;          /* ★ 壓欄寬 */
     }
 
     thead {
@@ -55,11 +55,11 @@
     }
 
     th, td {
-      padding: 3px 4px;         /* ★ 超緊湊 padding */
+      padding: 2px 2px;             /* ★ 超緊湊 padding */
       border-bottom: 1px solid #eee;
       white-space: nowrap;
       overflow: hidden;
-      text-overflow: ellipsis;  /* ★ 避免撐開 */
+      text-overflow: ellipsis;      /* ★ 避免撐開 */
     }
 
     th {
@@ -70,18 +70,18 @@
       text-align: right;
     }
 
-    /* ---- 欄位寬度調整 ---- */
-    th:nth-child(1), td:nth-child(1) { width: 24px;  } /* # */
-    th:nth-child(2), td:nth-child(2) { width: 105px; } /* 日期時間 */
-    th:nth-child(3), td:nth-child(3) { width: 70px;  } /* 成交點位 */
-    th:nth-child(4), td:nth-child(4) { width: 46px;  } /* 類別 */
-    th:nth-child(5), td:nth-child(5) { width: 46px;  } /* 點數 */
-    th:nth-child(6), td:nth-child(6) { width: 50px;  } /* 手續費 */
-    th:nth-child(7), td:nth-child(7) { width: 50px;  } /* 交易稅 */
-    th:nth-child(8), td:nth-child(8) { width: 80px;  } /* 理論損益 */
-    th:nth-child(9), td:nth-child(9) { width: 95px;  } /* 累積理論 */
-    th:nth-child(10), td:nth-child(10) { width: 90px; } /* 實際損益 */
-    th:nth-child(11), td:nth-child(11) { width: 110px;} /* 累積實際 */
+    /* ---- 欄位寬度調整（再縮一輪） ---- */
+    th:nth-child(1),  td:nth-child(1)  { width: 22px;  } /* # */
+    th:nth-child(2),  td:nth-child(2)  { width: 90px;  } /* 日期時間 */
+    th:nth-child(3),  td:nth-child(3)  { width: 60px;  } /* 成交點位 */
+    th:nth-child(4),  td:nth-child(4)  { width: 40px;  } /* 類別 */
+    th:nth-child(5),  td:nth-child(5)  { width: 40px;  } /* 點數 */
+    th:nth-child(6),  td:nth-child(6)  { width: 46px;  } /* 手續費 */
+    th:nth-child(7),  td:nth-child(7)  { width: 46px;  } /* 交易稅 */
+    th:nth-child(8),  td:nth-child(8)  { width: 70px;  } /* 理論損益 */
+    th:nth-child(9),  td:nth-child(9)  { width: 80px;  } /* 累積理論 */
+    th:nth-child(10), td:nth-child(10) { width: 75px;  } /* 實際損益 */
+    th:nth-child(11), td:nth-child(11) { width: 90px;  } /* 累積實際 */
 
     tbody tr:nth-child(even) {
       background: #fcfcfc;
@@ -90,7 +90,6 @@
     /* ---- 配色：紅 / 綠 ---- */
     .num-pos { color: #e60000; }
     .num-neg { color: #0a7f00; }
-
   </style>
 </head>
 
@@ -113,7 +112,7 @@
       <input type="number" id="slipInput" value="0" step="0.1">
     </label>
 
-    <span class="muted" style="font-size:12px;color:#777;">
+    <span class="muted" style="font-size:11px;color:#777;">
       1 點 = 200 元｜手續費 45 元｜期交稅率 0.002%（雙邊）
     </span>
   </div>
