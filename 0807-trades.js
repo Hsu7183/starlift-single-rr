@@ -1,7 +1,8 @@
 // 0807-trades.js
 // 讀取 0807 KPI 版 TF_1m（事件行：時間 價格 中文；持倉行：... INPOS）
 // 不看中文字，純靠欄位數 + INPOS 判斷進出場。
-// 新增：本金 / 滑點（每邊點數）可輸入，滑點會影響實際淨損益。
+// 本金 / 滑點（每邊點數）可輸入，滑點會影響實際淨損益。
+// ★ 這版已修正：交易稅 = 進場一邊四捨五入 + 出場一邊四捨五入。
 
 (function () {
   'use strict';
@@ -12,7 +13,7 @@
     feePerSide: 45,     // 單邊手續費
     taxRate: 0.00002,   // 期交稅率（單邊）
     slipPerSide: 0,     // 每邊滑點（點數），例如 2 → round-trip 扣 4 點
-    capital: 1000000    // 本金（先存起來，之後算報酬率用）
+    capital: 1000000    // 本金（之後算報酬率用）
   };
 
   let gParsed = null;   // 目前已解析的結果（給調整滑點時重畫）
@@ -116,8 +117,11 @@
           const gross = points * CFG.pointValue;
 
           const fee = CFG.feePerSide * 2; // 進 + 出
-          const taxBase = (entryPx + exitPx) * CFG.pointValue;
-          const tax = Math.round(taxBase * CFG.taxRate);
+
+          // ★ 正確作法：兩邊各自計稅後四捨五入，再相加
+          const taxEntry = Math.round(entryPx * CFG.pointValue * CFG.taxRate);
+          const taxExit  = Math.round(exitPx  * CFG.pointValue * CFG.taxRate);
+          const tax = taxEntry + taxExit;
 
           const theoNet = gross - fee - tax;
 
