@@ -74,17 +74,12 @@
     .kpi-table th {
       background: #fafafa;
     }
-    .kpi-table td:nth-child(2) {
+    .kpi-table td.num {
       text-align: right;
       font-variant-numeric: tabular-nums;
     }
-    .kpi-table td:nth-child(3) {
-      text-align: left;
-    }
-    .kpi-table td:nth-child(4),
-    .kpi-table th:nth-child(4),
-    .kpi-table td:nth-child(5),
-    .kpi-table th:nth-child(5) {
+    .kpi-table td.center,
+    .kpi-table th.center {
       text-align: center;
     }
     .kpi-name { font-weight: 600; }
@@ -105,9 +100,9 @@
     }
 
     /* 評語顏色：好的紅色，不行的綠色（照你習慣） */
-    .rating-strong  { color: #e60000; font-weight: 600; }  /* 好的 KPI */
-    .rating-adequate{ color: #cc7a00; font-weight: 600; }  /* 中立 */
-    .rating-improve { color: #008000; font-weight: 600; }  /* 需優化 KPI */
+    .rating-strong  { color: #e60000; font-weight: 600; }  /* Strong */
+    .rating-adequate{ color: #cc7a00; font-weight: 600; }  /* Adequate */
+    .rating-improve { color: #008000; font-weight: 600; }  /* Improve */
 
     /* 交易明細表格 —— 不設定 width，讓內容決定寬度，再整張表置中 */
     table.trade-table {
@@ -177,34 +172,37 @@
     </span>
   </div>
 
-  <!-- 建議優化指標卡片：把評等為 Improve 的 KPI 放這裡 -->
+  <!-- 建議優化指標卡片：所有評等 Improve 的 KPI 放這裡 -->
   <div class="kpi-wrapper kpi-bad-card">
     <table class="kpi-table">
       <thead>
         <tr>
-          <th style="width: 180px;">建議優化指標</th>
-          <th style="width: 120px;">數值</th>
-          <th>說明</th>
+          <th>建議優化指標</th>
+          <th class="center">數值（含滑價）</th>
+          <th class="center">建議</th>
+          <th class="center">機構評語</th>
+          <th class="center">參考區間</th>
         </tr>
       </thead>
       <tbody id="kpiBadBody">
         <tr>
-          <td colspan="3" style="color:#777;">目前沒有需要特別優化的指標。</td>
+          <td colspan="5" style="color:#777;">目前沒有需要特別優化的指標。</td>
         </tr>
       </tbody>
     </table>
   </div>
 
-  <!-- 全部 KPI 明細 -->
+  <!-- 全部 KPI 明細（理論 vs 含滑價） -->
   <div class="kpi-wrapper">
     <table class="kpi-table">
       <thead>
         <tr>
-          <th style="width: 190px;">指標</th>
-          <th style="width: 130px;">數值</th>
+          <th>指標</th>
+          <th class="center">數值（理論）</th>
+          <th class="center">數值（含滑價）</th>
           <th>說明</th>
-          <th style="width: 90px;">機構評語</th>
-          <th style="width: 120px;">參考區間</th>
+          <th class="center">機構評語</th>
+          <th class="center">參考區間</th>
         </tr>
       </thead>
       <tbody id="kpiBody">
@@ -213,7 +211,7 @@
     </table>
   </div>
 
-  <!-- 交易明細表格 -->
+  <!-- 交易明細表格：理論 vs 含滑價 並列 -->
   <table class="trade-table">
     <thead class="trade-head">
       <tr>
