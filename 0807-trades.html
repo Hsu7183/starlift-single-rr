@@ -16,10 +16,24 @@
     }
     .toolbar {
       margin-bottom: 12px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 16px;
+      align-items: center;
+      font-size: 14px;
     }
     .toolbar label {
       font-size: 14px;
-      margin-right: 12px;
+      white-space: nowrap;
+    }
+    .toolbar input[type="file"] {
+      font-size: 13px;
+    }
+    .toolbar input[type="number"] {
+      width: 100px;
+      font-size: 13px;
+      padding: 2px 4px;
+      margin-left: 4px;
     }
     table {
       width: 100%;
@@ -37,16 +51,22 @@
       padding: 6px 8px;
       border-bottom: 1px solid #eee;
       white-space: nowrap;
-      text-align: right;   /* ✅ 所有欄位靠右 */
+    }
+    th {
+      text-align: center;    /* ✅ 表頭置中 */
+      font-weight: 600;
+    }
+    td {
+      text-align: right;     /* ✅ 內容靠右 */
     }
     tbody tr:nth-child(even) {
       background: #fcfcfc;
     }
     .num-pos {
-      color: #e60000;      /* ✅ 獲利紅色 */
+      color: #e60000;        /* ✅ 獲利紅色 */
     }
     .num-neg {
-      color: #008800;      /* ✅ 虧損綠色 */
+      color: #008800;        /* ✅ 虧損綠色 */
     }
     .muted {
       color: #999;
@@ -61,8 +81,19 @@
       載入 TXT：
       <input type="file" id="fileInput" accept=".txt,.TF_1m">
     </label>
+
+    <label>
+      本金：
+      <input type="number" id="capitalInput" value="1000000" step="10000">
+    </label>
+
+    <label>
+      滑點（每邊點數）：
+      <input type="number" id="slipInput" value="0" step="0.1">
+    </label>
+
     <span class="muted">
-      目前設定：1 點 = 200 元，單邊手續費 45 元，期交稅率 0.002%（雙邊計）。
+      1 點 = 200 元，單邊手續費 45 元，期交稅率 0.002%（雙邊計）。
     </span>
   </div>
 
