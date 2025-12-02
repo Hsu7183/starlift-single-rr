@@ -2,7 +2,7 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="utf-8">
-  <title>0807 交易明細</title>
+  <title>台指期單檔分析</title>
 
   <style>
     body {
@@ -99,7 +99,7 @@
       background: #ffe5e5;
     }
 
-    /* 評語顏色：強=紅，Adequate=黃，Improve=綠 */
+    /* 評語顏色：Strong=紅，Adequate=黃，Improve=綠 */
     .rating-strong  { color: #e60000; font-weight: 600; }   /* Strong → 紅 */
     .rating-adequate{ color: #c9a500; font-weight: 600; }   /* Adequate → 黃 */
     .rating-improve { color: #008000; font-weight: 600; }   /* Improve → 綠 */
@@ -158,7 +158,7 @@
 </head>
 
 <body>
-  <h1>0807 交易明細</h1>
+  <h1>台指期單檔分析</h1>
 
   <div class="toolbar">
     <label>
@@ -181,6 +181,11 @@
     <span class="hint">
       步驟：先輸入本金／滑點 → 選 TXT → 按「計算」
     </span>
+  </div>
+
+  <!-- 圖表：放在輸入區下方、建議優化指標上方 -->
+  <div class="chart-wrapper">
+    <canvas id="equityChart"></canvas>
   </div>
 
   <!-- 建議優化指標卡片：所有評等 Improve 的 KPI 放這裡 -->
@@ -220,11 +225,6 @@
         <!-- JS 產生 -->
       </tbody>
     </table>
-  </div>
-
-  <!-- 圖表區：參考 0807 主頁的資產曲線 -->
-  <div class="chart-wrapper">
-    <canvas id="equityChart"></canvas>
   </div>
 
   <!-- 交易明細表格：理論 vs 含滑價 並列 -->
