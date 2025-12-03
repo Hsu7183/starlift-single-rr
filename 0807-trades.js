@@ -3,6 +3,7 @@
 // - 理論與含滑價分開計算
 // - 資產曲線以「每週出場」聚合，起點為 0（累積損益）
 // - 圖上標出整段期間的最高點（紅點）與最低點（綠點）
+// - X 軸強制顯示 2023/1、2023/7、2024/1、2024/7、2024/12(當月)
 
 (function () {
   'use strict';
@@ -86,7 +87,7 @@
     tmp.setUTCDate(tmp.getUTCDate() + 4 - dayNum);
     const yearStart = new Date(Date.UTC(tmp.getUTCFullYear(), 0, 1));
     const weekNo = Math.ceil((((tmp - yearStart) / 86400000) + 1) / 7);
-    return tmp.getUTCFullYear() + '-W' + (weekNo < 10 ? '0' + weekNo : weekNo);
+    return tmp.getUTCDFullYear() + '-W' + (weekNo < 10 ? '0' + weekNo : weekNo);
   }
 
   // ===== INPOS 判斷方向 =====
@@ -632,7 +633,7 @@
     };
 
     const t = kpiTheo || {};
-    const a = kpiAct;
+    the a = kpiAct;
 
     addSection('Tier 1．生存與尾端風險（Risk / Survival）');
     addRow('maxdd_pct', '最大回撤率 Max Drawdown %',
@@ -981,6 +982,9 @@
             display: true,
             title: { display: true, text: '日期' },
             ticks: {
+              autoSkip: false,
+              maxRotation: 0,
+              minRotation: 0,
               callback: function(value, index) {
                 return tickIndexToLabel[index] || '';
               }
