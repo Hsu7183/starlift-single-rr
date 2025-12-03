@@ -2,7 +2,7 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="utf-8">
-  <title>台指期單檔分析</title>
+  <title>三劍客量化科技機構級單檔分析</title>
 
   <style>
     body {
@@ -169,7 +169,7 @@
 </head>
 
 <body>
-  <h1>台指期單檔分析</h1>
+  <h1>三劍客量化科技機構級單檔分析</h1>
 
   <div class="toolbar">
     <label>
@@ -194,17 +194,15 @@
     </span>
   </div>
 
-  <!-- TXT 第一行參數顯示區 -->
-  <div class="param-line" id="paramLine">
-    <!-- JS 填入：BeginTime=...,EndTime=...,ForceExitTime=... -->
-  </div>
+  <!-- TXT 第一行參數 -->
+  <div class="param-line" id="paramLine"></div>
 
   <!-- 圖表 -->
   <div class="chart-wrapper">
     <canvas id="equityChart"></canvas>
   </div>
 
-  <!-- 建議優化指標卡片 -->
+  <!-- 建議優化指標 -->
   <div class="kpi-wrapper kpi-bad-card">
     <table class="kpi-table">
       <thead>
@@ -237,13 +235,11 @@
           <th class="center">參考區間</th>
         </tr>
       </thead>
-      <tbody id="kpiBody">
-        <!-- JS 產生 -->
-      </tbody>
+      <tbody id="kpiBody"></tbody>
     </table>
   </div>
 
-  <!-- 交易明細表格 -->
+  <!-- 交易明細 -->
   <table class="trade-table">
     <thead class="trade-head">
       <tr>
@@ -260,12 +256,9 @@
         <th>累積實際淨損益</th>
       </tr>
     </thead>
-    <tbody id="tradesBody">
-      <!-- JS 產生 -->
-    </tbody>
+    <tbody id="tradesBody"></tbody>
   </table>
 
-  <!-- Chart.js CDN -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="0807-trades.js"></script>
 </body>
