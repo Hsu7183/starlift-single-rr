@@ -87,7 +87,7 @@
     tmp.setUTCDate(tmp.getUTCDate() + 4 - dayNum);
     const yearStart = new Date(Date.UTC(tmp.getUTCFullYear(), 0, 1));
     const weekNo = Math.ceil((((tmp - yearStart) / 86400000) + 1) / 7);
-    return tmp.getUTCDFullYear() + '-W' + (weekNo < 10 ? '0' + weekNo : weekNo);
+    return tmp.getUTCFullYear() + '-W' + (weekNo < 10 ? '0' + weekNo : weekNo);
   }
 
   // ===== INPOS 判斷方向 =====
@@ -633,7 +633,7 @@
     };
 
     const t = kpiTheo || {};
-    the a = kpiAct;
+    const a = kpiAct;
 
     addSection('Tier 1．生存與尾端風險（Risk / Survival）');
     addRow('maxdd_pct', '最大回撤率 Max Drawdown %',
@@ -786,7 +786,6 @@
       });
     }
 
-    // 綜合分數
     const score = scoreCount > 0 ? (scoreSum / scoreCount) : null;
     renderScore(score);
   }
@@ -822,7 +821,7 @@
     return { dates: outDates, vals: outVals };
   }
 
-  // ===== 每週資產曲線 + 高低點 =====
+  // ===== 每週資產曲線 + 高低點（含強制 5 個 X 軸刻度） =====
   function renderEquityChartWeekly(exitDates, totalTheo, totalAct,
                                    longTheo, longAct, shortTheo, shortAct) {
     const canvas = document.getElementById('equityChart');
