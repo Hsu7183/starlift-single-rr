@@ -101,13 +101,54 @@
       font-weight: 700;
     }
 
-    /* 建議優化指標卡片 */
+    /* 建議優化指標區：左為分數卡、右為表格 */
+    .kpi-bad-card {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: stretch;
+      gap: 8px;
+    }
     .kpi-bad-card .kpi-table {
       background: #fff5f5;
       border: 1px solid #ffd0d0;
+      flex: 1 1 auto;
     }
     .kpi-bad-card thead th {
       background: #ffe5e5;
+    }
+
+    /* 綜合分數卡片 */
+    .kpi-score-card {
+      flex: 0 0 150px;
+      background: #fff;
+      border: 1px solid #ffd0d0;
+      border-radius: 4px;
+      padding: 6px 10px;
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      font-size: 12px;
+    }
+    .score-title {
+      font-size: 11px;
+      color: #777;
+      margin-bottom: 4px;
+    }
+    .score-value {
+      font-size: 20px;
+      font-weight: 700;
+      text-align: center;
+      margin-bottom: 4px;
+    }
+    .score-value.strong  { color: #e60000; }
+    .score-value.adequate{ color: #c9a500; }
+    .score-value.improve { color: #008000; }
+    .score-desc {
+      font-size: 11px;
+      color: #777;
+      text-align: center;
+      line-height: 1.3;
     }
 
     /* 評語顏色：Strong=紅，Adequate=黃，Improve=綠 */
@@ -202,8 +243,14 @@
     <canvas id="equityChart"></canvas>
   </div>
 
-  <!-- 建議優化指標 -->
+  <!-- 建議優化指標 + 綜合分數 -->
   <div class="kpi-wrapper kpi-bad-card">
+    <div class="kpi-score-card" id="scoreCard">
+      <div class="score-title">綜合分數</div>
+      <div class="score-value">—</div>
+      <div class="score-desc">載入檔案後自動計算</div>
+    </div>
+
     <table class="kpi-table">
       <thead>
         <tr>
