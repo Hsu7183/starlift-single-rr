@@ -18,16 +18,60 @@
       text-align: center;
     }
 
+    /* 上方：分數卡 + 工具列 */
+    .top-row {
+      max-width: 1100px;
+      margin: 0 auto 4px auto;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: stretch;
+    }
+
+    /* 綜合分數卡片 */
+    .kpi-score-card {
+      flex: 0 0 150px;
+      background: #fff;
+      border: 1px solid #ffd0d0;
+      border-radius: 4px;
+      padding: 6px 10px;
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      font-size: 12px;
+    }
+    .score-title {
+      font-size: 11px;
+      color: #777;
+      margin-bottom: 4px;
+    }
+    .score-value {
+      font-size: 20px;
+      font-weight: 700;
+      text-align: center;
+      margin-bottom: 4px;
+    }
+    .score-value.strong  { color: #e60000; }
+    .score-value.adequate{ color: #c9a500; }
+    .score-value.improve { color: #008000; }
+    .score-desc {
+      font-size: 11px;
+      color: #777;
+      text-align: center;
+      line-height: 1.3;
+    }
+
     /* 工具列 */
     .toolbar {
-      margin: 0 auto 4px auto;
+      flex: 1 1 auto;
+      margin: 0;
       display: flex;
       flex-wrap: wrap;
       gap: 4px 8px;
       align-items: center;
-      justify-content: center;
+      justify-content: flex-start;
       font-size: 12px;
-      max-width: 1100px;
     }
     .toolbar label {
       white-space: nowrap;
@@ -101,54 +145,13 @@
       font-weight: 700;
     }
 
-    /* 建議優化指標區：左為分數卡、右為表格 */
-    .kpi-bad-card {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: stretch;
-      gap: 8px;
-    }
+    /* 建議優化指標卡片（只剩表格本身） */
     .kpi-bad-card .kpi-table {
       background: #fff5f5;
       border: 1px solid #ffd0d0;
-      flex: 1 1 auto;
     }
     .kpi-bad-card thead th {
       background: #ffe5e5;
-    }
-
-    /* 綜合分數卡片 */
-    .kpi-score-card {
-      flex: 0 0 150px;
-      background: #fff;
-      border: 1px solid #ffd0d0;
-      border-radius: 4px;
-      padding: 6px 10px;
-      box-sizing: border-box;
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      font-size: 12px;
-    }
-    .score-title {
-      font-size: 11px;
-      color: #777;
-      margin-bottom: 4px;
-    }
-    .score-value {
-      font-size: 20px;
-      font-weight: 700;
-      text-align: center;
-      margin-bottom: 4px;
-    }
-    .score-value.strong  { color: #e60000; }
-    .score-value.adequate{ color: #c9a500; }
-    .score-value.improve { color: #008000; }
-    .score-desc {
-      font-size: 11px;
-      color: #777;
-      text-align: center;
-      line-height: 1.3;
     }
 
     /* 評語顏色：Strong=紅，Adequate=黃，Improve=綠 */
@@ -212,27 +215,36 @@
 <body>
   <h1>三劍客量化科技機構級單檔分析</h1>
 
-  <div class="toolbar">
-    <label>
-      本金：
-      <input type="number" id="capitalInput" value="1000000" step="10000">
-    </label>
+  <!-- 上方：分數卡 + 工具列 -->
+  <div class="top-row">
+    <div class="kpi-score-card" id="scoreCard">
+      <div class="score-title">綜合分數</div>
+      <div class="score-value">—</div>
+      <div class="score-desc">載入檔案後自動計算</div>
+    </div>
 
-    <label>
-      滑點（每邊點數）：
-      <input type="number" id="slipInput" value="0" step="0.1">
-    </label>
+    <div class="toolbar">
+      <label>
+        本金：
+        <input type="number" id="capitalInput" value="1000000" step="10000">
+      </label>
 
-    <label>
-      TXT 檔：
-      <input type="file" id="fileInput" accept=".txt,.TF_1m">
-    </label>
+      <label>
+        滑點（每邊點數）：
+        <input type="number" id="slipInput" value="0" step="0.1">
+      </label>
 
-    <button id="runBtn">計算</button>
+      <label>
+        TXT 檔：
+        <input type="file" id="fileInput" accept=".txt,.TF_1m">
+      </label>
 
-    <span class="hint">
-      步驟：先輸入本金／滑點 → 選 TXT → 按「計算」
-    </span>
+      <button id="runBtn">計算</button>
+
+      <span class="hint">
+        步驟：先輸入本金／滑點 → 選 TXT → 按「計算」
+      </span>
+    </div>
   </div>
 
   <!-- TXT 第一行參數 -->
@@ -243,14 +255,8 @@
     <canvas id="equityChart"></canvas>
   </div>
 
-  <!-- 建議優化指標 + 綜合分數 -->
+  <!-- 建議優化指標 -->
   <div class="kpi-wrapper kpi-bad-card">
-    <div class="kpi-score-card" id="scoreCard">
-      <div class="score-title">綜合分數</div>
-      <div class="score-value">—</div>
-      <div class="score-desc">載入檔案後自動計算</div>
-    </div>
-
     <table class="kpi-table">
       <thead>
         <tr>
