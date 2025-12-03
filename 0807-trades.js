@@ -1,6 +1,7 @@
 // 0807-trades.js
-// - 台指期單檔分析：KPI + 圖表 + 交易明細
-// - 理論與含滑價分開計算，圖表起點為 0（累積損益）
+// 台指期單檔分析：KPI + 每週資產曲線 + 交易明細
+// - 理論與含滑價分開計算
+// - 資產曲線以「每週出場」聚合，起點為 0（累積損益）
 
 (function () {
   'use strict';
@@ -130,6 +131,7 @@
       if (!isFinite(px)) continue;
 
       if (ps[ps.length - 1] === 'INPOS') {
+        // 未來要算 MAE/MFE 時可以在這裡收集 mid/low
         continue;
       }
 
@@ -152,7 +154,7 @@
           const taxOut= Math.round(exitPx  * CFG.pointValue * CFG.taxRate);
           const tax   = taxIn + taxOut;
 
-          const theoNet = gross - fee - tax; // 理論淨損益（不含滑點）
+          const theoNet = gross - fee - tax;
 
           const entryAction = dir > 0 ? '新買' : '新賣';
           const exitAction  = dir > 0 ? '平賣' : '平買';
@@ -587,7 +589,6 @@
     const t = kpiTheo || {};
     const a = kpiAct;
 
-    // ---- Tier 1 ----
     addSection('Tier 1．生存與尾端風險（Risk / Survival）');
     addRow('maxdd_pct', '最大回撤率 Max Drawdown %',
       'pct', t.maxDdPct, a.maxDdPct,
@@ -620,7 +621,6 @@
       'f2', t.recoveryFactor, a.recoveryFactor,
       '總淨利 / 最大回撤，衡量從虧損中恢復能力');
 
-    // ---- Tier 2 ----
     addSection('Tier 2．報酬與風險調整後報酬（Return / Risk-Adjusted）');
     addRow(null, '總淨利 Net Profit',
       'int', t.totalNet, a.totalNet,
@@ -644,7 +644,6 @@
       'f2', t.calmar, a.calmar,
       '年化報酬率 / 最大回撤率');
 
-    // ---- Tier 3 ----
     addSection('Tier 3．交易品質與結構（Trade Quality / Structure）');
     addRow(null, '交易筆數 #Trades',
       'int', t.nTrades, a.nTrades,
@@ -686,7 +685,6 @@
       'f2', t.kelly, a.kelly,
       '依勝率與賺賠比估算之 Kelly 槓桿（僅供參考）');
 
-    // ---- Tier 4 ----
     addSection('Tier 4．路徑與穩定度（Path / Stability）');
     addRow(null, 'Equity Stability R²',
       'f3', t.stabilityR2, a.stabilityR2,
@@ -695,7 +693,6 @@
       'int', null, null,
       '需額外提供基準指數報酬序列才可計算');
 
-    // ---- Tier 5 ----
     addSection('Tier 5．成本、槓桿與執行（Cost / Turnover / Execution）');
     addRow(null, '交易天數 Trading Days',
       'int', t.tradingDays, a.tradingDays,
@@ -744,15 +741,54 @@
     }
   }
 
-  // ===== 資產曲線圖 =====
-  function renderEquityChart(dates, totalTheo, totalAct,
-                             longTheo, longAct, shortTheo, shortAct) {
+  // ===== 每週聚合工具 =====
+  function aggregateWeekly(dates, series) {
+    const outDates = [];
+    const outVals  = [];
+    let prevKey = null;
+    let lastDate = null;
+    let lastVal  = 0;
+
+    for (let i = 1; i < series.length; i++) { // index 0 是 0 起點
+      const d = dates[i];
+      if (!d) continue;
+      const key = dateWeekKey(d);
+      if (prevKey !== null && key !== prevKey) {
+        outDates.push(lastDate);
+        outVals.push(lastVal);
+      }
+      prevKey = key;
+      lastDate = d;
+      lastVal  = series[i];
+    }
+    if (lastDate != null) {
+      outDates.push(lastDate);
+      outVals.push(lastVal);
+    }
+    // 在最前面插入起點 0
+    if (outDates.length > 0) {
+      outDates.unshift(outDates[0]);
+      outVals.unshift(0);
+    }
+    return { dates: outDates, vals: outVals };
+  }
+
+  // ===== 資產曲線圖（每週） =====
+  function renderEquityChartWeekly(exitDates, totalTheo, totalAct,
+                                   longTheo, longAct, shortTheo, shortAct) {
     const canvas = document.getElementById('equityChart');
     if (!canvas || !window.Chart) return;
     const ctx = canvas.getContext('2d');
 
-    // labels 用 index，刻度文字用日期
-    const labels = totalAct.map((_, i) => i + 1);
+    const aggTotalTheo  = aggregateWeekly(exitDates, totalTheo);
+    const aggTotalAct   = aggregateWeekly(exitDates, totalAct);
+    const aggLongTheo   = aggregateWeekly(exitDates, longTheo);
+    const aggLongAct    = aggregateWeekly(exitDates, longAct);
+    const aggShortTheo  = aggregateWeekly(exitDates, shortTheo);
+    const aggShortAct   = aggregateWeekly(exitDates, shortAct);
+
+    const weekDates = aggTotalAct.dates;
+    const labels    = aggTotalAct.vals.map((_, i) => i + 1);
 
     if (gChart) {
       gChart.destroy();
@@ -764,20 +800,18 @@
       data: {
         labels,
         datasets: [
-          // 含滑價總損益：黑實線
           {
             label: '含滑價總損益',
-            data: totalAct,
+            data: aggTotalAct.vals,
             borderColor: 'rgba(0,0,0,1)',
             backgroundColor: 'rgba(0,0,0,0)',
             borderWidth: 2,
             tension: 0,
             pointRadius: 0
           },
-          // 理論總損益：黑虛線
           {
             label: '理論總損益',
-            data: totalTheo,
+            data: aggTotalTheo.vals,
             borderColor: 'rgba(0,0,0,0.5)',
             backgroundColor: 'rgba(0,0,0,0)',
             borderWidth: 1,
@@ -785,20 +819,18 @@
             tension: 0,
             pointRadius: 0
           },
-          // 多頭含滑價：紅實線
           {
             label: '多頭含滑價',
-            data: longAct,
+            data: aggLongAct.vals,
             borderColor: 'rgba(220,0,0,1)',
             backgroundColor: 'rgba(0,0,0,0)',
             borderWidth: 1.5,
             tension: 0,
             pointRadius: 0
           },
-          // 多頭理論：紅虛線
           {
             label: '多頭理論',
-            data: longTheo,
+            data: aggLongTheo.vals,
             borderColor: 'rgba(220,0,0,0.5)',
             backgroundColor: 'rgba(0,0,0,0)',
             borderWidth: 1,
@@ -806,20 +838,18 @@
             tension: 0,
             pointRadius: 0
           },
-          // 空頭含滑價：綠實線
           {
             label: '空頭含滑價',
-            data: shortAct,
+            data: aggShortAct.vals,
             borderColor: 'rgba(0,150,0,1)',
             backgroundColor: 'rgba(0,0,0,0)',
             borderWidth: 1.5,
             tension: 0,
             pointRadius: 0
           },
-          // 空頭理論：綠虛線
           {
             label: '空頭理論',
-            data: shortTheo,
+            data: aggShortTheo.vals,
             borderColor: 'rgba(0,150,0,0.5)',
             backgroundColor: 'rgba(0,0,0,0)',
             borderWidth: 1,
@@ -845,7 +875,7 @@
             callbacks: {
               title: function(items) {
                 const idx = items[0].dataIndex;
-                const d   = dates[idx];
+                const d   = weekDates[idx];
                 if (!d) return '';
                 const ymdd = `${d.getFullYear()}/${(d.getMonth()+1)
                   .toString().padStart(2,'0')}/${d.getDate().toString().padStart(2,'0')}`;
@@ -861,18 +891,15 @@
         scales: {
           x: {
             display: true,
-            title: {
-              display: true,
-              text: '日期（月）'
-            },
+            title: { display: true, text: '日期（週）' },
             ticks: {
               callback: function(value, index) {
-                const d = dates[index];
+                const d = weekDates[index];
                 if (!d) return '';
                 const ym = `${d.getFullYear()}/${(d.getMonth()+1)
                   .toString().padStart(2,'0')}`;
                 if (index === 0) return ym;
-                const prev = dates[index - 1];
+                const prev = weekDates[index - 1];
                 const prevYm = `${prev.getFullYear()}/${(prev.getMonth()+1)
                   .toString().padStart(2,'0')}`;
                 return ym === prevYm ? '' : ym;
@@ -881,10 +908,7 @@
           },
           y: {
             display: true,
-            title: {
-              display: true,
-              text: '累積損益（金額）'
-            }
+            title: { display: true, text: '累積損益（金額）' }
           }
         }
       }
@@ -969,41 +993,44 @@
     const kpiAct  = calcKpi(parsed.trades, actPnls,  actEquity,  CFG.slipPerSide);
     renderKpi(kpiTheo, kpiAct);
 
-    // 圖表：累積損益（起點 0） & 多頭/空頭拆線
-    const totalTheo = [0];
-    const totalAct  = [0];
-    theoEquity.forEach(v => totalTheo.push(v));
-    actEquity.forEach(v  => totalAct.push(v));
+    // 圖表：累積損益（從 0 起） & 長短拆線（每週）
+    const totalTheo = [0], totalAct = [0];
+    const longTheo  = [0], longAct  = [0];
+    const shortTheo = [0], shortAct = [0];
 
-    const longTheo  = [0];
-    const longAct   = [0];
-    const shortTheo = [0];
-    const shortAct  = [0];
+    let cumTotalTheo = 0, cumTotalAct = 0;
+    let cumLongTheo  = 0, cumLongAct  = 0;
+    let cumShortTheo = 0, cumShortAct = 0;
 
-    let cumLT = 0, cumLA = 0, cumST = 0, cumSA = 0;
     for (let i = 0; i < theoPnls.length; i++) {
-      const dir   = dirs[i];
-      const tPnL  = theoPnls[i];
-      const aPnL  = actPnls[i];
+      const dir  = dirs[i];
+      const tPnL = theoPnls[i];
+      const aPnL = actPnls[i];
+
+      cumTotalTheo += tPnL;
+      cumTotalAct  += aPnL;
 
       if (dir > 0) {
-        cumLT += tPnL;
-        cumLA += aPnL;
+        cumLongTheo  += tPnL;
+        cumLongAct   += aPnL;
       } else if (dir < 0) {
-        cumST += tPnL;
-        cumSA += aPnL;
+        cumShortTheo += tPnL;
+        cumShortAct  += aPnL;
       }
-      longTheo.push(cumLT);
-      longAct.push(cumLA);
-      shortTheo.push(cumST);
-      shortAct.push(cumSA);
+
+      totalTheo.push(cumTotalTheo);
+      totalAct.push(cumTotalAct);
+      longTheo.push(cumLongTheo);
+      longAct.push(cumLongAct);
+      shortTheo.push(cumShortTheo);
+      shortAct.push(cumShortAct);
     }
 
     const datesForChart = [exitDates[0] || new Date()];
     exitDates.forEach(d => datesForChart.push(d || exitDates[0]));
 
-    renderEquityChart(datesForChart, totalTheo, totalAct,
-                      longTheo, longAct, shortTheo, shortAct);
+    renderEquityChartWeekly(datesForChart, totalTheo, totalAct,
+                            longTheo, longAct, shortTheo, shortAct);
   }
 
   // ===== 事件 =====
