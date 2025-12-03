@@ -1,10 +1,5 @@
 // 0807-trades.js
-// 台指期單檔分析：KPI + 每週資產曲線 + 交易明細
-// - 理論與含滑價分開計算
-// - 資產曲線以「每週出場」聚合，起點為 0（累積損益）
-// - 圖上標出期間最高點（紅點）與最低點（綠點）
-// - X 軸只顯示半年刻度：每年 1 月 / 7 月 + 最後一個點
-// - TXT 第一行參數顯示在圖表上方
+// 三劍客量化科技機構級單檔分析：KPI + 每週資產曲線 + 交易明細
 
 (function () {
   'use strict';
@@ -24,27 +19,12 @@
 
   const $ = (s) => document.querySelector(s);
 
-  const fmtInt = (n) => {
-    if (n == null || !isFinite(n)) return '—';
-    return Math.round(n).toLocaleString('en-US');
-  };
-  const fmtSignedInt = (n) => {
-    if (n == null || !isFinite(n)) return '—';
-    const v = Math.round(n);
-    return v.toLocaleString('en-US');
-  };
-  const fmtPct = (p) => {
-    if (p == null || !isFinite(p)) return '—';
-    return (p * 100).toFixed(2) + '%';
-  };
-  const fmtFloat = (x, d) => {
-    if (x == null || !isFinite(x)) return '—';
-    return x.toFixed(d);
-  };
-  const clsForNumber = (n) => {
-    if (n == null || !isFinite(n) || n === 0) return '';
-    return n > 0 ? 'num-pos' : 'num-neg';
-  };
+  const fmtInt = (n) => !isFinite(n) ? '—' : Math.round(n).toLocaleString('en-US');
+  const fmtSignedInt = fmtInt;
+  const fmtPct = (p) => !isFinite(p) ? '—' : (p * 100).toFixed(2) + '%';
+  const fmtFloat = (x, d) => !isFinite(x) ? '—' : x.toFixed(d);
+  const clsForNumber = (n) =>
+    !isFinite(n) || n === 0 ? '' : (n > 0 ? 'num-pos' : 'num-neg');
 
   function tsToDate(ts) {
     if (!ts) return null;
@@ -107,8 +87,7 @@
     const allLines = text.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
     if (!allLines.length) return { header: null, trades: [] };
 
-    const header = allLines[0];
-    gHeader = header;  // 記起來給畫面用
+    gHeader = allLines[0]; // 第一行參數
     const lines  = allLines.slice(1);
 
     const trades = [];
@@ -162,72 +141,60 @@
       }
     }
 
-    return { header, trades };
+    return { header: gHeader, trades };
   }
 
-  // ===== KPI 評等規則 =====
+  // ===== KPI 評等 =====
   function rateMetric(key, value) {
-    if (value == null || !isFinite(value)) return null;
-
-    let label = 'Adequate';
-    let css   = 'rating-adequate';
-    let ref   = '—';
+    if (!isFinite(value)) return null;
+    let label = 'Adequate', css = 'rating-adequate', ref = '—';
 
     switch (key) {
       case 'maxdd_pct':
         ref = '≦ 20% 強；20–30% 可接受；>30% 需優化';
-        if (value <= 0.20)       { label = 'Strong';  css = 'rating-strong';  }
-        else if (value <= 0.30)  { label = 'Adequate'; }
-        else                     { label = 'Improve'; css = 'rating-improve'; }
+        if (value <= 0.20)       { label = 'Strong'; css = 'rating-strong'; }
+        else if (value > 0.30)   { label = 'Improve'; css = 'rating-improve'; }
         break;
       case 'total_return':
       case 'cagr':
         ref = '≥ 15% 強；5–15% 可接受；<5% 需優化';
-        if (value >= 0.15)       { label = 'Strong';  css = 'rating-strong';  }
-        else if (value >= 0.05)  { label = 'Adequate'; }
-        else                     { label = 'Improve'; css = 'rating-improve'; }
+        if (value >= 0.15)       { label = 'Strong'; css = 'rating-strong'; }
+        else if (value < 0.05)   { label = 'Improve'; css = 'rating-improve'; }
         break;
       case 'pf':
         ref = '≥ 1.5 強；1.1–1.5 可接受；<1.1 需優化';
-        if (value >= 1.5)        { label = 'Strong';  css = 'rating-strong';  }
-        else if (value >= 1.1)   { label = 'Adequate'; }
-        else                     { label = 'Improve'; css = 'rating-improve'; }
+        if (value >= 1.5)        { label = 'Strong'; css = 'rating-strong'; }
+        else if (value < 1.1)    { label = 'Improve'; css = 'rating-improve'; }
         break;
       case 'winrate':
         ref = '≥ 55% 強；45–55% 可接受；<45% 需優化';
-        if (value >= 0.55)       { label = 'Strong';  css = 'rating-strong';  }
-        else if (value >= 0.45)  { label = 'Adequate'; }
-        else                     { label = 'Improve'; css = 'rating-improve'; }
+        if (value >= 0.55)       { label = 'Strong'; css = 'rating-strong'; }
+        else if (value < 0.45)   { label = 'Improve'; css = 'rating-improve'; }
         break;
       case 'sharpe':
         ref = '≥ 1.5 強；0.8–1.5 可接受；<0.8 需優化';
-        if (value >= 1.5)        { label = 'Strong';  css = 'rating-strong';  }
-        else if (value >= 0.8)   { label = 'Adequate'; }
-        else                     { label = 'Improve'; css = 'rating-improve'; }
+        if (value >= 1.5)        { label = 'Strong'; css = 'rating-strong'; }
+        else if (value < 0.8)    { label = 'Improve'; css = 'rating-improve'; }
         break;
       case 'sortino':
         ref = '≥ 2 強；1–2 可接受；<1 需優化';
-        if (value >= 2)          { label = 'Strong';  css = 'rating-strong';  }
-        else if (value >= 1)     { label = 'Adequate'; }
-        else                     { label = 'Improve'; css = 'rating-improve'; }
+        if (value >= 2)          { label = 'Strong'; css = 'rating-strong'; }
+        else if (value < 1)      { label = 'Improve'; css = 'rating-improve'; }
         break;
       case 'calmar':
         ref = '≥ 0.5 強；0.2–0.5 可接受；<0.2 需優化';
-        if (value >= 0.5)        { label = 'Strong';  css = 'rating-strong';  }
-        else if (value >= 0.2)   { label = 'Adequate'; }
-        else                     { label = 'Improve'; css = 'rating-improve'; }
+        if (value >= 0.5)        { label = 'Strong'; css = 'rating-strong'; }
+        else if (value < 0.2)    { label = 'Improve'; css = 'rating-improve'; }
         break;
       case 'risk_ruin':
         ref = '≦ 5% 強；5–20% 可接受；>20% 需優化';
-        if (value <= 0.05)       { label = 'Strong';  css = 'rating-strong';  }
-        else if (value <= 0.20)  { label = 'Adequate'; }
-        else                     { label = 'Improve'; css = 'rating-improve'; }
+        if (value <= 0.05)       { label = 'Strong'; css = 'rating-strong'; }
+        else if (value > 0.20)   { label = 'Improve'; css = 'rating-improve'; }
         break;
       case 'cost_ratio':
         ref = '≦ 20% 強；20–40% 可接受；>40% 需優化';
-        if (value <= 0.20)       { label = 'Strong';  css = 'rating-strong';  }
-        else if (value <= 0.40)  { label = 'Adequate'; }
-        else                     { label = 'Improve'; css = 'rating-improve'; }
+        if (value <= 0.20)       { label = 'Strong'; css = 'rating-strong'; }
+        else if (value > 0.40)   { label = 'Improve'; css = 'rating-improve'; }
         break;
       default:
         return null;
@@ -272,7 +239,6 @@
     const stdev = varT > 0 ? Math.sqrt(varT) : 0;
     const sharpeTrade = stdev > 0 ? (mean / stdev) * Math.sqrt(n) : null;
 
-    // Sortino
     let downsideSq = 0, downsideCnt = 0;
     pnls.forEach(p => {
       if (p < 0) { downsideSq += p * p; downsideCnt++; }
@@ -373,15 +339,14 @@
     } else if (avg <= 0) {
       riskOfRuin = 1;
     } else {
-      const mu = avg;
-      const sigma2 = varT;
+      const mu = avg, sigma2 = varT;
       const exponent = -2 * mu * CFG.capital / sigma2;
       const r = Math.exp(exponent);
       riskOfRuin = Math.min(1, Math.max(0, r));
     }
 
     // 成本 / 週轉
-    let totalFee  = 0, totalTax = 0, notionalTraded = 0;
+    let totalFee = 0, totalTax = 0, notionalTraded = 0;
     const slipPerTradeMoney = CFG.pointValue * slipPerSide * 2;
     trades.forEach(t => {
       totalFee  += t.fee;
@@ -490,7 +455,7 @@
     const badList = [];
 
     const toStr = (fmt, v) => {
-      if (v == null || !isFinite(v)) return '—';
+      if (!isFinite(v)) return '—';
       if (fmt === 'pct') {
         if (v < 0) return '—';
         if (v < 0.0001) return '<0.01%';
@@ -704,7 +669,7 @@
     let lastDate = null;
     let lastVal  = 0;
 
-    for (let i = 1; i < series.length; i++) { // index 0 是 0 起點
+    for (let i = 1; i < series.length; i++) {
       const d = dates[i];
       if (!d) continue;
       const key = dateWeekKey(d);
@@ -874,10 +839,10 @@
                 const d = weekDates[index];
                 if (!d) return '';
                 const m  = d.getMonth() + 1;
-                const ym = `${d.getFullYear()}/${m.toString().padStart(2,'0')}`;
+                const ym = `${d.getFullYear()}/${m.toString().padStart(2, '0')}`;
                 const lastIndex = weekDates.length - 1;
-                if (index === lastIndex) return ym;          // 最近一個月
-                if (m === 1 || m === 7) return ym;           // 每年 1/7 月
+                if (index === lastIndex) return ym;           // 最近一個月
+                if (m === 1 || m === 7) return ym;            // 每年 1 / 7 月
                 return '';
               }
             }
@@ -891,14 +856,12 @@
     });
   }
 
-  // ===== 畫交易明細表格 =====
+  // ===== 交易表 & 圖表 =====
   function renderTrades(parsed) {
     const tbody = $('#tradesBody');
     tbody.innerHTML = '';
 
-    // 參數列
-    const paramLine = $('#paramLine');
-    paramLine.textContent = gHeader ? `參數：${gHeader}` : '';
+    $('#paramLine').textContent = gHeader ? `參數：${gHeader}` : '';
 
     renderKpi(null, null);
 
@@ -967,12 +930,10 @@
       tbody.appendChild(tr2);
     });
 
-    // KPI：理論 vs 含滑價
     const kpiTheo = calcKpi(parsed.trades, theoPnls, theoEquity, 0);
     const kpiAct  = calcKpi(parsed.trades, actPnls,  actEquity,  CFG.slipPerSide);
     renderKpi(kpiTheo, kpiAct);
 
-    // 累積損益線（從 0 起） & 長短拆線
     const totalTheo = [0], totalAct = [0];
     const longTheo  = [0], longAct  = [0];
     const shortTheo = [0], shortAct = [0];
@@ -1012,7 +973,7 @@
                             longTheo, longAct, shortTheo, shortAct);
   }
 
-  // ===== 事件 =====
+  // ===== 事件綁定 =====
   $('#fileInput').addEventListener('change', function (ev) {
     const file = ev.target.files && ev.target.files[0];
     gFile = file || null;
@@ -1040,7 +1001,7 @@
 
     const reader = new FileReader();
     reader.onload = function (e) {
-      const text = e.target.result || '';
+      const text   = e.target.result || '';
       const parsed = parseTxt(text);
       gParsed = parsed;
       renderTrades(parsed);
