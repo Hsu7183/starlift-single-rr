@@ -132,7 +132,6 @@
       if (!isFinite(px)) continue;
 
       if (ps[ps.length - 1] === 'INPOS') {
-        // 未來要算 MAE/MFE 時可以在這裡收集 mid/low
         continue;
       }
 
@@ -569,8 +568,6 @@
     }
 
     const badList = [];
-
-    // 綜合分數：以核心有評級的 KPI 做平均分數
     let scoreSum   = 0;
     let scoreCount = 0;
 
@@ -612,7 +609,7 @@
         });
       }
 
-      // 累積分數（以含滑價 KPI 為主）
+      // 分數（含滑價）
       if (rating) {
         let pts = 0;
         if (rating.label === 'Strong')   pts = 90;
@@ -770,7 +767,7 @@
       'int', t.totalCost, a.totalCost,
       '手續費 + 稅 + 滑價總和');
 
-    // ===== 建議優化指標卡片 =====
+    // 建議優化指標卡片
     if (!badList.length) {
       badBody.innerHTML =
         '<tr><td colspan="5" style="color:#777;">目前沒有需要特別優化的指標。</td></tr>';
@@ -788,7 +785,7 @@
       });
     }
 
-    // ===== 綜合分數輸出 =====
+    // 綜合分數
     const score = scoreCount > 0 ? (scoreSum / scoreCount) : null;
     renderScore(score);
   }
@@ -817,7 +814,6 @@
       outDates.push(lastDate);
       outVals.push(lastVal);
     }
-    // 在最前面插入起點 0
     if (outDates.length > 0) {
       outDates.unshift(outDates[0]);
       outVals.unshift(0);
@@ -842,7 +838,7 @@
     const weekDates = aggTotalAct.dates;
     const labels    = aggTotalAct.vals.map((_, i) => i + 1);
 
-    // 找含滑價總損益的最高點 / 最低點（排除 index 0 的起點）
+    // 最高 / 最低點
     let maxVal = -Infinity, minVal = Infinity;
     let maxIdx = null,      minIdx = null;
     for (let i = 1; i < aggTotalAct.vals.length; i++) {
@@ -850,7 +846,6 @@
       if (v > maxVal) { maxVal = v; maxIdx = i; }
       if (v < minVal) { minVal = v; minIdx = i; }
     }
-
     const maxMarker = aggTotalAct.vals.map((_, i) => (i === maxIdx ? aggTotalAct.vals[i] : null));
     const minMarker = aggTotalAct.vals.map((_, i) => (i === minIdx ? aggTotalAct.vals[i] : null));
 
@@ -859,15 +854,16 @@
       gChart = null;
     }
 
-    // X 軸只顯示 2023/1、2023/7、2024/1、2024/7、2024/12(目前)
-    const labelMap = {
-      '2023/1': '2023/1',
-      '2023/7': '2023/7',
-      '2024/1': '2024/1',
-      '2024/7': '2024/7',
-      '2024/12': '2024/12(目前)'
-    };
-    let lastTickKey = null;
+    // 強制 5 個 X 軸刻度位置：等距切 4 段
+    const tickTexts = ['2023/1', '2023/7', '2024/1', '2024/7', '2024/12(當月)'];
+    const tickIndexToLabel = {};
+    if (labels.length > 1) {
+      const last = labels.length - 1;
+      for (let i = 0; i < tickTexts.length; i++) {
+        const idx = Math.round(last * i / (tickTexts.length - 1));
+        tickIndexToLabel[idx] = tickTexts[i];
+      }
+    }
 
     gChart = new Chart(ctx, {
       type: 'line',
@@ -931,7 +927,6 @@
             tension: 0,
             pointRadius: 0
           },
-          // 最高點標記（紅點）
           {
             label: '期間最高點',
             data: maxMarker,
@@ -941,7 +936,6 @@
             pointHoverRadius: 5,
             showLine: false
           },
-          // 最低點標記（綠點）
           {
             label: '期間最低點',
             data: minMarker,
@@ -988,17 +982,7 @@
             title: { display: true, text: '日期' },
             ticks: {
               callback: function(value, index) {
-                const d = weekDates[index];
-                if (!d) return '';
-                const y = d.getFullYear();
-                const m = d.getMonth() + 1;
-                const key = `${y}/${m}`;
-                const label = labelMap[key];
-                if (!label) return '';
-                // 同一個年月只顯示一次
-                if (lastTickKey === key) return '';
-                lastTickKey = key;
-                return label;
+                return tickIndexToLabel[index] || '';
               }
             }
           },
@@ -1051,7 +1035,6 @@
       const tr1 = document.createElement('tr');
       const tr2 = document.createElement('tr');
 
-      // 進場列
       tr1.innerHTML = `
         <td rowspan="2">${idx + 1}</td>
         <td>${formatTs(t.entry.ts)}</td>
@@ -1066,7 +1049,6 @@
         <td>—</td>
       `;
 
-      // 出場列：理論 vs 含滑價
       tr2.innerHTML = `
         <td>${formatTs(t.exit.ts)}</td>
         <td>${fmtInt(t.exit.px)}</td>
@@ -1084,12 +1066,10 @@
       tbody.appendChild(tr2);
     });
 
-    // KPI：理論 vs 含滑價
     const kpiTheo = calcKpi(parsed.trades, theoPnls, theoEquity, 0);
     const kpiAct  = calcKpi(parsed.trades, actPnls,  actEquity,  CFG.slipPerSide);
     renderKpi(kpiTheo, kpiAct);
 
-    // 累積損益線（從 0 起） & 長短拆線
     const totalTheo = [0], totalAct = [0];
     const longTheo  = [0], longAct  = [0];
     const shortTheo = [0], shortAct = [0];
