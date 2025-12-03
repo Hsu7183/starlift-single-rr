@@ -257,6 +257,38 @@
     return { label, cssClass: css, ref };
   }
 
+  // ===== 綜合分數卡片 =====
+  function renderScore(score) {
+    const card = document.getElementById('scoreCard');
+    if (!card) return;
+
+    if (score == null || !isFinite(score)) {
+      card.innerHTML = `
+        <div class="score-title">綜合分數</div>
+        <div class="score-value">—</div>
+        <div class="score-desc">載入檔案後自動計算</div>
+      `;
+      return;
+    }
+
+    const v = score.toFixed(1);
+    let cls   = 'adequate';
+    let label = 'Adequate';
+    if (score >= 85) {
+      cls   = 'strong';
+      label = 'Strong';
+    } else if (score < 70) {
+      cls   = 'improve';
+      label = 'Improve';
+    }
+
+    card.innerHTML = `
+      <div class="score-title">綜合分數</div>
+      <div class="score-value ${cls}">${v}</div>
+      <div class="score-desc">${label}｜以核心 KPI 加權計算（含滑價）</div>
+    `;
+  }
+
   // ===== KPI 計算（單一版本：給理論 or 含滑價用） =====
   function calcKpi(trades, pnls, equity, slipPerSide) {
     const n = pnls.length;
@@ -528,6 +560,7 @@
     if (!tbody || !badBody) return;
     tbody.innerHTML   = '';
     badBody.innerHTML = '';
+    renderScore(null);  // 先重置分數
 
     if (!kpiAct) {
       badBody.innerHTML =
@@ -536,6 +569,10 @@
     }
 
     const badList = [];
+
+    // 綜合分數：以核心有評級的 KPI 做平均分數
+    let scoreSum   = 0;
+    let scoreCount = 0;
 
     const toStr = (fmt, v) => {
       if (v == null || !isFinite(v)) return '—';
@@ -573,6 +610,16 @@
           ratingClass,
           refRange
         });
+      }
+
+      // 累積分數（以含滑價 KPI 為主）
+      if (rating) {
+        let pts = 0;
+        if (rating.label === 'Strong')   pts = 90;
+        else if (rating.label === 'Adequate') pts = 75;
+        else if (rating.label === 'Improve')  pts = 60;
+        scoreSum   += pts;
+        scoreCount += 1;
       }
 
       const tr = document.createElement('tr');
@@ -740,6 +787,10 @@
         badBody.appendChild(tr);
       });
     }
+
+    // ===== 綜合分數輸出 =====
+    const score = scoreCount > 0 ? (scoreSum / scoreCount) : null;
+    renderScore(score);
   }
 
   // ===== 每週聚合工具 =====
@@ -807,6 +858,16 @@
       gChart.destroy();
       gChart = null;
     }
+
+    // X 軸只顯示 2023/1、2023/7、2024/1、2024/7、2024/12(目前)
+    const labelMap = {
+      '2023/1': '2023/1',
+      '2023/7': '2023/7',
+      '2024/1': '2024/1',
+      '2024/7': '2024/7',
+      '2024/12': '2024/12(目前)'
+    };
+    let lastTickKey = null;
 
     gChart = new Chart(ctx, {
       type: 'line',
@@ -924,24 +985,20 @@
         scales: {
           x: {
             display: true,
-            title: { display: true, text: '日期（季）' },
+            title: { display: true, text: '日期' },
             ticks: {
               callback: function(value, index) {
                 const d = weekDates[index];
                 if (!d) return '';
-                const m  = d.getMonth() + 1;
-                const isQuarter = (m === 1 || m === 4 || m === 7 || m === 10);
-                if (!isQuarter) return '';
-                const ym = `${d.getFullYear()}/${m.toString().padStart(2, '0')}`;
-                // 若前一個 tick 同季，就只顯示一次
-                if (index === 0) return ym;
-                const prev = weekDates[index - 1];
-                const pm   = prev.getMonth() + 1;
-                const prevIsQuarter = (pm === 1 || pm === 4 || pm === 7 || pm === 10);
-                if (prevIsQuarter && `${prev.getFullYear()}/${pm.toString().padStart(2,'0')}` === ym) {
-                  return '';
-                }
-                return ym;
+                const y = d.getFullYear();
+                const m = d.getMonth() + 1;
+                const key = `${y}/${m}`;
+                const label = labelMap[key];
+                if (!label) return '';
+                // 同一個年月只顯示一次
+                if (lastTickKey === key) return '';
+                lastTickKey = key;
+                return label;
               }
             }
           },
