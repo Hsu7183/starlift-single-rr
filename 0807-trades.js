@@ -2,6 +2,7 @@
 // 台指期單檔分析：KPI + 每週資產曲線 + 交易明細
 // - 理論與含滑價分開計算
 // - 資產曲線以「每週出場」聚合，起點為 0（累積損益）
+// - 圖上標出整段期間的最高點（紅點）與最低點（綠點）
 
 (function () {
   'use strict';
@@ -520,7 +521,7 @@
     };
   }
 
-  // ===== KPI 呈現（理論 + 含滑價） =====
+  // ===== KPI 呈現 =====
   function renderKpi(kpiTheo, kpiAct) {
     const tbody   = $('#kpiBody');
     const badBody = $('#kpiBadBody');
@@ -773,7 +774,7 @@
     return { dates: outDates, vals: outVals };
   }
 
-  // ===== 資產曲線圖（每週） =====
+  // ===== 每週資產曲線 + 高低點 =====
   function renderEquityChartWeekly(exitDates, totalTheo, totalAct,
                                    longTheo, longAct, shortTheo, shortAct) {
     const canvas = document.getElementById('equityChart');
@@ -789,6 +790,18 @@
 
     const weekDates = aggTotalAct.dates;
     const labels    = aggTotalAct.vals.map((_, i) => i + 1);
+
+    // 找含滑價總損益的最高點 / 最低點（排除 index 0 的起點）
+    let maxVal = -Infinity, minVal = Infinity;
+    let maxIdx = null,      minIdx = null;
+    for (let i = 1; i < aggTotalAct.vals.length; i++) {
+      const v = aggTotalAct.vals[i];
+      if (v > maxVal) { maxVal = v; maxIdx = i; }
+      if (v < minVal) { minVal = v; minIdx = i; }
+    }
+
+    const maxMarker = aggTotalAct.vals.map((_, i) => (i === maxIdx ? aggTotalAct.vals[i] : null));
+    const minMarker = aggTotalAct.vals.map((_, i) => (i === minIdx ? aggTotalAct.vals[i] : null));
 
     if (gChart) {
       gChart.destroy();
@@ -856,6 +869,26 @@
             borderDash: [4, 3],
             tension: 0,
             pointRadius: 0
+          },
+          // 最高點標記（紅點）
+          {
+            label: '期間最高點',
+            data: maxMarker,
+            borderColor: 'rgba(220,0,0,0)',
+            backgroundColor: 'rgba(220,0,0,1)',
+            pointRadius: 4,
+            pointHoverRadius: 5,
+            showLine: false
+          },
+          // 最低點標記（綠點）
+          {
+            label: '期間最低點',
+            data: minMarker,
+            borderColor: 'rgba(0,150,0,0)',
+            backgroundColor: 'rgba(0,150,0,1)',
+            pointRadius: 4,
+            pointHoverRadius: 5,
+            showLine: false
           }
         ]
       },
@@ -891,18 +924,24 @@
         scales: {
           x: {
             display: true,
-            title: { display: true, text: '日期（週）' },
+            title: { display: true, text: '日期（季）' },
             ticks: {
               callback: function(value, index) {
                 const d = weekDates[index];
                 if (!d) return '';
-                const ym = `${d.getFullYear()}/${(d.getMonth()+1)
-                  .toString().padStart(2,'0')}`;
+                const m  = d.getMonth() + 1;
+                const isQuarter = (m === 1 || m === 4 || m === 7 || m === 10);
+                if (!isQuarter) return '';
+                const ym = `${d.getFullYear()}/${m.toString().padStart(2, '0')}`;
+                // 若前一個 tick 同季，就只顯示一次
                 if (index === 0) return ym;
                 const prev = weekDates[index - 1];
-                const prevYm = `${prev.getFullYear()}/${(prev.getMonth()+1)
-                  .toString().padStart(2,'0')}`;
-                return ym === prevYm ? '' : ym;
+                const pm   = prev.getMonth() + 1;
+                const prevIsQuarter = (pm === 1 || pm === 4 || pm === 7 || pm === 10);
+                if (prevIsQuarter && `${prev.getFullYear()}/${pm.toString().padStart(2,'0')}` === ym) {
+                  return '';
+                }
+                return ym;
               }
             }
           },
@@ -993,7 +1032,7 @@
     const kpiAct  = calcKpi(parsed.trades, actPnls,  actEquity,  CFG.slipPerSide);
     renderKpi(kpiTheo, kpiAct);
 
-    // 圖表：累積損益（從 0 起） & 長短拆線（每週）
+    // 累積損益線（從 0 起） & 長短拆線
     const totalTheo = [0], totalAct = [0];
     const longTheo  = [0], longAct  = [0];
     const shortTheo = [0], shortAct = [0];
