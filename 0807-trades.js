@@ -3,7 +3,7 @@
 // - 理論與含滑價分開計算
 // - 資產曲線以「每週出場」聚合，起點為 0（累積損益）
 // - 圖上標出整段期間的最高點（紅點）與最低點（綠點）
-// - X 軸強制顯示 2023/1、2023/7、2024/1、2024/7、2024/12(當月)
+// - X 軸依 TXT 資料起訖分成 5 個節點標記（起點、中間 3 點、終點）
 
 (function () {
   'use strict';
@@ -579,6 +579,7 @@
         if (v < 0.0001) return '<0.01%';
         return fmtPct(v);
       }
+      if (fmt === 'f1')   return fmtFloat(v, 1);
       if (fmt === 'f2')   return fmtFloat(v, 2);
       if (fmt === 'f3')   return fmtFloat(v, 3);
       if (fmt === 'f4')   return fmtFloat(v, 4);
@@ -821,7 +822,7 @@
     return { dates: outDates, vals: outVals };
   }
 
-  // ===== 每週資產曲線 + 高低點（含強制 5 個 X 軸刻度） =====
+  // ===== 每週資產曲線 + 高低點（X 軸依資料起訖 5 等分） =====
   function renderEquityChartWeekly(exitDates, totalTheo, totalAct,
                                    longTheo, longAct, shortTheo, shortAct) {
     const canvas = document.getElementById('equityChart');
@@ -854,15 +855,21 @@
       gChart = null;
     }
 
-    // 強制 5 個 X 軸刻度位置：等距切 4 段
-    const tickTexts = ['2023/1', '2023/7', '2024/1', '2024/7', '2024/12(當月)'];
+    // 依 weekDates 長度，取起 / 0.25 / 0.5 / 0.75 / 1 位置的年月作為 5 個刻度標籤
     const tickIndexToLabel = {};
-    if (labels.length > 1) {
-      const last = labels.length - 1;
-      for (let i = 0; i < tickTexts.length; i++) {
-        const idx = Math.round(last * i / (tickTexts.length - 1));
-        tickIndexToLabel[idx] = tickTexts[i];
-      }
+    if (weekDates.length > 0 && labels.length === weekDates.length) {
+      const last = weekDates.length - 1;
+      const ratios = [0, 0.25, 0.5, 0.75, 1];
+
+      ratios.forEach(r => {
+        const idx = Math.round(last * r);
+        const d   = weekDates[idx];
+        if (!d) return;
+        const y = d.getFullYear();
+        const m = d.getMonth() + 1;
+        const label = `${y}/${m}`; // 例：2023/7
+        tickIndexToLabel[idx] = label;
+      });
     }
 
     gChart = new Chart(ctx, {
@@ -961,15 +968,16 @@
           },
           tooltip: {
             callbacks: {
-              title: function(items) {
+              title: function (items) {
                 const idx = items[0].dataIndex;
                 const d   = weekDates[idx];
                 if (!d) return '';
-                const ymdd = `${d.getFullYear()}/${(d.getMonth()+1)
-                  .toString().padStart(2,'0')}/${d.getDate().toString().padStart(2,'0')}`;
-                return ymdd;
+                const y = d.getFullYear();
+                const m = (d.getMonth() + 1).toString().padStart(2, '0');
+                const day = d.getDate().toString().padStart(2, '0');
+                return `${y}/${m}/${day}`;
               },
-              label: function(ctx) {
+              label: function (ctx) {
                 const v = ctx.parsed.y;
                 return `${ctx.dataset.label}: ${fmtInt(v)}`;
               }
@@ -984,7 +992,7 @@
               autoSkip: false,
               maxRotation: 0,
               minRotation: 0,
-              callback: function(value, index) {
+              callback: function (value, index) {
                 return tickIndexToLabel[index] || '';
               }
             }
