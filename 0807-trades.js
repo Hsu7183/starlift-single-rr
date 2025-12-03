@@ -2,48 +2,45 @@
 // 台指期單檔分析：KPI + 每週資產曲線 + 交易明細
 // - 理論與含滑價分開計算
 // - 資產曲線以「每週出場」聚合，起點為 0（累積損益）
-// - 圖上標出整段期間的最高點（紅點）與最低點（綠點）
+// - 圖上標出期間最高點（紅點）與最低點（綠點）
+// - X 軸只顯示半年刻度：每年 1 月 / 7 月 + 最後一個點
+// - TXT 第一行參數顯示在圖表上方
 
 (function () {
   'use strict';
 
-  // ===== 參數設定 =====
   const CFG = {
-    pointValue: 200,    // 每點金額
-    feePerSide: 45,     // 單邊手續費
-    taxRate: 0.00002,   // 期交稅率（單邊）
-    slipPerSide: 0,     // 每邊滑點（點數）
-    capital: 1000000    // 本金（KPI 用）
+    pointValue: 200,
+    feePerSide: 45,
+    taxRate: 0.00002,
+    slipPerSide: 0,
+    capital: 1000000
   };
 
   let gParsed = null;
   let gFile   = null;
   let gChart  = null;
+  let gHeader = '';   // TXT 第一行參數
 
-  // ===== 小工具 =====
   const $ = (s) => document.querySelector(s);
 
   const fmtInt = (n) => {
     if (n == null || !isFinite(n)) return '—';
     return Math.round(n).toLocaleString('en-US');
   };
-
   const fmtSignedInt = (n) => {
     if (n == null || !isFinite(n)) return '—';
     const v = Math.round(n);
     return v.toLocaleString('en-US');
   };
-
   const fmtPct = (p) => {
     if (p == null || !isFinite(p)) return '—';
     return (p * 100).toFixed(2) + '%';
   };
-
   const fmtFloat = (x, d) => {
     if (x == null || !isFinite(x)) return '—';
     return x.toFixed(d);
   };
-
   const clsForNumber = (n) => {
     if (n == null || !isFinite(n) || n === 0) return '';
     return n > 0 ? 'num-pos' : 'num-neg';
@@ -89,24 +86,18 @@
     return tmp.getUTCFullYear() + '-W' + (weekNo < 10 ? '0' + weekNo : weekNo);
   }
 
-  // ===== INPOS 判斷方向 =====
   function getDirFromInpos(lines, startIdx) {
     const maxLookAhead = 300;
     const total = lines.length;
-
     for (let j = startIdx + 1; j < total && j <= startIdx + maxLookAhead; j++) {
       const line = lines[j];
       const ps = line.split(/\s+/);
       if (!ps.length) continue;
-
       if (ps.length >= 6 && ps[ps.length - 1] === 'INPOS') {
         const dir = parseInt(ps[3], 10);
         if (dir === 1 || dir === -1) return dir;
       }
-
-      if (ps.length === 3 && ps[ps.length - 1] !== 'INPOS') {
-        break;
-      }
+      if (ps.length === 3 && ps[ps.length - 1] !== 'INPOS') break;
     }
     return 1;
   }
@@ -117,6 +108,7 @@
     if (!allLines.length) return { header: null, trades: [] };
 
     const header = allLines[0];
+    gHeader = header;  // 記起來給畫面用
     const lines  = allLines.slice(1);
 
     const trades = [];
@@ -132,7 +124,6 @@
       if (!isFinite(px)) continue;
 
       if (ps[ps.length - 1] === 'INPOS') {
-        // 未來要算 MAE/MFE 時可以在這裡收集 mid/low
         continue;
       }
 
@@ -145,17 +136,13 @@
           const entryPx  = open.px;
           const exitPx   = px;
 
-          const points = dir > 0
-            ? (exitPx - entryPx)
-            : (entryPx - exitPx);
-
-          const gross = points * CFG.pointValue;
-          const fee   = CFG.feePerSide * 2;
-          const taxIn = Math.round(entryPx * CFG.pointValue * CFG.taxRate);
-          const taxOut= Math.round(exitPx  * CFG.pointValue * CFG.taxRate);
-          const tax   = taxIn + taxOut;
-
-          const theoNet = gross - fee - tax;
+          const points = dir > 0 ? (exitPx - entryPx) : (entryPx - exitPx);
+          const gross  = points * CFG.pointValue;
+          const fee    = CFG.feePerSide * 2;
+          const taxIn  = Math.round(entryPx * CFG.pointValue * CFG.taxRate);
+          const taxOut = Math.round(exitPx  * CFG.pointValue * CFG.taxRate);
+          const tax    = taxIn + taxOut;
+          const theoNet= gross - fee - tax;
 
           const entryAction = dir > 0 ? '新買' : '新賣';
           const exitAction  = dir > 0 ? '平賣' : '平買';
@@ -178,7 +165,7 @@
     return { header, trades };
   }
 
-  // ===== KPI 評等規則（Strong / Adequate / Improve） =====
+  // ===== KPI 評等規則 =====
   function rateMetric(key, value) {
     if (value == null || !isFinite(value)) return null;
 
@@ -193,7 +180,6 @@
         else if (value <= 0.30)  { label = 'Adequate'; }
         else                     { label = 'Improve'; css = 'rating-improve'; }
         break;
-
       case 'total_return':
       case 'cagr':
         ref = '≥ 15% 強；5–15% 可接受；<5% 需優化';
@@ -201,75 +187,63 @@
         else if (value >= 0.05)  { label = 'Adequate'; }
         else                     { label = 'Improve'; css = 'rating-improve'; }
         break;
-
       case 'pf':
         ref = '≥ 1.5 強；1.1–1.5 可接受；<1.1 需優化';
         if (value >= 1.5)        { label = 'Strong';  css = 'rating-strong';  }
         else if (value >= 1.1)   { label = 'Adequate'; }
         else                     { label = 'Improve'; css = 'rating-improve'; }
         break;
-
       case 'winrate':
         ref = '≥ 55% 強；45–55% 可接受；<45% 需優化';
         if (value >= 0.55)       { label = 'Strong';  css = 'rating-strong';  }
         else if (value >= 0.45)  { label = 'Adequate'; }
         else                     { label = 'Improve'; css = 'rating-improve'; }
         break;
-
       case 'sharpe':
         ref = '≥ 1.5 強；0.8–1.5 可接受；<0.8 需優化';
         if (value >= 1.5)        { label = 'Strong';  css = 'rating-strong';  }
         else if (value >= 0.8)   { label = 'Adequate'; }
         else                     { label = 'Improve'; css = 'rating-improve'; }
         break;
-
       case 'sortino':
         ref = '≥ 2 強；1–2 可接受；<1 需優化';
         if (value >= 2)          { label = 'Strong';  css = 'rating-strong';  }
         else if (value >= 1)     { label = 'Adequate'; }
         else                     { label = 'Improve'; css = 'rating-improve'; }
         break;
-
       case 'calmar':
         ref = '≥ 0.5 強；0.2–0.5 可接受；<0.2 需優化';
         if (value >= 0.5)        { label = 'Strong';  css = 'rating-strong';  }
         else if (value >= 0.2)   { label = 'Adequate'; }
         else                     { label = 'Improve'; css = 'rating-improve'; }
         break;
-
       case 'risk_ruin':
         ref = '≦ 5% 強；5–20% 可接受；>20% 需優化';
         if (value <= 0.05)       { label = 'Strong';  css = 'rating-strong';  }
         else if (value <= 0.20)  { label = 'Adequate'; }
         else                     { label = 'Improve'; css = 'rating-improve'; }
         break;
-
       case 'cost_ratio':
         ref = '≦ 20% 強；20–40% 可接受；>40% 需優化';
         if (value <= 0.20)       { label = 'Strong';  css = 'rating-strong';  }
         else if (value <= 0.40)  { label = 'Adequate'; }
         else                     { label = 'Improve'; css = 'rating-improve'; }
         break;
-
       default:
         return null;
     }
     return { label, cssClass: css, ref };
   }
 
-  // ===== KPI 計算（單一版本：給理論 or 含滑價用） =====
+  // ===== KPI 計算（單一版本） =====
   function calcKpi(trades, pnls, equity, slipPerSide) {
     const n = pnls.length;
     if (!n) return null;
 
-    let sum = 0;
-    let sumSq = 0;
-    let grossProfit = 0;
-    let grossLoss = 0;
-    let wins = 0;
-    let losses = 0;
-    let largestWin = null;
-    let largestLoss = null;
+    let sum = 0, sumSq = 0;
+    let grossProfit = 0, grossLoss = 0;
+    let wins = 0, losses = 0;
+    let largestWin = null, largestLoss = null;
 
     pnls.forEach(p => {
       sum += p;
@@ -293,37 +267,25 @@
     const payoff   = (avgLoss < 0) ? (avgWin / Math.abs(avgLoss)) : null;
     const pf       = grossLoss < 0 ? grossProfit / Math.abs(grossLoss) : null;
 
-    const mean   = avg;
-    const varT   = n > 1 ? (sumSq / n - mean * mean) : 0;
-    const stdev  = varT > 0 ? Math.sqrt(varT) : 0;
-
-    const sharpeTrade  = stdev > 0 ? (mean / stdev) * Math.sqrt(n) : null;
+    const mean  = avg;
+    const varT  = n > 1 ? (sumSq / n - mean * mean) : 0;
+    const stdev = varT > 0 ? Math.sqrt(varT) : 0;
+    const sharpeTrade = stdev > 0 ? (mean / stdev) * Math.sqrt(n) : null;
 
     // Sortino
-    let downsideSq = 0;
-    let downsideCnt = 0;
+    let downsideSq = 0, downsideCnt = 0;
     pnls.forEach(p => {
-      if (p < 0) {
-        downsideSq += p * p;
-        downsideCnt++;
-      }
+      if (p < 0) { downsideSq += p * p; downsideCnt++; }
     });
-    const downsideDev   = downsideCnt > 0 ? Math.sqrt(downsideSq / downsideCnt) : 0;
-    const sortinoTrade  = downsideDev > 0 ? (mean / downsideDev) * Math.sqrt(n) : null;
+    const downsideDev  = downsideCnt > 0 ? Math.sqrt(downsideSq / downsideCnt) : 0;
+    const sortinoTrade = downsideDev > 0 ? (mean / downsideDev) * Math.sqrt(n) : null;
 
     // 最大回撤
-    let peak = 0;
-    let maxDd = 0;
-    let maxDdStartIdx = 0;
-    let maxDdEndIdx   = 0;
-    let curPeakIdx    = 0;
-
+    let peak = 0, maxDd = 0;
+    let maxDdStartIdx = 0, maxDdEndIdx = 0, curPeakIdx = 0;
     for (let i = 0; i < equity.length; i++) {
       const v = equity[i];
-      if (v > peak) {
-        peak = v;
-        curPeakIdx = i;
-      }
+      if (v > peak) { peak = v; curPeakIdx = i; }
       const dd = peak - v;
       if (dd > maxDd) {
         maxDd = dd;
@@ -335,34 +297,30 @@
     const totalReturnPct = CFG.capital > 0 ? totalNet / CFG.capital : null;
     const maxDdPct       = CFG.capital > 0 ? maxDd   / CFG.capital : null;
 
-    // 年化（CAGR）
+    // 年化
     const exitDates = trades.map(t => tsToDate(t.exit.ts));
     let cagr = null;
     if (exitDates.length) {
-      const first = exitDates[0];
-      const last  = exitDates[exitDates.length - 1];
+      const first = exitDates[0], last = exitDates[exitDates.length - 1];
       if (first && last && last > first && CFG.capital > 0) {
         const days  = (last - first) / 86400000;
         const years = days / 365;
         if (years > 0) {
-          const finalNav = CFG.capital + totalNet;
-          const ratio    = finalNav / CFG.capital;
+          const ratio = (CFG.capital + totalNet) / CFG.capital;
           cagr = Math.pow(ratio, 1 / years) - 1;
         }
       }
     }
 
     const calmar = (maxDdPct != null && maxDdPct > 0 && cagr != null)
-      ? (cagr / maxDdPct)
-      : null;
+      ? (cagr / maxDdPct) : null;
 
     const timeToRecoveryTrades =
       maxDdEndIdx > maxDdStartIdx ? (maxDdEndIdx - maxDdStartIdx) : 0;
 
-    // Ulcer Index（NAV）
+    // Ulcer Index
     const nav = equity.map(v => CFG.capital + v);
-    let peakNav = 0;
-    let sumDdSq = 0;
+    let peakNav = 0, sumDdSq = 0;
     for (let i = 0; i < nav.length; i++) {
       const v = nav[i];
       if (v > peakNav) peakNav = v;
@@ -373,8 +331,7 @@
     const recoveryFactor= maxDd > 0 ? totalNet / maxDd : null;
 
     // 日 / 週損益
-    const dayMap = {};
-    const weekMap = {};
+    const dayMap = {}, weekMap = {};
     pnls.forEach((p, i) => {
       const t  = trades[i];
       const dk = tsDayKey(t.exit.ts);
@@ -393,23 +350,20 @@
     const alpha = 0.95;
     const idx   = Math.floor((1 - alpha) * sortedPnls.length);
     const varLoss = sortedPnls.length
-      ? -sortedPnls[Math.min(idx, sortedPnls.length - 1)]
-      : null;
+      ? -sortedPnls[Math.min(idx, sortedPnls.length - 1)] : null;
 
-    let tailSum = 0;
-    let tailCnt = 0;
+    let tailSum = 0, tailCnt = 0;
     for (let i = 0; i <= idx && i < sortedPnls.length; i++) {
       tailSum += sortedPnls[i];
       tailCnt++;
     }
     const cvarLoss = tailCnt > 0 ? -(tailSum / tailCnt) : null;
 
-    // Expectancy / Kelly / Risk of Ruin (Brownian 近似)
+    // Expectancy / Kelly / Risk of Ruin
     const expectancy = avg;
     let kelly = null;
     if (payoff != null && payoff > 0 && winRate > 0 && winRate < 1) {
-      const p = winRate;
-      const q = 1 - p;
+      const p = winRate, q = 1 - p;
       kelly = p - q / payoff;
     }
 
@@ -419,7 +373,7 @@
     } else if (avg <= 0) {
       riskOfRuin = 1;
     } else {
-      const mu     = avg;
+      const mu = avg;
       const sigma2 = varT;
       const exponent = -2 * mu * CFG.capital / sigma2;
       const r = Math.exp(exponent);
@@ -427,9 +381,7 @@
     }
 
     // 成本 / 週轉
-    let totalFee  = 0;
-    let totalTax  = 0;
-    let notionalTraded = 0;
+    let totalFee  = 0, totalTax = 0, notionalTraded = 0;
     const slipPerTradeMoney = CFG.pointValue * slipPerSide * 2;
     trades.forEach(t => {
       totalFee  += t.fee;
@@ -442,8 +394,8 @@
     const turnover      = CFG.capital > 0 ? (notionalTraded / CFG.capital) : null;
     const costRatio     = totalGrossAbs > 0 ? (totalCost / totalGrossAbs) : null;
 
-    const tradingDays = Object.keys(dayMap).length;
-    const tradesPerDay= tradingDays > 0 ? n / tradingDays : null;
+    const tradingDays  = Object.keys(dayMap).length;
+    const tradesPerDay = tradingDays > 0 ? n / tradingDays : null;
 
     let totalHoldMin = 0;
     trades.forEach(t => {
@@ -723,11 +675,13 @@
       'int', t.totalCost, a.totalCost,
       '手續費 + 稅 + 滑價總和');
 
-    // ===== 建議優化指標卡片 =====
+    // 建議優化卡片
+    const badBody = $('#kpiBadBody');
     if (!badList.length) {
       badBody.innerHTML =
         '<tr><td colspan="5" style="color:#777;">目前沒有需要特別優化的指標。</td></tr>';
     } else {
+      badBody.innerHTML = '';
       badList.forEach(item => {
         const tr = document.createElement('tr');
         tr.innerHTML = `
@@ -766,7 +720,6 @@
       outDates.push(lastDate);
       outVals.push(lastVal);
     }
-    // 在最前面插入起點 0
     if (outDates.length > 0) {
       outDates.unshift(outDates[0]);
       outVals.unshift(0);
@@ -791,7 +744,7 @@
     const weekDates = aggTotalAct.dates;
     const labels    = aggTotalAct.vals.map((_, i) => i + 1);
 
-    // 找含滑價總損益的最高點 / 最低點（排除 index 0 的起點）
+    // 高低點（含滑價總損益）
     let maxVal = -Infinity, minVal = Infinity;
     let maxIdx = null,      minIdx = null;
     for (let i = 1; i < aggTotalAct.vals.length; i++) {
@@ -799,7 +752,6 @@
       if (v > maxVal) { maxVal = v; maxIdx = i; }
       if (v < minVal) { minVal = v; minIdx = i; }
     }
-
     const maxMarker = aggTotalAct.vals.map((_, i) => (i === maxIdx ? aggTotalAct.vals[i] : null));
     const minMarker = aggTotalAct.vals.map((_, i) => (i === minIdx ? aggTotalAct.vals[i] : null));
 
@@ -870,7 +822,6 @@
             tension: 0,
             pointRadius: 0
           },
-          // 最高點標記（紅點）
           {
             label: '期間最高點',
             data: maxMarker,
@@ -880,7 +831,6 @@
             pointHoverRadius: 5,
             showLine: false
           },
-          // 最低點標記（綠點）
           {
             label: '期間最低點',
             data: minMarker,
@@ -895,15 +845,9 @@
       options: {
         responsive: true,
         maintainAspectRatio: false,
-        interaction: {
-          mode: 'index',
-          intersect: false
-        },
+        interaction: { mode: 'index', intersect: false },
         plugins: {
-          legend: {
-            display: true,
-            position: 'top'
-          },
+          legend: { display: true, position: 'top' },
           tooltip: {
             callbacks: {
               title: function(items) {
@@ -924,24 +868,17 @@
         scales: {
           x: {
             display: true,
-            title: { display: true, text: '日期（季）' },
+            title: { display: true, text: '日期（半年）' },
             ticks: {
               callback: function(value, index) {
                 const d = weekDates[index];
                 if (!d) return '';
                 const m  = d.getMonth() + 1;
-                const isQuarter = (m === 1 || m === 4 || m === 7 || m === 10);
-                if (!isQuarter) return '';
-                const ym = `${d.getFullYear()}/${m.toString().padStart(2, '0')}`;
-                // 若前一個 tick 同季，就只顯示一次
-                if (index === 0) return ym;
-                const prev = weekDates[index - 1];
-                const pm   = prev.getMonth() + 1;
-                const prevIsQuarter = (pm === 1 || pm === 4 || pm === 7 || pm === 10);
-                if (prevIsQuarter && `${prev.getFullYear()}/${pm.toString().padStart(2,'0')}` === ym) {
-                  return '';
-                }
-                return ym;
+                const ym = `${d.getFullYear()}/${m.toString().padStart(2,'0')}`;
+                const lastIndex = weekDates.length - 1;
+                if (index === lastIndex) return ym;          // 最近一個月
+                if (m === 1 || m === 7) return ym;           // 每年 1/7 月
+                return '';
               }
             }
           },
@@ -954,10 +891,15 @@
     });
   }
 
-  // ===== 畫交易明細表格（理論 vs 含滑價） =====
+  // ===== 畫交易明細表格 =====
   function renderTrades(parsed) {
     const tbody = $('#tradesBody');
     tbody.innerHTML = '';
+
+    // 參數列
+    const paramLine = $('#paramLine');
+    paramLine.textContent = gHeader ? `參數：${gHeader}` : '';
+
     renderKpi(null, null);
 
     if (!parsed || !parsed.trades.length) {
@@ -994,7 +936,6 @@
       const tr1 = document.createElement('tr');
       const tr2 = document.createElement('tr');
 
-      // 進場列
       tr1.innerHTML = `
         <td rowspan="2">${idx + 1}</td>
         <td>${formatTs(t.entry.ts)}</td>
@@ -1009,7 +950,6 @@
         <td>—</td>
       `;
 
-      // 出場列：理論 vs 含滑價
       tr2.innerHTML = `
         <td>${formatTs(t.exit.ts)}</td>
         <td>${fmtInt(t.exit.px)}</td>
