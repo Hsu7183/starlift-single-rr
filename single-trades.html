@@ -96,59 +96,40 @@
       white-space: nowrap;
     }
 
-    /* 雲端讀檔卡片 */
-    .cloud-card {
+    /* 雲端載入列（嵌在工具列下方） */
+    .cloud-inline-row {
       max-width: 1100px;
-      margin: 4px auto;
-      background:#fff;
-      border:1px solid #e5e7eb;
-      border-radius:8px;
-      box-shadow:0 2px 6px rgba(15,23,42,0.03);
-      padding:8px 12px;
-      font-size:12px;
-    }
-    .cloud-card h3 {
-      margin:0 0 4px 0;
-      font-size:13px;
-    }
-    .cloud-row {
-      display:flex;
-      flex-wrap:nowrap; /* 重要：不換行 */
-      gap:8px;
-      align-items:center;
-      overflow-x:auto;  /* 窄螢幕時可以左右捲動 */
-    }
-    .cloud-input {
-      padding:6px 8px;
-      border:1px solid #d1d5db;
-      border-radius:6px;
-      font-size:12px;
-      min-width:220px;
-    }
-    .cloud-select {
-      padding:6px 8px;
-      border:1px solid #d1d5db;
-      border-radius:6px;
-      font-size:12px;
-      min-width:260px;
-      max-width:380px;
+      margin: 2px auto 4px auto;
+      display: flex;
+      flex-wrap: nowrap;     /* 不要換行 */
+      gap: 8px;
+      align-items: center;
+      font-size: 12px;
+      overflow-x: auto;
     }
     .cloud-btn {
-      padding:6px 10px;
-      border-radius:6px;
-      border:0;
-      cursor:pointer;
-      font-size:12px;
-      white-space:nowrap;
-    }
-    .cloud-btn-primary {
+      padding: 4px 10px;
+      border-radius: 6px;
+      border: 0;
+      cursor: pointer;
+      font-size: 12px;
+      white-space: nowrap;
       background:#0d6efd;
       color:#fff;
     }
+    .cloud-select {
+      padding: 4px 8px;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      font-size: 12px;
+      min-width: 260px;
+      max-width: 380px;
+    }
     .cloud-meta {
-      margin-top:4px;
-      font-size:11px;
+      font-size: 11px;
       color:#666;
+      margin-left:4px;
+      white-space: nowrap;
     }
 
     /* 參數列 */
@@ -303,23 +284,17 @@
     </div>
   </div>
 
+  <!-- 雲端載入列：與 TXT 同一區塊下方 -->
+  <div class="cloud-inline-row">
+    <button id="btnCloudList" class="cloud-btn">載入清單（雲端）</button>
+    <select id="cloudSelect" class="cloud-select">
+      <option value="">（雲端未載入）</option>
+    </select>
+    <span id="cloudMeta" class="cloud-meta"></span>
+  </div>
+
   <!-- TXT 第一行參數 -->
   <div class="param-line" id="paramLine"></div>
-
-  <!-- 從資料上傳區讀檔 -->
-  <div class="cloud-card" id="cloudPanel">
-    <h3>從「資料上傳區」讀檔（Supabase / reports）</h3>
-    <div class="cloud-row">
-      <input id="cloudPrefix" class="cloud-input" placeholder="篩選資料夾（例：2025-09-24/）">
-      <button id="btnCloudList" class="cloud-btn cloud-btn-primary">載入清單</button>
-      <select id="cloudSelect" class="cloud-select">
-        <option value="">（雲端未載入）</option>
-      </select>
-    </div>
-    <div id="cloudMeta" class="cloud-meta">
-      說明：先輸入資料夾前綴並按「載入清單」，再從右側選擇檔案。選好後，上方 TXT 檔會自動帶入，最後按「計算」。
-    </div>
-  </div>
 
   <!-- 主資產曲線 -->
   <div class="chart-wrapper chart-main">
