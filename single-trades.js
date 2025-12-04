@@ -2,7 +2,7 @@
 // 三劍客量化科技機構級單檔分析：KPI + 每週資產曲線 + 交易明細
 // - 理論與含滑價分開計算
 // - 主圖：資產曲線（週聚合）
-// - 副圖：每週損益（紅=獲利直條、綠=虧損直條、黃=累積折線）
+// - 副圖：每週損益（紅=獲利直條、綠=虧損直條）
 // - X 軸依 TXT 資料起訖分成 5 個節點標記（起點、中間 3 點、終點）
 
 (function () {
@@ -290,7 +290,7 @@
     `;
   }
 
-  // ===== KPI 計算（單一版本：給理論 or 含滑價用） =====
+  // ===== KPI 計算 =====
   function calcKpi(trades, pnls, equity, slipPerSide) {
     const n = pnls.length;
     if (!n) return null;
@@ -437,7 +437,7 @@
     }
     const cvarLoss = tailCnt > 0 ? -(tailSum / tailCnt) : null;
 
-    // Expectancy / Kelly / Risk of Ruin (Brownian 近似)
+    // Expectancy / Kelly / Risk of Ruin
     const expectancy = avg;
     let kelly = null;
     if (payoff != null && payoff > 0 && winRate > 0 && winRate < 1) {
@@ -772,7 +772,6 @@
     const score = scoreCount > 0 ? (scoreSum / scoreCount) : null;
     renderScore(score);
 
-    // 建議優化指標卡片
     if (!badList.length) {
       badBody.innerHTML =
         '<tr><td colspan="5" style="color:#777;">目前沒有需要特別優化的指標。</td></tr>';
@@ -855,7 +854,6 @@
       gChart = null;
     }
 
-    // X 軸 5 等分標籤
     const tickIndexToLabel = {};
     if (weekDates.length > 0 && labels.length === weekDates.length) {
       const last = weekDates.length - 1;
@@ -1004,7 +1002,7 @@
     });
   }
 
-  // ===== 每週損益副圖（紅/綠直條 + 黃線） =====
+  // ===== 每週損益副圖（紅/綠直條，無累積線） =====
   function renderWeeklyPnlChart(weekDates, weekPnls) {
     const canvas = document.getElementById('weeklyPnlChart');
     if (!canvas || !window.Chart) return;
@@ -1017,8 +1015,7 @@
 
     if (!weekDates.length) return;
 
-    // X 軸 5 等分標籤（跟主圖概念一致）
-    const labels = weekDates.map((d, i) => i + 1); // 內部 index
+    const labels = weekDates.map((d, i) => i + 1);
     const tickIndexToLabel = {};
     const last = weekDates.length - 1;
     const ratios = [0, 0.25, 0.5, 0.75, 1];
@@ -1033,9 +1030,6 @@
 
     const pos = weekPnls.map(v => (v > 0 ? v : null));
     const neg = weekPnls.map(v => (v < 0 ? v : null));
-    const cum = [];
-    let c = 0;
-    weekPnls.forEach(v => { c += v; cum.push(c); });
 
     gWeeklyChart = new Chart(ctx, {
       type: 'bar',
@@ -1059,17 +1053,6 @@
             borderWidth: 1,
             barPercentage: 0.7,
             categoryPercentage: 0.9
-          },
-          {
-            label: '每週累積損益',
-            data: cum,
-            type: 'line',
-            borderColor: 'rgba(220,180,0,1)',
-            backgroundColor: 'rgba(220,180,0,0)',
-            borderWidth: 2,
-            tension: 0,
-            pointRadius: 0,
-            yAxisID: 'y'
           }
         ]
       },
@@ -1118,7 +1101,7 @@
           },
           y: {
             display: true,
-            title: { display: true, text: '每週損益 / 累積（金額）' },
+            title: { display: true, text: '每週損益（金額）' },
             grid: {
               zeroLineWidth: 1
             }
@@ -1200,12 +1183,10 @@
       tbody.appendChild(tr2);
     });
 
-    // KPI：理論 vs 含滑價
     const kpiTheo = calcKpi(parsed.trades, theoPnls, theoEquity, 0);
     const kpiAct  = calcKpi(parsed.trades, actPnls,  actEquity,  CFG.slipPerSide);
     renderKpi(kpiTheo, kpiAct);
 
-    // 主圖：累積損益線（從 0 起） & 長短拆線
     const totalTheo = [0], totalAct = [0];
     const longTheo  = [0], longAct  = [0];
     const shortTheo = [0], shortAct = [0];
@@ -1253,7 +1234,6 @@
       if (!weekMap[key]) {
         weekMap[key] = { sum: 0, date: d };
       } else if (d > weekMap[key].date) {
-        // 同一週用最後一次出場日期當 label
         weekMap[key].date = d;
       }
       weekMap[key].sum += actPnls[i];
