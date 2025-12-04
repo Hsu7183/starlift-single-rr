@@ -2,7 +2,7 @@
 // 三劍客量化科技機構級單檔分析：KPI + 每週資產曲線 + 交易明細
 // - 理論與含滑價分開計算
 // - 主圖：資產曲線（週聚合）
-// - 副圖：每週損益（紅=獲利、綠=虧損、黃=累積）
+// - 副圖：每週損益（紅=獲利直條、綠=虧損直條、黃=累積折線）
 // - X 軸依 TXT 資料起訖分成 5 個節點標記（起點、中間 3 點、終點）
 
 (function () {
@@ -19,8 +19,8 @@
 
   let gParsed = null;
   let gFile   = null;
-  let gChart  = null;   // 主資產曲線
-  let gWeeklyChart = null; // 每週損益圖
+  let gChart  = null;        // 主資產曲線
+  let gWeeklyChart = null;   // 每週損益圖
 
   // ===== 小工具 =====
   const $ = (s) => document.querySelector(s);
@@ -179,7 +179,7 @@
     return { header, trades };
   }
 
-  // ===== KPI 評等規則（Strong / Adequate / Improve） =====
+  // ===== KPI 評等規則 =====
   function rateMetric(key, value) {
     if (value == null || !isFinite(value)) return null;
 
@@ -612,7 +612,6 @@
         });
       }
 
-      // 分數（含滑價）
       if (rating) {
         let pts = 0;
         if (rating.label === 'Strong')   pts = 90;
@@ -770,6 +769,9 @@
       'int', t.totalCost, a.totalCost,
       '手續費 + 稅 + 滑價總和');
 
+    const score = scoreCount > 0 ? (scoreSum / scoreCount) : null;
+    renderScore(score);
+
     // 建議優化指標卡片
     if (!badList.length) {
       badBody.innerHTML =
@@ -787,9 +789,6 @@
         badBody.appendChild(tr);
       });
     }
-
-    const score = scoreCount > 0 ? (scoreSum / scoreCount) : null;
-    renderScore(score);
   }
 
   // ===== 每週聚合工具（主圖用） =====
@@ -856,20 +855,18 @@
       gChart = null;
     }
 
-    // 依 weekDates 長度，取起 / 0.25 / 0.5 / 0.75 / 1 位置的年月作為 5 個刻度標籤
+    // X 軸 5 等分標籤
     const tickIndexToLabel = {};
     if (weekDates.length > 0 && labels.length === weekDates.length) {
       const last = weekDates.length - 1;
       const ratios = [0, 0.25, 0.5, 0.75, 1];
-
       ratios.forEach(r => {
         const idx = Math.round(last * r);
         const d   = weekDates[idx];
         if (!d) return;
         const y = d.getFullYear();
         const m = d.getMonth() + 1;
-        const label = `${y}/${m}`;
-        tickIndexToLabel[idx] = label;
+        tickIndexToLabel[idx] = `${y}/${m}`;
       });
     }
 
@@ -1007,7 +1004,7 @@
     });
   }
 
-  // ===== 每週損益副圖（紅：獲利、綠：虧損、黃：累積） =====
+  // ===== 每週損益副圖（紅/綠直條 + 黃線） =====
   function renderWeeklyPnlChart(weekDates, weekPnls) {
     const canvas = document.getElementById('weeklyPnlChart');
     if (!canvas || !window.Chart) return;
@@ -1020,11 +1017,18 @@
 
     if (!weekDates.length) return;
 
-    const labels = weekDates.map((d) => {
+    // X 軸 5 等分標籤（跟主圖概念一致）
+    const labels = weekDates.map((d, i) => i + 1); // 內部 index
+    const tickIndexToLabel = {};
+    const last = weekDates.length - 1;
+    const ratios = [0, 0.25, 0.5, 0.75, 1];
+    ratios.forEach(r => {
+      const idx = Math.round(last * r);
+      const d   = weekDates[idx];
+      if (!d) return;
       const y = d.getFullYear();
-      const m = (d.getMonth() + 1).toString().padStart(2, '0');
-      const day = d.getDate().toString().padStart(2, '0');
-      return `${y}/${m}/${day}`;
+      const m = d.getMonth() + 1;
+      tickIndexToLabel[idx] = `${y}/${m}`;
     });
 
     const pos = weekPnls.map(v => (v > 0 ? v : null));
@@ -1034,7 +1038,7 @@
     weekPnls.forEach(v => { c += v; cum.push(c); });
 
     gWeeklyChart = new Chart(ctx, {
-      type: 'line',
+      type: 'bar',
       data: {
         labels,
         datasets: [
@@ -1042,28 +1046,30 @@
             label: '每週獲利（>0）',
             data: pos,
             borderColor: 'rgba(220,0,0,1)',
-            backgroundColor: 'rgba(220,0,0,0)',
-            borderWidth: 1.5,
-            tension: 0,
-            pointRadius: 0
+            backgroundColor: 'rgba(220,0,0,0.8)',
+            borderWidth: 1,
+            barPercentage: 0.7,
+            categoryPercentage: 0.9
           },
           {
             label: '每週虧損（<0）',
             data: neg,
             borderColor: 'rgba(0,150,0,1)',
-            backgroundColor: 'rgba(0,150,0,0)',
-            borderWidth: 1.5,
-            tension: 0,
-            pointRadius: 0
+            backgroundColor: 'rgba(0,150,0,0.8)',
+            borderWidth: 1,
+            barPercentage: 0.7,
+            categoryPercentage: 0.9
           },
           {
             label: '每週累積損益',
             data: cum,
+            type: 'line',
             borderColor: 'rgba(220,180,0,1)',
             backgroundColor: 'rgba(220,180,0,0)',
             borderWidth: 2,
             tension: 0,
-            pointRadius: 0
+            pointRadius: 0,
+            yAxisID: 'y'
           }
         ]
       },
@@ -1081,6 +1087,15 @@
           },
           tooltip: {
             callbacks: {
+              title: function (items) {
+                const idx = items[0].dataIndex;
+                const d   = weekDates[idx];
+                if (!d) return '';
+                const y = d.getFullYear();
+                const m = (d.getMonth() + 1).toString().padStart(2, '0');
+                const day = d.getDate().toString().padStart(2, '0');
+                return `${y}/${m}/${day}`;
+              },
               label: function (ctx) {
                 const v = ctx.parsed.y;
                 return `${ctx.dataset.label}: ${fmtInt(v)}`;
@@ -1093,17 +1108,11 @@
             display: true,
             title: { display: true, text: '週期' },
             ticks: {
+              autoSkip: false,
               maxRotation: 0,
               minRotation: 0,
               callback: function (value, index) {
-                // 月初 / 季初才顯示，以免太擠
-                const d = weekDates[index];
-                if (!d) return '';
-                const day = d.getDate();
-                if (day > 7) return '';
-                const y = d.getFullYear();
-                const m = (d.getMonth() + 1).toString().padStart(2, '0');
-                return `${y}/${m}`;
+                return tickIndexToLabel[index] || '';
               }
             }
           },
