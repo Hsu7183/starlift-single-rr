@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>內部研究環境｜策略分析系統（僅供研究）</title>
+  <title>策略分析系統（僅供研究）</title>
   <meta name="robots" content="noindex,nofollow" />
   <!-- CSP + 反嵌入 -->
   <meta http-equiv="Content-Security-Policy"
@@ -34,7 +34,7 @@
     a.card{ display:block; background:#fff; padding:18px 16px; border-radius:12px; box-shadow:0 2px 8px rgba(0,0,0,.08); text-decoration:none; color:inherit; transition:transform .15s, box-shadow .15s; border:1px solid #e5e7eb }
     a.card:hover{ transform:translateY(-4px); box-shadow:0 10px 22px rgba(0,0,0,.12) }
     .card-title{ font-weight:700; font-size:18px; margin:0 0 8px 0; text-align:center }
-    .card-title.big{ font-size:22px; }  /* 三個主要分析入口放大字體 */
+    .card-title.big{ font-size:22px; }  /* 主要入口放大字體 */
     .card-title.red{ color:#d32f2f } .card-title.blue{ color:#0d6efd } .card-title.gray{ color:#6c757d } .card-title.black{ color:#111 }
     .card-desc{ margin:0; color:#666; font-size:14px; line-height:1.5; text-align:left }
     .lines{ margin-top:2px }
@@ -63,7 +63,7 @@
   </style>
 </head>
 <body translate="no">
-  <div class="restrict">RESTRICTED • INTERNAL RESEARCH ONLY • NOT FOR PUBLIC DISTRIBUTION • NON-ADVISORY</div>
+  <!-- 上方 RESTRICTED Banner 已移除 -->
   <div id="shield"><div><h3>頁面受保護</h3>偵測到嘗試檢視原始碼或開發者工具，請關閉後重新整理。</div></div>
 
   <!-- (A) 密碼門檻 -->
@@ -78,8 +78,7 @@
 
   <!-- (B) 內容 -->
   <div id="app" class="hidden">
-    <h1>內部研究環境｜策略分析系統（僅供研究）</h1>
-    <p class="subtitle">僅供研究與教育用途　｜　非投資建議　｜　嚴禁對外散布</p>
+    <!-- 標題與副標已移除 -->
     <hr>
 
     <h3 class="section-title-red">交易策略</h3>
@@ -162,7 +161,7 @@
             <p class="line"><span class="label">近1年報酬率</span><span id="y1-range-1031"  class="range">—</span><span id="y1-1031"  class="val neu">—</span></p>
             <p class="line"><span class="label">近2年報酬率</span><span id="y2-range-1031"  class="range">—</span><span id="y2-1031"  class="val neu">—</span></p>
             <p class="line"><span class="label">近3年報酬率</span><span id="y3-range-1031"  class="range">—</span><span id="y3-1031"  class="val neu">—</span></p>
-            <p class="line"><span class="label">近6年報酬率</span><span id="y6-range-1031"  class="range">—</span><span id="y6-1031"  class="val neu">—</span></p>
+            <p class="line"><span class="label">近6月報酬率</span><span id="y6-range-1031"  class="range">—</span><span id="y6-1031"  class="val neu">—</span></p>
             <p class="period">期間：<span id="period-1031">—</span></p>
           </div>
         </a>
@@ -204,8 +203,8 @@
     <h3 class="section-title-black">資料</h3>
     <div class="nav">
       <a class="card" href="upload.html">
-        <p class="card-title black">上傳檔案</p>
-        <p class="card-desc">上傳／檢視／下載／刪除回測與實倉報表，支援多檔批次處理。</p>
+        <p class="card-title black big">上傳檔案</p>
+        <p class="card-desc"></p>
       </a>
     </div>
   </div>
