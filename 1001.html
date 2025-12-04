@@ -3,37 +3,303 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>1001版本</title>
+  <title>三劍客量化科技 1001 單檔分析</title>
+
   <style>
-    body{font-family:ui-sans-serif,system-ui;-webkit-font-smoothing:antialiased;margin:0;padding:16px;background:#f7f7fb}
-    .wrap{max-width:1440px;margin:0 auto}
-    .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
-    .chip{display:inline-block;background:#eef;padding:6px 10px;border-radius:999px;font-size:12px}
-    .btn{background:#0d6efd;color:#fff;border:0;border-radius:10px;padding:8px 12px;cursor:pointer}
-    .btn.gray{background:#6c757d}
-    .btn:disabled{opacity:.5;cursor:not-allowed}
-    .card{background:#fff;border:1px solid #e5e7eb;border-radius:12px;box-shadow:0 2px 10px rgba(0,0,0,.03);padding:12px;margin-bottom:20px}
-    #chartBox{height:520px}
-    table{width:100%;border-collapse:collapse}
-    th,td{border-bottom:1px solid #eee;padding:6px 8px;font-size:13px}
-    th{background:#fafafa;text-align:left}
-    .back-link{margin-bottom:12px;display:inline-block}
-    .scroll-x{overflow-x:auto}
-    .muted{color:#666;font-size:13px}
-    #autostatus{white-space:pre-wrap}
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans TC",
+                   "Microsoft JhengHei", sans-serif;
+      background: #f5f5f5;
+      padding: 8px;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .wrap {
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      font-size: 16px;
+      margin: 0 0 6px 0;
+      text-align: left;
+    }
+
+    .muted {
+      color: #666;
+      font-size: 13px;
+    }
+
+    /* 共用卡片外觀 */
+    .card {
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 8px 10px;
+      box-shadow: 0 2px 6px rgba(0,0,0,.03);
+      margin-bottom: 8px;
+    }
+
+    /* 差異檢查那一行 */
+    .row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .chip {
+      display: inline-block;
+      background: #eef;
+      padding: 4px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+    }
+
+    .btn {
+      background: #0d6efd;
+      color: #fff;
+      border: 0;
+      border-radius: 999px;
+      padding: 4px 10px;
+      cursor: pointer;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+    .btn.gray {
+      background: #6c757d;
+    }
+    .btn:disabled {
+      opacity: .5;
+      cursor: not-allowed;
+    }
+
+    #autostatus {
+      white-space: pre-wrap;
+    }
+
+    /* 上方：分數卡 + 工具列（沿用 single-trades） */
+    .top-row {
+      max-width: 1100px;
+      margin: 0 auto 4px auto;
+      display: flex;
+      flex-wrap: nowrap;        /* 不要把分數卡跟工具列拆開 */
+      gap: 8px;
+      align-items: stretch;
+    }
+
+    /* 綜合分數卡片 */
+    .kpi-score-card {
+      flex: 0 0 150px;
+      background: #fff;
+      border: 1px solid #ffd0d0;
+      border-radius: 4px;
+      padding: 6px 10px;
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      font-size: 12px;
+    }
+    .score-title {
+      font-size: 11px;
+      color: #777;
+      margin-bottom: 4px;
+    }
+    .score-value {
+      font-size: 20px;
+      font-weight: 700;
+      text-align: center;
+      margin-bottom: 4px;
+    }
+    .score-value.strong  { color: #e60000; }
+    .score-value.adequate{ color: #c9a500; }
+    .score-value.improve { color: #008000; }
+    .score-desc {
+      font-size: 11px;
+      color: #777;
+      text-align: center;
+      line-height: 1.3;
+    }
+
+    /* 工具列（本金 / 滑點 / TXT / 雲端 / 計算） */
+    .toolbar {
+      flex: 1 1 auto;
+      margin: 0;
+      display: flex;
+      flex-wrap: nowrap;        /* 都擠在同一行，窄螢幕用橫向捲動 */
+      gap: 8px;
+      align-items: center;
+      justify-content: flex-start;
+      font-size: 12px;
+      overflow-x: auto;
+    }
+    .toolbar label {
+      white-space: nowrap;
+    }
+    .toolbar input[type="number"] {
+      width: 80px;
+      font-size: 12px;
+      padding: 1px 2px;
+      margin-left: 3px;
+    }
+    .toolbar input[type="file"] {
+      font-size: 12px;
+    }
+    .toolbar button {
+      font-size: 12px;
+      padding: 2px 10px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    /* TXT + 雲端檔 block：在 1001 頁面隱藏，但保留給 single-trades.js 使用 */
+    .file-block {
+      display: none;  /* 1001 不給使用者選檔，但元素仍存在給 single-trades.js 用 */
+      flex-direction: column;
+      gap: 2px;
+    }
+    .file-block label {
+      white-space: nowrap;
+    }
+    .cloud-select {
+      padding: 4px 8px;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      font-size: 12px;
+      min-width: 260px;
+      max-width: 380px;
+    }
+
+    /* 參數列 */
+    .param-line {
+      max-width: 1100px;
+      margin: 0 auto 4px auto;
+      font-size: 11px;
+      color: #555;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* KPI 區塊共用 */
+    .kpi-wrapper {
+      margin: 4px auto;
+      max-width: 1100px;
+    }
+    .kpi-table {
+      border-collapse: collapse;
+      background: #fff;
+      font-size: 12px;
+      width: 100%;
+    }
+    .kpi-table th,
+    .kpi-table td {
+      padding: 4px 6px;
+      border-bottom: 1px solid #eee;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .kpi-table th {
+      background: #fafafa;
+    }
+    .kpi-table td.num {
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+    .kpi-table td.center,
+    .kpi-table th.center {
+      text-align: center;
+    }
+    .kpi-name { font-weight: 600; }
+    .kpi-desc { color: #777; font-size: 11px; }
+
+    .kpi-section {
+      background: #f0f0f0;
+      font-weight: 700;
+    }
+
+    .kpi-bad-card .kpi-table {
+      background: #fff5f5;
+      border: 1px solid #ffd0d0;
+    }
+    .kpi-bad-card thead th {
+      background: #ffe5e5;
+    }
+
+    .rating-strong  { color: #e60000; font-weight: 600; }
+    .rating-adequate{ color: #c9a500; font-weight: 600; }
+    .rating-improve { color: #008000; font-weight: 600; }
+
+    .chart-wrapper {
+      max-width: 1100px;
+      margin: 4px auto 8px auto;
+      background: #fff;
+      border: 1px solid #eee;
+      border-radius: 4px;
+      padding: 8px;
+    }
+    .chart-main {
+      height: 420px;
+    }
+    .chart-weekly {
+      height: 260px;
+    }
+
+    table.trade-table {
+      border-collapse: collapse;
+      background: #fff;
+      font-size: 12px;
+      margin: 4px auto 0 auto;
+      width: 100%;
+    }
+
+    thead.trade-head {
+      background: #fafafa;
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+
+    table.trade-table th,
+    table.trade-table td {
+      padding: 3px 6px;
+      border-bottom: 1px solid #eee;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      line-height: 1.3;
+    }
+
+    table.trade-table th {
+      text-align: center;
+      font-weight: 600;
+    }
+    table.trade-table td {
+      text-align: right;
+    }
+
+    table.trade-table tbody tr:nth-child(even) {
+      background: #fcfcfc;
+    }
+
+    .num-pos { color: #e60000; }
+    .num-neg { color: #0a7f00; }
   </style>
-  <!-- 依賴 -->
+
+  <!-- 依賴：Chart.js + Supabase + single-trades.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="shared.js?v=txfee45tax2"></script>
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 </head>
+
 <body>
   <div class="wrap">
-    <a class="back-link" href="index.html">← 返回首頁</a>
-    <h1>1001版本</h1>
-    <p class="muted">本頁自動擷取檔名含 <code>1001</code> 的最新 TXT，並以「基準檔的最前／最後日期」為錨點：實際分析資料＝基準檔全段 + 基準之後的新增。</p>
 
-    <!-- 期間摘要 -->
+    <!-- 頁面標題 -->
+    <h1>1001版本</h1>
+
+    <!-- 差異檢查 -->
     <div class="card" id="diffCard">
       <div class="row">
         <strong>差異檢查</strong>
@@ -45,32 +311,124 @@
       <div id="periodText" class="muted" style="margin-top:6px;"></div>
     </div>
 
-    <!-- 保留 DOM 給 single.js（隱藏） -->
-    <div class="row card" style="display:none">
-      <div>
-        <button id="btn-clip">從剪貼簿貼上 TXT</button>
-        <input id="file" type="file" accept=".txt" />
-      </div>
-      <div class="chip">參數：<span id="paramChip">—</span></div>
+    <!-- 自動流程狀態 -->
+    <div class="card">
+      <span id="autostatus" class="muted">初始化中…</span>
     </div>
 
-    <!-- 自動流程狀態 -->
-    <div class="card"><span id="autostatus" class="muted">初始化中…</span></div>
+    <!-- 上方：綜合分數卡 + 工具列 -->
+    <div class="top-row">
+      <div class="kpi-score-card" id="scoreCard">
+        <div class="score-title">綜合分數</div>
+        <div class="score-value">—</div>
+        <div class="score-desc">載入檔案後自動計算</div>
+      </div>
 
-    <!-- 單檔分析（沿用 single.html 結構） -->
-    <div id="chartBox" class="card"><canvas id="chart"></canvas></div>
-    <div id="kpiAll" class="card scroll-x"></div>
-    <div id="kpiL"></div><div id="kpiS"></div>
-    <div id="rrLines" class="card scroll-x"></div>
+      <div class="toolbar">
+        <label>
+          本金：
+          <input type="number" id="capitalInput" value="1000000" step="10000">
+        </label>
 
-    <div class="card scroll-x">
-      <table id="tradeTable"><thead></thead><tbody></tbody></table>
+        <label>
+          滑點（每邊點數）：
+          <input type="number" id="slipInput" value="0" step="0.1">
+        </label>
+
+        <!-- TXT 檔 + 雲端檔 block：在 1001 頁面隱藏，但保留給 single-trades.js 使用 -->
+        <div class="file-block">
+          <label>
+            TXT 檔：
+            <input type="file" id="fileInput" accept=".txt,.TF_1m">
+          </label>
+          <label>
+            雲端檔：
+            <select id="cloudSelect" class="cloud-select">
+              <option value="">（雲端未載入）</option>
+            </select>
+          </label>
+        </div>
+
+        <button id="runBtn">計算</button>
+      </div>
+    </div>
+
+    <!-- TXT 第一行參數 -->
+    <div class="param-line" id="paramLine"></div>
+
+    <!-- 主資產曲線 -->
+    <div class="chart-wrapper chart-main">
+      <canvas id="equityChart"></canvas>
+    </div>
+
+    <!-- 每週損益圖 -->
+    <div class="chart-wrapper chart-weekly">
+      <canvas id="weeklyPnlChart"></canvas>
+    </div>
+
+    <!-- 建議優化指標 -->
+    <div class="kpi-wrapper kpi-bad-card">
+      <table class="kpi-table">
+        <thead>
+          <tr>
+            <th>建議優化指標</th>
+            <th class="center">數值（含滑價）</th>
+            <th class="center">建議</th>
+            <th class="center">機構評語</th>
+            <th class="center">參考區間</th>
+          </tr>
+        </thead>
+        <tbody id="kpiBadBody">
+          <tr>
+            <td colspan="5" style="color:#777;">目前沒有需要特別優化的指標。</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- 全部 KPI 明細 -->
+    <div class="kpi-wrapper">
+      <table class="kpi-table">
+        <thead>
+          <tr>
+            <th>指標</th>
+            <th class="center">數值（理論）</th>
+            <th class="center">數值（含滑價）</th>
+            <th>說明</th>
+            <th class="center">機構評語</th>
+            <th class="center">參考區間</th>
+          </tr>
+        </thead>
+        <tbody id="kpiBody"></tbody>
+      </table>
+    </div>
+
+    <!-- 交易明細 -->
+    <div class="card">
+      <table class="trade-table">
+        <thead class="trade-head">
+          <tr>
+            <th>#</th>
+            <th>日期時間</th>
+            <th>成交點位</th>
+            <th>類別</th>
+            <th>點數</th>
+            <th>手續費</th>
+            <th>交易稅</th>
+            <th>理論淨損益</th>
+            <th>累積理論淨損益</th>
+            <th>實際淨損益</th>
+            <th>累積實際淨損益</th>
+          </tr>
+        </thead>
+        <tbody id="tradesBody"></tbody>
+      </table>
     </div>
   </div>
 
-  <!-- 主分析（帶版本號清快取） -->
-  <script src="single.js?v=full-table-v14-safe-tx2"></script>
-  <!-- 1001 自動合併/期間摘要（帶版本號清快取） -->
-  <script src="1001.js?v=anchored-merge-tx2"></script>
+  <!-- 單檔分析主邏輯（機構級期貨單檔分析版本） -->
+  <script src="single-trades.js"></script>
+  <!-- 1001 專屬：自動找最新 1001 + 基準，合併後直接餵給 single-trades.js -->
+  <script src="1001.js"></script>
 </body>
 </html>
