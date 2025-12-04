@@ -104,11 +104,11 @@
       border:1px solid #e5e7eb;
       border-radius:8px;
       box-shadow:0 2px 6px rgba(15,23,42,0.03);
-      padding:10px 12px;
+      padding:8px 12px;
       font-size:12px;
     }
     .cloud-card h3 {
-      margin:0 0 6px 0;
+      margin:0 0 4px 0;
       font-size:13px;
     }
     .cloud-row {
@@ -122,14 +122,14 @@
       border:1px solid #d1d5db;
       border-radius:6px;
       font-size:12px;
-      min-width:200px;
+      min-width:220px;
     }
     .cloud-select {
       padding:6px 8px;
       border:1px solid #d1d5db;
       border-radius:6px;
       font-size:12px;
-      min-width:280px;
+      min-width:260px;
       max-width:420px;
     }
     .cloud-btn {
@@ -143,25 +143,10 @@
       background:#0d6efd;
       color:#fff;
     }
-    .cloud-btn-gray {
-      background:#6c757d;
-      color:#fff;
-    }
     .cloud-meta {
       margin-top:4px;
       font-size:11px;
       color:#666;
-    }
-    pre.cloud-preview {
-      margin-top:6px;
-      max-height:220px;
-      overflow:auto;
-      background:#f9fafb;
-      padding:6px 8px;
-      border:1px solid #e5e7eb;
-      border-radius:6px;
-      font-size:11px;
-      white-space:pre-wrap;
     }
 
     /* 參數列 */
@@ -320,25 +305,20 @@
     </div>
   </div>
 
-  <!-- TXT 第一行參數（保留位置） -->
+  <!-- TXT 第一行參數 -->
   <div class="param-line" id="paramLine"></div>
 
-  <!-- 新增：從資料上傳區讀檔（Supabase / reports） -->
+  <!-- 從資料上傳區讀檔（Supabase / reports） -->
   <div class="cloud-card" id="cloudPanel">
     <h3>從「資料上傳區」讀檔（Supabase / reports）</h3>
     <div class="cloud-row">
       <input id="cloudPrefix" class="cloud-input" placeholder="篩選資料夾（例：2025-09-24/）">
       <button id="btnCloudList" class="cloud-btn cloud-btn-primary">載入清單</button>
       <select id="cloudSelect" class="cloud-select">
-        <option value="">（請先載入清單）</option>
+        <option value="">（雲端未載入）</option>
       </select>
-      <button id="btnCloudPreview" class="cloud-btn cloud-btn-gray">預覽</button>
-      <button id="btnCloudImport" class="cloud-btn cloud-btn-primary">載入到分析</button>
     </div>
-    <div id="cloudMeta" class="cloud-meta"></div>
-    <pre id="cloudPreview" class="cloud-preview"></pre>
-    <!-- 只用來暫存文字預覽，不影響 single-trades.js -->
-    <textarea id="cloudTxt" style="display:none"></textarea>
+    <div id="cloudMeta" class="cloud-meta">說明：先輸入資料夾前綴並按「載入清單」，再從右側選擇檔案，選好後上方 TXT 檔會自動帶入，最後按「計算」。</div>
   </div>
 
   <!-- 主資產曲線 -->
@@ -410,7 +390,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="single-trades.js"></script>
-  <!-- Supabase v2（只給雲端讀檔用） -->
+  <!-- Supabase 只給雲端讀檔用 -->
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
   <script src="single-trades-cloud.js"></script>
 </body>
