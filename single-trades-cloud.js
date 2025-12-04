@@ -1,5 +1,5 @@
 // single-trades-cloud.js
-// 從 Supabase / reports 讀檔 → 丟給 #fileInput，交由 single-trades.js 分析
+// 從 Supabase / reports 讀檔 → 丟給 #fileInput，並自動按「計算」
 (function () {
   'use strict';
 
@@ -10,44 +10,28 @@
   const $ = (s) => document.querySelector(s);
 
   const fileInput = $('#fileInput');
-  const prefix    = $('#cloudPrefix');
   const btnList   = $('#btnCloudList');
   const pick      = $('#cloudSelect');
   const meta      = $('#cloudMeta');
+  const runBtn    = $('#runBtn');
 
-  // 如果 DOM 元件沒找到就不做事（避免其他頁誤載）
-  if (!fileInput || !prefix || !btnList || !pick || !meta) {
+  if (!fileInput || !btnList || !pick || !meta) return;
+  if (!window.supabase) {
+    meta.textContent = 'Supabase 尚未載入。';
     return;
   }
 
-  // 等 Supabase script 載好再建立 client
-  function getClient() {
-    if (!window.supabase) {
-      throw new Error('Supabase 尚未載入');
-    }
-    return window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON, {
-      global:{ fetch:(u,o={})=>fetch(u,{...o,cache:'no-store'}) }
-    });
-  }
+  const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON, {
+    global:{ fetch:(u,o={})=>fetch(u,{...o,cache:'no-store'}) }
+  });
 
-  let sb = null;
-  try { sb = getClient(); }
-  catch (e) {
-    console.error(e);
-    meta.textContent = 'Supabase 初始化失敗：' + e.message;
-    return;
-  }
-
-  // 載入清單
+  // 1) 載入清單（目前預設列出 reports bucket 下所有檔案，你之後要加前綴再說）
   btnList.addEventListener('click', async () => {
     try {
       meta.textContent = '';
       pick.innerHTML = '<option value="">載入中…</option>';
 
-      const p      = (prefix.value || '').trim();
-      const fixed  = p && !p.endsWith('/') ? p + '/' : p;
-
-      const { data, error } = await sb.storage.from(BUCKET).list(fixed, {
+      const { data, error } = await sb.storage.from(BUCKET).list('', {
         limit: 1000,
         sortBy: { column:'name', order:'asc' }
       });
@@ -60,15 +44,15 @@
       }
       if (!data || !data.length) {
         pick.innerHTML = '<option value="">（無檔案）</option>';
-        meta.textContent = '找不到符合前綴的檔案。';
+        meta.textContent = '找不到任何檔案。';
         return;
       }
 
       pick.innerHTML = '';
       data.forEach(it => {
-        // 跳過資料夾（id=null && !metadata）
+        // 跳過資料夾
         if (it.id === null && !it.metadata) return;
-        const path = (fixed || '') + it.name;
+        const path = it.name;
         const opt  = document.createElement('option');
         const sizeKB = it.metadata?.size ? (it.metadata.size/1024).toFixed(1) : '-';
         opt.value = path;
@@ -76,7 +60,7 @@
         pick.appendChild(opt);
       });
 
-      meta.textContent = '清單載入完成，請從右側選擇檔案。';
+      meta.textContent = '清單載入完成，請從下拉選擇檔案。';
     } catch (e) {
       console.error(e);
       pick.innerHTML = '<option value="">讀取失敗</option>';
@@ -84,7 +68,7 @@
     }
   });
 
-  // 選擇雲端檔案 → 下載 → 塞進 #fileInput
+  // 2) 選擇雲端檔案 → 下載 → 塞進 #fileInput → 自動按「計算」
   pick.addEventListener('change', async () => {
     const path = pick.value;
     if (!path) {
@@ -95,7 +79,7 @@
     try {
       meta.textContent = `下載中：${path} …`;
 
-      const url = await getUrl(sb, path);
+      const url = await getUrl(path);
       if (!url) {
         meta.textContent = '取得雲端連結失敗。';
         return;
@@ -117,24 +101,31 @@
       const dt = new DataTransfer();
       dt.items.add(f);
       fileInput.files = dt.files;
+
+      // 觸發 single-trades.js 的 change 邏輯
       fileInput.dispatchEvent(new Event('change', { bubbles:true }));
 
-      meta.textContent = `已載入：${path} → 上方 TXT 檔已帶入，按「計算」即可分析。`;
+      meta.textContent = `已載入：${path} → 上方 TXT 檔已帶入，已自動執行「計算」。`;
+
+      // 自動幫你按一次計算，把圖表跑出來
+      if (runBtn) {
+        runBtn.click();
+      }
     } catch (e) {
       console.error(e);
       meta.textContent = '載入檔案時發生錯誤：' + e.message;
     }
   });
 
-  // 先簽名再 public（兼容 private/public bucket）
-  async function getUrl(client, path) {
+  // 取得檔案 URL：先試簽名，失敗再用 publicUrl
+  async function getUrl(path) {
     try {
-      const { data } = await client.storage.from(BUCKET).createSignedUrl(path, 3600);
+      const { data } = await sb.storage.from(BUCKET).createSignedUrl(path, 3600);
       if (data?.signedUrl) return data.signedUrl;
     } catch (e) {
       console.warn('createSignedUrl 失敗，改用 publicUrl', e);
     }
-    const { data: pub } = client.storage.from(BUCKET).getPublicUrl(path);
+    const { data: pub } = sb.storage.from(BUCKET).getPublicUrl(path);
     return pub?.publicUrl || '';
   }
 })();
