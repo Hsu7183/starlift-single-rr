@@ -96,26 +96,14 @@
       white-space: nowrap;
     }
 
-    /* 雲端載入列（嵌在工具列下方） */
-    .cloud-inline-row {
-      max-width: 1100px;
-      margin: 2px auto 4px auto;
+    /* TXT + 雲端檔 block：TXT 在上、雲端在下 */
+    .file-block {
       display: flex;
-      flex-wrap: nowrap;     /* 不要換行 */
-      gap: 8px;
-      align-items: center;
-      font-size: 12px;
-      overflow-x: auto;
+      flex-direction: column;
+      gap: 2px;
     }
-    .cloud-btn {
-      padding: 4px 10px;
-      border-radius: 6px;
-      border: 0;
-      cursor: pointer;
-      font-size: 12px;
+    .file-block label {
       white-space: nowrap;
-      background:#0d6efd;
-      color:#fff;
     }
     .cloud-select {
       padding: 4px 8px;
@@ -124,12 +112,6 @@
       font-size: 12px;
       min-width: 260px;
       max-width: 380px;
-    }
-    .cloud-meta {
-      font-size: 11px;
-      color:#666;
-      margin-left:4px;
-      white-space: nowrap;
     }
 
     /* 參數列 */
@@ -271,26 +253,25 @@
         <input type="number" id="slipInput" value="0" step="0.1">
       </label>
 
-      <label>
-        TXT 檔：
-        <input type="file" id="fileInput" accept=".txt,.TF_1m">
-      </label>
+      <div class="file-block">
+        <label>
+          TXT 檔：
+          <input type="file" id="fileInput" accept=".txt,.TF_1m">
+        </label>
+        <label>
+          雲端檔：
+          <select id="cloudSelect" class="cloud-select">
+            <option value="">（雲端未載入）</option>
+          </select>
+        </label>
+      </div>
 
       <button id="runBtn">計算</button>
 
       <span class="hint">
-        步驟：先輸入本金／滑點 → 選 TXT → 按「計算」
+        步驟：先輸入本金／滑點 → 選 TXT（本機或雲端） → 按「計算」
       </span>
     </div>
-  </div>
-
-  <!-- 雲端載入列：與 TXT 同一區塊下方 -->
-  <div class="cloud-inline-row">
-    <button id="btnCloudList" class="cloud-btn">載入清單（雲端）</button>
-    <select id="cloudSelect" class="cloud-select">
-      <option value="">（雲端未載入）</option>
-    </select>
-    <span id="cloudMeta" class="cloud-meta"></span>
   </div>
 
   <!-- TXT 第一行參數 -->
