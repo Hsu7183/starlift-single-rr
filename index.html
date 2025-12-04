@@ -34,6 +34,7 @@
     a.card{ display:block; background:#fff; padding:18px 16px; border-radius:12px; box-shadow:0 2px 8px rgba(0,0,0,.08); text-decoration:none; color:inherit; transition:transform .15s, box-shadow .15s; border:1px solid #e5e7eb }
     a.card:hover{ transform:translateY(-4px); box-shadow:0 10px 22px rgba(0,0,0,.12) }
     .card-title{ font-weight:700; font-size:18px; margin:0 0 8px 0; text-align:center }
+    .card-title.big{ font-size:22px; }  /* 三個主要分析入口放大字體 */
     .card-title.red{ color:#d32f2f } .card-title.blue{ color:#0d6efd } .card-title.gray{ color:#6c757d } .card-title.black{ color:#111 }
     .card-desc{ margin:0; color:#666; font-size:14px; line-height:1.5; text-align:left }
     .lines{ margin-top:2px }
@@ -174,40 +175,29 @@
     <!-- 分析標題與第一排之間多一行空白 -->
     <div style="height:8px;"></div>
 
-    <!-- 第一排：目前只保留機構級單檔分析 -->
+    <!-- 第一排：期貨策略分析 -->
     <div class="nav">
       <a class="card" href="single-trades.html">
-        <p class="card-title blue">機構級單檔分析</p>
-        <p class="card-desc">三劍客量化科技機構級單檔分析頁面，顯示交易明細、KPI 與週次資產曲線，供 0807、1001 等策略共用。</p>
+        <p class="card-title blue big">期貨策略分析</p>
+        <p class="card-desc"></p>
       </a>
     </div>
 
     <!-- 第一排與其他工具之間再多一行分隔 -->
     <div style="height:12px;"></div>
 
-    <!-- 其他分析工具（仍在使用的分頁） -->
+    <!-- 其他分析工具（股票＋期貨最佳化） -->
     <div class="nav">
-      <a class="card" href="single-cloud.html">
-        <p class="card-title blue">雲端單檔分析 <span class="tag">第5分頁</span></p>
-        <p class="card-desc">直接從「資料上傳區」挑選檔案進行單檔分析，免重複上傳。</p>
-      </a>
-
-      <!-- 股票專用雲端單檔分析 -->
-      <a class="card" href="stock-single-cloud.html">
-        <p class="card-title blue">股票｜雲端單檔分析</p>
-        <p class="card-desc">股票專用口徑（整數進位+最低手續費、賣出含稅、每張股數與滑價可調），直接從 Supabase 選檔分析。</p>
-      </a>
-
-      <!-- 股票｜雲端多檔分析 -->
+      <!-- 股票策略分析（原 stock-multi-cloud） -->
       <a class="card" href="stock-multi-cloud.html">
-        <p class="card-title blue">股票｜雲端多檔分析</p>
-        <p class="card-desc">讀取 1031/49KPI 類 TXT，針對多檔股票進行雲端彙總分析與 KPI 排名。</p>
+        <p class="card-title blue big">股票策略分析</p>
+        <p class="card-desc"></p>
       </a>
 
-      <!-- 新增：多檔分析 Pro -->
+      <!-- 期貨最佳化參數分析（原 multi-pro） -->
       <a class="card" href="multi-pro.html">
-        <p class="card-title blue">多檔分析 Pro</p>
-        <p class="card-desc">機構級多檔分析頁面，支援批量載入策略 TXT、計算整體組合 KPI 與收益曲線。</p>
+        <p class="card-title blue big">期貨最佳化參數分析</p>
+        <p class="card-desc"></p>
       </a>
     </div>
 
