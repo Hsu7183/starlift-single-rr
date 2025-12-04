@@ -559,7 +559,7 @@
     };
   }
 
-  // ===== KPI 呈現（含綜合分數） =====
+  // ===== KPI 呈現（含綜合分數 + 建議優化指標） =====
   function renderKpi(kpiTheo, kpiAct) {
     const tbody   = $('#kpiBody');
     const badBody = $('#kpiBadBody');
@@ -609,7 +609,8 @@
       const ratingClass = rating ? rating.cssClass : '';
       const refRange    = rating ? rating.ref      : '—';
 
-      if (rating && rating.label === 'Improve') {
+      // ✅ 只要機構評語以 "Improve" 開頭，就視為「建議優化指標」
+      if (rating && rating.label && rating.label.startsWith('Improve')) {
         badList.push({
           name,
           valueStr: sAct,
@@ -623,7 +624,7 @@
         let pts = 0;
         if (rating.label === 'Strong')      pts = 90;
         else if (rating.label === 'Adequate') pts = 75;
-        else if (rating.label === 'Improve')  pts = 60;
+        else if (rating.label.startsWith('Improve'))  pts = 60;
         scoreSum   += pts;
         scoreCount += 1;
       }
@@ -781,7 +782,26 @@
       'int', t.totalCost, a.totalCost,
       '手續費 + 稅 + 滑價總和');
 
-    // 綜合分數
+    // ===== 建議優化指標卡片 =====
+    if (!badList.length) {
+      badBody.innerHTML =
+        '<tr><td colspan="5" style="color:#777;">目前沒有需要特別優化的指標。</td></tr>';
+    } else {
+      badBody.innerHTML = '';
+      badList.forEach(item => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td class="kpi-name">${item.name}</td>
+          <td class="num center ${item.ratingClass}">${item.valueStr}</td>
+          <td class="center">建議優化</td>
+          <td class="center ${item.ratingClass}">${item.ratingLabel}</td>
+          <td class="center">${item.refRange}</td>
+        `;
+        badBody.appendChild(tr);
+      });
+    }
+
+    // ===== 綜合分數 =====
     const score = scoreCount > 0 ? (scoreSum / scoreCount) : null;
     renderScore(score);
   }
