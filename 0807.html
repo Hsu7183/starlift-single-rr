@@ -25,17 +25,6 @@
       text-align: left;
     }
 
-    .back-link {
-      margin-bottom: 8px;
-      display: inline-block;
-      font-size: 12px;
-      color: #0d6efd;
-      text-decoration: none;
-    }
-    .back-link:hover {
-      text-decoration: underline;
-    }
-
     .muted {
       color: #666;
       font-size: 13px;
@@ -164,7 +153,7 @@
       white-space: nowrap;
     }
 
-    /* TXT + 雲端檔 block：在 0807 頁面直接隱藏（由 0807.js 自動載檔） */
+    /* TXT + 雲端檔 block：在 0807 頁面隱藏，但保留給 single-trades.js 使用 */
     .file-block {
       display: none;  /* 0807 不給使用者選檔，但元素仍存在給 single-trades.js 用 */
       flex-direction: column;
@@ -306,14 +295,11 @@
 
 <body>
   <div class="wrap">
-    <a class="back-link" href="index.html">← 返回首頁</a>
-    <h1>三劍客量化科技 0807 單檔分析</h1>
-    <p class="muted">
-      本頁會自動從雲端（Supabase / reports）找出檔名含 <code>0807</code> 的最新 TXT，
-      以「基準檔＋最新檔新增區段」合併後，直接套用機構級單檔分析（KPI＋資產曲線）。
-    </p>
 
-    <!-- 期間摘要 & 差異檢查（沿用原 0807 差異卡片） -->
+    <!-- 新標題 -->
+    <h1>0807版本</h1>
+
+    <!-- 差異檢查 -->
     <div class="card" id="diffCard">
       <div class="row">
         <strong>差異檢查</strong>
@@ -330,7 +316,7 @@
       <span id="autostatus" class="muted">初始化中…</span>
     </div>
 
-    <!-- 上方：綜合分數卡 + 工具列（來源：single-trades.html） -->
+    <!-- 上方：綜合分數卡 + 工具列 -->
     <div class="top-row">
       <div class="kpi-score-card" id="scoreCard">
         <div class="score-title">綜合分數</div>
@@ -370,12 +356,12 @@
     <!-- TXT 第一行參數 -->
     <div class="param-line" id="paramLine"></div>
 
-    <!-- 主資產曲線（含滑價/理論 + 多空分線） -->
+    <!-- 主資產曲線 -->
     <div class="chart-wrapper chart-main">
       <canvas id="equityChart"></canvas>
     </div>
 
-    <!-- 每週損益圖（紅/綠直條） -->
+    <!-- 每週損益圖 -->
     <div class="chart-wrapper chart-weekly">
       <canvas id="weeklyPnlChart"></canvas>
     </div>
@@ -440,7 +426,7 @@
     </div>
   </div>
 
-  <!-- 單檔分析主邏輯（機構級期貨單檔分析基準版） -->
+  <!-- 單檔分析主邏輯（機構級期貨單檔分析版本） -->
   <script src="single-trades.js"></script>
   <!-- 0807 專屬：自動找最新 0807 + 基準，合併後直接餵給 single-trades.js -->
   <script src="0807.js"></script>
