@@ -67,7 +67,7 @@
       color: #555;
     }
 
-    /* Score 分布圖卡片 */
+    /* 卡片通用 */
     .card {
       max-width: 1200px;
       margin: 4px auto;
@@ -83,9 +83,15 @@
       margin-bottom: 4px;
     }
 
-    #scoreChart {
+    /* ✅ 固定圖表高度，避免無限拉長 */
+    .chart-box {
       width: 100%;
-      height: 280px;
+      height: 260px;          /* 你覺得太高可以再調，例如 220px */
+    }
+    .chart-box canvas {
+      width: 100% !important;
+      height: 100% !important; /* 讓 Chart.js 填滿這個固定高度 */
+      display: block;
     }
 
     /* 表格 */
@@ -175,7 +181,7 @@
       border: 1px solid #a3e6a3;
     }
 
-    /* KPI 顏色（沿用單檔版 Strong / Adequate / Improve） */
+    /* KPI 顏色 */
     .rating-strong  { background:#ffe5e5; color:#e60000; font-weight:600; }
     .rating-adequate{ background:#fff9db; color:#c9a500; font-weight:600; }
     .rating-improve { background:#e7f7e7; color:#008000; font-weight:600; }
@@ -219,10 +225,12 @@
     說明：一次可選擇多個 0807/期貨 TXT（含 INPOS），將依單檔分析的 KPI 與分數邏輯計算。
   </div>
 
-  <!-- Score 分布圖 -->
+  <!-- Score 分布圖：用了固定高度的 chart-box -->
   <div class="card">
     <div class="card-title">綜合分數分布（每檔一點）</div>
-    <canvas id="scoreChart"></canvas>
+    <div class="chart-box">
+      <canvas id="scoreChart"></canvas>
+    </div>
   </div>
 
   <!-- 統計表格 -->
