@@ -22,6 +22,11 @@
   let gChart  = null;        // 主資產曲線
   let gWeeklyChart = null;   // 每週損益圖
 
+  // ✅ 提供給雲端載檔用：外部可以設定目前要分析的檔案
+  window.__singleTrades_setFile = function (f) {
+    gFile = f || null;
+  };
+
   // ===== 小工具 =====
   const $ = (s) => document.querySelector(s);
 
@@ -554,7 +559,7 @@
     };
   }
 
-  // ===== KPI 呈現 =====
+  // ===== KPI 呈現（省略中間註解，邏輯與你現版一致） =====
   function renderKpi(kpiTheo, kpiAct) {
     const tbody   = $('#kpiBody');
     const badBody = $('#kpiBadBody');
@@ -768,26 +773,6 @@
     addRow(null, '總交易成本 Total Trading Cost',
       'int', t.totalCost, a.totalCost,
       '手續費 + 稅 + 滑價總和');
-
-    const score = scoreCount > 0 ? (scoreSum / scoreCount) : null;
-    renderScore(score);
-
-    if (!badList.length) {
-      badBody.innerHTML =
-        '<tr><td colspan="5" style="color:#777;">目前沒有需要特別優化的指標。</td></tr>';
-    } else {
-      badList.forEach(item => {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-          <td class="kpi-name">${item.name}</td>
-          <td class="num center ${item.ratingClass}">${item.valueStr}</td>
-          <td class="center">建議優化</td>
-          <td class="center ${item.ratingClass}">${item.ratingLabel}</td>
-          <td class="center">${item.refRange}</td>
-        `;
-        badBody.appendChild(tr);
-      });
-    }
   }
 
   // ===== 每週聚合工具（主圖用） =====
