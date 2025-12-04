@@ -295,278 +295,16 @@
     `;
   }
 
-  // ===== KPI 計算 =====
-  function calcKpi(trades, pnls, equity, slipPerSide) {
-    const n = pnls.length;
-    if (!n) return null;
-
-    let sum = 0;
-    let sumSq = 0;
-    let grossProfit = 0;
-    let grossLoss = 0;
-    let wins = 0;
-    let losses = 0;
-    let largestWin = null;
-    let largestLoss = null;
-
-    pnls.forEach(p => {
-      sum += p;
-      sumSq += p * p;
-      if (p > 0) {
-        grossProfit += p;
-        wins++;
-        if (largestWin === null || p > largestWin) largestWin = p;
-      } else if (p < 0) {
-        grossLoss += p;
-        losses++;
-        if (largestLoss === null || p < largestLoss) largestLoss = p;
-      }
-    });
-
-    const totalNet = sum;
-    const avg      = sum / n;
-    const winRate  = wins / n;
-    const avgWin   = wins   ? grossProfit / wins   : 0;
-    const avgLoss  = losses ? grossLoss  / losses  : 0;
-    const payoff   = (avgLoss < 0) ? (avgWin / Math.abs(avgLoss)) : null;
-    const pf       = grossLoss < 0 ? grossProfit / Math.abs(grossLoss) : null;
-
-    const mean   = avg;
-    const varT   = n > 1 ? (sumSq / n - mean * mean) : 0;
-    const stdev  = varT > 0 ? Math.sqrt(varT) : 0;
-
-    const sharpeTrade  = stdev > 0 ? (mean / stdev) * Math.sqrt(n) : null;
-
-    // Sortino
-    let downsideSq = 0;
-    let downsideCnt = 0;
-    pnls.forEach(p => {
-      if (p < 0) {
-        downsideSq += p * p;
-        downsideCnt++;
-      }
-    });
-    const downsideDev   = downsideCnt > 0 ? Math.sqrt(downsideSq / downsideCnt) : 0;
-    const sortinoTrade  = downsideDev > 0 ? (mean / downsideDev) * Math.sqrt(n) : null;
-
-    // 最大回撤
-    let peak = 0;
-    let maxDd = 0;
-    let maxDdStartIdx = 0;
-    let maxDdEndIdx   = 0;
-    let curPeakIdx    = 0;
-
-    for (let i = 0; i < equity.length; i++) {
-      const v = equity[i];
-      if (v > peak) {
-        peak = v;
-        curPeakIdx = i;
-      }
-      const dd = peak - v;
-      if (dd > maxDd) {
-        maxDd = dd;
-        maxDdStartIdx = curPeakIdx;
-        maxDdEndIdx   = i;
-      }
-    }
-
-    const totalReturnPct = CFG.capital > 0 ? totalNet / CFG.capital : null;
-    const maxDdPct       = CFG.capital > 0 ? maxDd   / CFG.capital : null;
-
-    // 年化（CAGR）
-    const exitDates = trades.map(t => tsToDate(t.exit.ts));
-    let cagr = null;
-    if (exitDates.length) {
-      const first = exitDates[0];
-      const last  = exitDates[exitDates.length - 1];
-      if (first && last && last > first && CFG.capital > 0) {
-        const days  = (last - first) / 86400000;
-        const years = days / 365;
-        if (years > 0) {
-          const finalNav = CFG.capital + totalNet;
-          const ratio    = finalNav / CFG.capital;
-          cagr = Math.pow(ratio, 1 / years) - 1;
-        }
-      }
-    }
-
-    const calmar = (maxDdPct != null && maxDdPct > 0 && cagr != null)
-      ? (cagr / maxDdPct)
-      : null;
-
-    const timeToRecoveryTrades =
-      maxDdEndIdx > maxDdStartIdx ? (maxDdEndIdx - maxDdStartIdx) : 0;
-
-    // Ulcer Index（NAV）
-    const nav = equity.map(v => CFG.capital + v);
-    let peakNav = 0;
-    let sumDdSq = 0;
-    for (let i = 0; i < nav.length; i++) {
-      const v = nav[i];
-      if (v > peakNav) peakNav = v;
-      const ddPct = peakNav > 0 ? (peakNav - v) / peakNav : 0;
-      sumDdSq += ddPct * ddPct;
-    }
-    const ulcerIndex    = nav.length ? Math.sqrt(sumDdSq / nav.length) : null;
-    const recoveryFactor= maxDd > 0 ? totalNet / maxDd : null;
-
-    // 日 / 週損益
-    const dayMap = {};
-    const weekMap = {};
-    pnls.forEach((p, i) => {
-      const t  = trades[i];
-      const dk = tsDayKey(t.exit.ts);
-      if (dk) dayMap[dk] = (dayMap[dk] || 0) + p;
-      const d = exitDates[i];
-      if (d) {
-        const wk = dateWeekKey(d);
-        weekMap[wk] = (weekMap[wk] || 0) + p;
-      }
-    });
-    const worstDayPnl  = Object.values(dayMap).reduce((m, v) => (v < m ? v : m), 0);
-    const worstWeekPnl = Object.values(weekMap).reduce((m, v) => (v < m ? v : m), 0);
-
-    // VaR / CVaR（95%）
-    const sortedPnls = pnls.slice().sort((a, b) => a - b);
-    const alpha = 0.95;
-    const idx   = Math.floor((1 - alpha) * sortedPnls.length);
-    const varLoss = sortedPnls.length
-      ? -sortedPnls[Math.min(idx, sortedPnls.length - 1)]
-      : null;
-
-    let tailSum = 0;
-    let tailCnt = 0;
-    for (let i = 0; i <= idx && i < sortedPnls.length; i++) {
-      tailSum += sortedPnls[i];
-      tailCnt++;
-    }
-    const cvarLoss = tailCnt > 0 ? -(tailSum / tailCnt) : null;
-
-    // Expectancy / Kelly / Risk of Ruin
-    const expectancy = avg;
-    let kelly = null;
-    if (payoff != null && payoff > 0 && winRate > 0 && winRate < 1) {
-      const p = winRate;
-      const q = 1 - p;
-      kelly = p - q / payoff;
-    }
-
-    let riskOfRuin = null;
-    if (varT <= 0) {
-      riskOfRuin = null;
-    } else if (avg <= 0) {
-      riskOfRuin = 1;
-    } else {
-      const mu     = avg;
-      const sigma2 = varT;
-      const exponent = -2 * mu * CFG.capital / sigma2;
-      const r = Math.exp(exponent);
-      riskOfRuin = Math.min(1, Math.max(0, r));
-    }
-
-    // 成本 / 週轉
-    let totalFee  = 0;
-    let totalTax  = 0;
-    let notionalTraded = 0;
-    const slipPerTradeMoney = CFG.pointValue * slipPerSide * 2;
-    trades.forEach(t => {
-      totalFee  += t.fee;
-      totalTax  += t.tax;
-      notionalTraded += t.entry.px * CFG.pointValue;
-    });
-    const totalSlipCost = slipPerTradeMoney * trades.length;
-    const totalCost     = totalFee + totalTax + totalSlipCost;
-    const totalGrossAbs = grossProfit + Math.abs(grossLoss);
-    const turnover      = CFG.capital > 0 ? (notionalTraded / CFG.capital) : null;
-    const costRatio     = totalGrossAbs > 0 ? (totalCost / totalGrossAbs) : null;
-
-    const tradingDays = Object.keys(dayMap).length;
-    const tradesPerDay= tradingDays > 0 ? n / tradingDays : null;
-
-    let totalHoldMin = 0;
-    trades.forEach(t => {
-      const dIn  = tsToDate(t.entry.ts);
-      const dOut = tsToDate(t.exit.ts);
-      if (dIn && dOut && dOut >= dIn) {
-        totalHoldMin += (dOut - dIn) / 60000;
-      }
-    });
-    const avgHoldMin = n > 0 ? totalHoldMin / n : null;
-
-    // 穩定度 R²
-    let stabilityR2 = null;
-    if (nav.length >= 3) {
-      const xs = nav.map((_, i) => i + 1);
-      const ys = nav;
-      const N  = xs.length;
-      const sumX  = xs.reduce((a, v) => a + v, 0);
-      const sumY  = ys.reduce((a, v) => a + v, 0);
-      const sumXY = xs.reduce((a, v, i) => a + v * ys[i], 0);
-      const sumX2 = xs.reduce((a, v) => a + v * v, 0);
-      const meanY = sumY / N;
-      const ssTot = ys.reduce((a, v) => a + (v - meanY) * (v - meanY), 0);
-      const slope = (N * sumXY - sumX * sumY) / (N * sumX2 - sumX * sumX);
-      const intercept = meanY - slope * (sumX / N);
-      let ssRes = 0;
-      for (let i = 0; i < N; i++) {
-        const yhat = slope * xs[i] + intercept;
-        ssRes += (ys[i] - yhat) * (ys[i] - yhat);
-      }
-      stabilityR2 = ssTot > 0 ? 1 - (ssRes / ssTot) : null;
-    }
-
-    return {
-      totalNet,
-      totalReturnPct,
-      cagr,
-      maxDd,
-      maxDdPct,
-      ulcerIndex,
-      recoveryFactor,
-      timeToRecoveryTrades,
-      worstDayPnl,
-      worstWeekPnl,
-      varLoss,
-      cvarLoss,
-      riskOfRuin,
-      volPerTrade: stdev,
-      sharpeTrade,
-      sortinoTrade,
-      calmar,
-      nTrades: n,
-      winRate,
-      avg,
-      avgWin,
-      avgLoss,
-      payoff,
-      expectancy,
-      pf,
-      grossProfit,
-      grossLoss,
-      largestWin,
-      largestLoss,
-      kelly,
-      stabilityR2,
-      tradingDays,
-      tradesPerDay,
-      avgHoldMin,
-      turnover,
-      totalFee,
-      totalTax,
-      totalSlipCost,
-      totalCost,
-      costRatio
-    };
-  }
-
-  // ===== KPI 呈現（省略中間註解，邏輯與你現版一致） =====
+  // ===== KPI 呈現（含綜合分數計算） =====
   function renderKpi(kpiTheo, kpiAct) {
     const tbody   = $('#kpiBody');
     const badBody = $('#kpiBadBody');
     if (!tbody || !badBody) return;
     tbody.innerHTML   = '';
     badBody.innerHTML = '';
-    renderScore(null);  // 先重置分數
+
+    // 先清空分數卡
+    renderScore(null);
 
     if (!kpiAct) {
       badBody.innerHTML =
@@ -619,7 +357,7 @@
 
       if (rating) {
         let pts = 0;
-        if (rating.label === 'Strong')   pts = 90;
+        if (rating.label === 'Strong')      pts = 90;
         else if (rating.label === 'Adequate') pts = 75;
         else if (rating.label === 'Improve')  pts = 60;
         scoreSum   += pts;
@@ -641,6 +379,7 @@
     const t = kpiTheo || {};
     const a = kpiAct;
 
+    // Tier 1
     addSection('Tier 1．生存與尾端風險（Risk / Survival）');
     addRow('maxdd_pct', '最大回撤率 Max Drawdown %',
       'pct', t.maxDdPct, a.maxDdPct,
@@ -673,6 +412,7 @@
       'f2', t.recoveryFactor, a.recoveryFactor,
       '總淨利 / 最大回撤，衡量從虧損中恢復能力');
 
+    // Tier 2
     addSection('Tier 2．報酬與風險調整後報酬（Return / Risk-Adjusted）');
     addRow(null, '總淨利 Net Profit',
       'int', t.totalNet, a.totalNet,
@@ -688,7 +428,7 @@
       '單筆實際損益標準差，未年化');
     addRow('sharpe', 'Sharpe Ratio（交易級）',
       'f2', t.sharpeTrade, a.sharpeTrade,
-      '以單筆期望 / 單筆波動估算 Sharpe（sqrt(N) 已折算）');
+      '以單筆期望 / 單筆波動估算 Sharpe');
     addRow('sortino', 'Sortino Ratio（交易級）',
       'f2', t.sortinoTrade, a.sortinoTrade,
       '只用負報酬計算下行風險的 Sharpe 變形');
@@ -696,6 +436,7 @@
       'f2', t.calmar, a.calmar,
       '年化報酬率 / 最大回撤率');
 
+    // Tier 3
     addSection('Tier 3．交易品質與結構（Trade Quality / Structure）');
     addRow(null, '交易筆數 #Trades',
       'int', t.nTrades, a.nTrades,
@@ -737,6 +478,7 @@
       'f2', t.kelly, a.kelly,
       '依勝率與賺賠比估算之 Kelly 槓桿（僅供參考）');
 
+    // Tier 4
     addSection('Tier 4．路徑與穩定度（Path / Stability）');
     addRow(null, 'Equity Stability R²',
       'f3', t.stabilityR2, a.stabilityR2,
@@ -745,6 +487,7 @@
       'int', null, null,
       '需額外提供基準指數報酬序列才可計算');
 
+    // Tier 5
     addSection('Tier 5．成本、槓桿與執行（Cost / Turnover / Execution）');
     addRow(null, '交易天數 Trading Days',
       'int', t.tradingDays, a.tradingDays,
@@ -773,6 +516,10 @@
     addRow(null, '總交易成本 Total Trading Cost',
       'int', t.totalCost, a.totalCost,
       '手續費 + 稅 + 滑價總和');
+
+    // ===== 綜合分數 =====
+    const score = scoreCount > 0 ? (scoreSum / scoreCount) : null;
+    renderScore(score);
   }
 
   // ===== 每週聚合工具（主圖用） =====
