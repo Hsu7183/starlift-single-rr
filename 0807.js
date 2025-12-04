@@ -13,7 +13,7 @@
 
   if (status) status.style.whiteSpace = 'pre-wrap';
 
-  // Supabase 設定（與 single-trades-cloud、其他頁一致）
+  // Supabase 設定（與其他頁一致）
   const SUPABASE_URL  = "https://byhbmmnacezzgkwfkozs.supabase.co";
   const SUPABASE_ANON = "sb_publishable_xVe8fGbqQ0XGwi4DsmjPMg_Y2RBOD3t";
   const BUCKET        = "reports";
@@ -29,6 +29,7 @@
   const WANT          = /0807/i;
   const MANIFEST_PATH = "manifests/0807.json";
 
+  // canonical 3 欄行
   const CANON_RE   = /^(\d{14})\.0{6}\s+(\d+\.\d{6})\s+(新買|平賣|新賣|平買|強制平倉)\s*$/;
   const EXTRACT_RE = /.*?(\d{14})(?:\.0{1,6})?\s+(\d+(?:\.\d{1,6})?)\s*(新買|平賣|新賣|平買|強制平倉)\s*$/;
 
@@ -75,9 +76,9 @@
   // ===== 文字正規化 & canonical 行抽取 =====
   function normalizeText(raw) {
     let s = raw
-      .replace(/\ufeff/gi, '')             // BOM
-      .replace(/\u200b|\u200c|\u200d/gi, '') // 零寬字元
-      .replace(/[\x00-\x09\x0B-\x1F\x7F]/g, ''); // 控制碼
+      .replace(/\ufeff/gi, '')                  // BOM
+      .replace(/\u200b|\u200c|\u200d/gi, '')    // 零寬字元
+      .replace(/[\x00-\x09\x0B-\x1F\x7F]/g, '');// 控制碼
 
     s = s.replace(/\r\n?/g, '\n')
          .replace(/\u3000/g, ' ');
@@ -176,6 +177,34 @@
     };
   }
 
+  // ===== 為每一筆「新買／新賣」插入假的 INPOS 行，給 single-trades.js 判方向用 =====
+  function addFakeInpos(text) {
+    const lines = (text || '')
+      .split('\n')
+      .map(s => s.trim())
+      .filter(Boolean);
+
+    const out = [];
+    for (const line of lines) {
+      const m = line.match(CANON_RE);
+      if (!m) continue;
+
+      const ts  = m[1];
+      const act = m[3];
+
+      if (act === '新買' || act === '新賣') {
+        const dir = (act === '新買') ? 1 : -1;
+        out.push(line);
+        // 假 INPOS 行，格式只要符合 single-trades.js 的判斷邏輯即可
+        // ps.length >= 6 且最後一個欄位為 "INPOS"，第 4 欄是方向
+        out.push(`${ts}.000000 0 0 ${dir} 0 INPOS`);
+      } else {
+        out.push(line);
+      }
+    }
+    return out.join('\n');
+  }
+
   // ===== 把合併後內容餵給 single-trades.js =====
   async function feedToSingleTrades(filename, mergedText) {
     const fileInput = $('#fileInput');
@@ -230,7 +259,7 @@
   // ===== 主流程 =====
   async function boot() {
     try {
-      const url      = new URL(location.href);
+      const url       = new URL(location.href);
       const paramFile = url.searchParams.get('file');
 
       let latest = null;
@@ -350,9 +379,12 @@
         };
       }
 
-      // 5) 把合併後 TXT 丟給 single-trades.js，自動計算 KPI + 畫圖
+      // 5) 在合併後的資料上插入假的 INPOS，並加一行 header，餵給 single-trades.js
+      const mergedWithInpos = addFakeInpos(mergedText);
+      const finalText       = '0807 MERGED\n' + mergedWithInpos;
+
       setStatus('已載入（合併後）資料，開始分析…');
-      await feedToSingleTrades(latest.name, mergedText);
+      await feedToSingleTrades(latest.name, finalText);
       setStatus('分析完成（可調整本頁「本金／滑點」即時重算 KPI）。');
     } catch (err) {
       console.error(err);
