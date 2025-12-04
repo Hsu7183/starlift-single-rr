@@ -162,12 +162,17 @@
     /* 圖表區塊 */
     .chart-wrapper {
       max-width: 1100px;
-      height: 420px;
       margin: 4px auto 8px auto;
       background: #fff;
       border: 1px solid #eee;
       border-radius: 4px;
       padding: 8px;
+    }
+    .chart-main {
+      height: 420px;
+    }
+    .chart-weekly {
+      height: 260px;
     }
 
     /* 交易明細表格 */
@@ -247,12 +252,17 @@
     </div>
   </div>
 
-  <!-- TXT 第一行參數（若有需要可顯示簡要資訊，目前先保留空容器） -->
+  <!-- TXT 第一行參數（保留位置） -->
   <div class="param-line" id="paramLine"></div>
 
-  <!-- 圖表 -->
-  <div class="chart-wrapper">
+  <!-- 主資產曲線 -->
+  <div class="chart-wrapper chart-main">
     <canvas id="equityChart"></canvas>
+  </div>
+
+  <!-- 新增：每週損益 + 累積損益線圖 -->
+  <div class="chart-wrapper chart-weekly">
+    <canvas id="weeklyPnlChart"></canvas>
   </div>
 
   <!-- 建議優化指標 -->
