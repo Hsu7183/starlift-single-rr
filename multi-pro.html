@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <title>三劍客量化科技機構級多檔分析</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans TC",
+                   "Microsoft JhengHei", sans-serif;
+      background: #f5f5f5;
+      padding: 8px;
+    }
+    h1 {
+      font-size: 16px;
+      margin: 0 0 6px 0;
+      text-align: center;
+    }
+
+    /* 上方：工具列 */
+    .top-row {
+      max-width: 1200px;
+      margin: 0 auto 4px auto;
+      display: flex;
+      flex-wrap: nowrap;
+      gap: 8px;
+      align-items: stretch;
+    }
+
+    .toolbar {
+      flex: 1 1 auto;
+      display: flex;
+      flex-wrap: nowrap;
+      gap: 8px;
+      align-items: center;
+      font-size: 12px;
+      overflow-x: auto;
+      background: #fff;
+      border-radius: 4px;
+      border: 1px solid #ddd;
+      padding: 6px 8px;
+    }
+    .toolbar label {
+      white-space: nowrap;
+    }
+    .toolbar input[type="number"] {
+      width: 90px;
+      font-size: 12px;
+      padding: 1px 2px;
+      margin-left: 3px;
+    }
+    .toolbar input[type="file"] {
+      font-size: 12px;
+    }
+    .toolbar button {
+      font-size: 12px;
+      padding: 2px 10px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .status-line {
+      max-width: 1200px;
+      margin: 2px auto 4px auto;
+      font-size: 11px;
+      color: #555;
+    }
+
+    /* Score 分布圖卡片 */
+    .card {
+      max-width: 1200px;
+      margin: 4px auto;
+      background: #fff;
+      border-radius: 4px;
+      border: 1px solid #ddd;
+      padding: 8px;
+      box-sizing: border-box;
+    }
+    .card-title {
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+
+    #scoreChart {
+      width: 100%;
+      height: 280px;
+    }
+
+    /* 表格 */
+    .table-wrapper {
+      max-width: 1200px;
+      margin: 4px auto;
+      background: #fff;
+      border-radius: 4px;
+      border: 1px solid #ddd;
+      padding: 4px;
+      box-sizing: border-box;
+      overflow-x: auto;
+    }
+
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      min-width: 1000px;
+      font-size: 12px;
+    }
+    thead {
+      background: #fafafa;
+    }
+    th, td {
+      padding: 4px 6px;
+      border-bottom: 1px solid #eee;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      overflow: hidden;
+    }
+    th {
+      text-align: center;
+      font-weight: 600;
+      cursor: pointer;
+      user-select: none;
+    }
+    th.sortable:hover {
+      background: #f0f0f0;
+    }
+    th[data-sort-dir="asc"]::after {
+      content: " ▲";
+      font-size: 10px;
+    }
+    th[data-sort-dir="desc"]::after {
+      content: " ▼";
+      font-size: 10px;
+    }
+
+    td {
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+    td:first-child {
+      text-align: center;
+    }
+    td:nth-child(2) {
+      text-align: left;
+      max-width: 420px;
+    }
+    tbody tr:nth-child(even) {
+      background: #fcfcfc;
+    }
+
+    /* Score 膠囊 */
+    .score-badge {
+      display: inline-block;
+      min-width: 46px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+      text-align: center;
+    }
+    .score-strong {
+      background: #ffe5e5;
+      color: #e60000;
+      border: 1px solid #ffb3b3;
+    }
+    .score-adequate {
+      background: #fff9db;
+      color: #c9a500;
+      border: 1px solid #ffe58f;
+    }
+    .score-improve {
+      background: #e7f7e7;
+      color: #008000;
+      border: 1px solid #a3e6a3;
+    }
+
+    /* KPI 顏色（沿用單檔版 Strong / Adequate / Improve） */
+    .rating-strong  { background:#ffe5e5; color:#e60000; font-weight:600; }
+    .rating-adequate{ background:#fff9db; color:#c9a500; font-weight:600; }
+    .rating-improve { background:#e7f7e7; color:#008000; font-weight:600; }
+
+    .hint {
+      font-size: 11px;
+      color: #777;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    @media (max-width: 768px) {
+      h1 { font-size: 15px; }
+      .toolbar { font-size: 11px; }
+    }
+  </style>
+</head>
+<body>
+  <h1>三劍客量化科技機構級多檔分析</h1>
+
+  <!-- 工具列：本金 / 滑點 / 多檔 TXT / 計算 -->
+  <div class="top-row">
+    <div class="toolbar">
+      <label>
+        本金：
+        <input type="number" id="capitalInput" value="1000000" step="10000">
+      </label>
+      <label>
+        滑點（每邊點數）：
+        <input type="number" id="slipInput" value="0" step="0.1">
+      </label>
+      <label>
+        TXT 檔（可多選）：
+        <input type="file" id="fileInput" accept=".txt,.TF_1m" multiple>
+      </label>
+      <button id="runBtn" disabled>計算</button>
+    </div>
+  </div>
+
+  <div class="status-line" id="statusLine">
+    說明：一次可選擇多個 0807/期貨 TXT（含 INPOS），將依單檔分析的 KPI 與分數邏輯計算。
+  </div>
+
+  <!-- Score 分布圖 -->
+  <div class="card">
+    <div class="card-title">綜合分數分布（每檔一點）</div>
+    <canvas id="scoreChart"></canvas>
+  </div>
+
+  <!-- 統計表格 -->
+  <div class="table-wrapper">
+    <table id="resultTable">
+      <thead>
+        <tr>
+          <th class="sortable" data-key="dateTag">製作時間</th>
+          <th>參數</th>
+          <th class="sortable" data-key="score">分數</th>
+          <th class="sortable" data-key="cagr">CAGR</th>
+          <th class="sortable" data-key="totalReturn">總報酬</th>
+          <th class="sortable" data-key="maxDdPct">MaxDD%</th>
+          <th class="sortable" data-key="pf">PF</th>
+          <th class="sortable" data-key="winRate">Hit%</th>
+          <th class="sortable" data-key="sharpe">Sharpe</th>
+          <th class="sortable" data-key="sortino">Sortino</th>
+          <th class="sortable" data-key="calmar">Calmar</th>
+          <th class="sortable" data-key="riskOfRuin">破產風險</th>
+          <th class="sortable" data-key="costRatio">成本比</th>
+          <th class="sortable" data-key="nTrades">筆數</th>
+          <th class="sortable" data-key="avgTrade">平均單筆</th>
+          <th class="sortable" data-key="worstDay">最差單日</th>
+          <th class="sortable" data-key="worstWeek">最差單週</th>
+          <th class="sortable" data-key="ulcer">Ulcer</th>
+          <th class="sortable" data-key="recoveryFactor">Recovery</th>
+          <th class="sortable" data-key="turnover">Turnover</th>
+        </tr>
+      </thead>
+      <tbody>
+        <!-- JS 填入 -->
+      </tbody>
+    </table>
+  </div>
+
+  <div class="hint">
+    提示：點欄位名稱可切換升序／降序。KPI 顏色依單檔版評級（Strong / Adequate / Improve）標示。
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="multi-pro.js?v=20251204"></script>
+</body>
+</html>
