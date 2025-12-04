@@ -113,9 +113,10 @@
     }
     .cloud-row {
       display:flex;
-      flex-wrap:wrap;
+      flex-wrap:nowrap; /* 重要：不換行 */
       gap:8px;
       align-items:center;
+      overflow-x:auto;  /* 窄螢幕時可以左右捲動 */
     }
     .cloud-input {
       padding:6px 8px;
@@ -130,7 +131,7 @@
       border-radius:6px;
       font-size:12px;
       min-width:260px;
-      max-width:420px;
+      max-width:380px;
     }
     .cloud-btn {
       padding:6px 10px;
@@ -138,6 +139,7 @@
       border:0;
       cursor:pointer;
       font-size:12px;
+      white-space:nowrap;
     }
     .cloud-btn-primary {
       background:#0d6efd;
@@ -198,7 +200,6 @@
       font-weight: 700;
     }
 
-    /* 建議優化指標卡片（只剩表格本身） */
     .kpi-bad-card .kpi-table {
       background: #fff5f5;
       border: 1px solid #ffd0d0;
@@ -207,12 +208,10 @@
       background: #ffe5e5;
     }
 
-    /* 評語顏色：Strong=紅，Adequate=黃，Improve=綠 */
     .rating-strong  { color: #e60000; font-weight: 600; }
     .rating-adequate{ color: #c9a500; font-weight: 600; }
     .rating-improve { color: #008000; font-weight: 600; }
 
-    /* 圖表區塊 */
     .chart-wrapper {
       max-width: 1100px;
       margin: 4px auto 8px auto;
@@ -228,7 +227,6 @@
       height: 260px;
     }
 
-    /* 交易明細表格 */
     table.trade-table {
       border-collapse: collapse;
       background: #fff;
@@ -308,7 +306,7 @@
   <!-- TXT 第一行參數 -->
   <div class="param-line" id="paramLine"></div>
 
-  <!-- 從資料上傳區讀檔（Supabase / reports） -->
+  <!-- 從資料上傳區讀檔 -->
   <div class="cloud-card" id="cloudPanel">
     <h3>從「資料上傳區」讀檔（Supabase / reports）</h3>
     <div class="cloud-row">
@@ -318,7 +316,9 @@
         <option value="">（雲端未載入）</option>
       </select>
     </div>
-    <div id="cloudMeta" class="cloud-meta">說明：先輸入資料夾前綴並按「載入清單」，再從右側選擇檔案，選好後上方 TXT 檔會自動帶入，最後按「計算」。</div>
+    <div id="cloudMeta" class="cloud-meta">
+      說明：先輸入資料夾前綴並按「載入清單」，再從右側選擇檔案。選好後，上方 TXT 檔會自動帶入，最後按「計算」。
+    </div>
   </div>
 
   <!-- 主資產曲線 -->
