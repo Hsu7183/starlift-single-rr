@@ -1,8 +1,8 @@
 // single-trades.js
 // 三劍客量化科技機構級單檔分析：KPI + 每週資產曲線 + 交易明細
 // - 理論與含滑價分開計算
-// - 資產曲線以「每週出場」聚合，起點為 0（累積損益）
-// - 圖上標出整段期間的最高點（紅點）與最低點（綠點）
+// - 主圖：資產曲線（週聚合）
+// - 副圖：每週損益（紅=獲利、綠=虧損、黃=累積）
 // - X 軸依 TXT 資料起訖分成 5 個節點標記（起點、中間 3 點、終點）
 
 (function () {
@@ -19,7 +19,8 @@
 
   let gParsed = null;
   let gFile   = null;
-  let gChart  = null;
+  let gChart  = null;   // 主資產曲線
+  let gWeeklyChart = null; // 每週損益圖
 
   // ===== 小工具 =====
   const $ = (s) => document.querySelector(s);
@@ -791,7 +792,7 @@
     renderScore(score);
   }
 
-  // ===== 每週聚合工具 =====
+  // ===== 每週聚合工具（主圖用） =====
   function aggregateWeekly(dates, series) {
     const outDates = [];
     const outVals  = [];
@@ -822,7 +823,7 @@
     return { dates: outDates, vals: outVals };
   }
 
-  // ===== 每週資產曲線 + 高低點（X 軸依資料起訖 5 等分） =====
+  // ===== 主資產曲線（週聚合，X 軸起訖 5 等分） =====
   function renderEquityChartWeekly(exitDates, totalTheo, totalAct,
                                    longTheo, longAct, shortTheo, shortAct) {
     const canvas = document.getElementById('equityChart');
@@ -867,7 +868,7 @@
         if (!d) return;
         const y = d.getFullYear();
         const m = d.getMonth() + 1;
-        const label = `${y}/${m}`; // 例：2023/7
+        const label = `${y}/${m}`;
         tickIndexToLabel[idx] = label;
       });
     }
@@ -1006,11 +1007,124 @@
     });
   }
 
-  // ===== 畫交易明細表格（理論 vs 含滑價） =====
+  // ===== 每週損益副圖（紅：獲利、綠：虧損、黃：累積） =====
+  function renderWeeklyPnlChart(weekDates, weekPnls) {
+    const canvas = document.getElementById('weeklyPnlChart');
+    if (!canvas || !window.Chart) return;
+    const ctx = canvas.getContext('2d');
+
+    if (gWeeklyChart) {
+      gWeeklyChart.destroy();
+      gWeeklyChart = null;
+    }
+
+    if (!weekDates.length) return;
+
+    const labels = weekDates.map((d) => {
+      const y = d.getFullYear();
+      const m = (d.getMonth() + 1).toString().padStart(2, '0');
+      const day = d.getDate().toString().padStart(2, '0');
+      return `${y}/${m}/${day}`;
+    });
+
+    const pos = weekPnls.map(v => (v > 0 ? v : null));
+    const neg = weekPnls.map(v => (v < 0 ? v : null));
+    const cum = [];
+    let c = 0;
+    weekPnls.forEach(v => { c += v; cum.push(c); });
+
+    gWeeklyChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          {
+            label: '每週獲利（>0）',
+            data: pos,
+            borderColor: 'rgba(220,0,0,1)',
+            backgroundColor: 'rgba(220,0,0,0)',
+            borderWidth: 1.5,
+            tension: 0,
+            pointRadius: 0
+          },
+          {
+            label: '每週虧損（<0）',
+            data: neg,
+            borderColor: 'rgba(0,150,0,1)',
+            backgroundColor: 'rgba(0,150,0,0)',
+            borderWidth: 1.5,
+            tension: 0,
+            pointRadius: 0
+          },
+          {
+            label: '每週累積損益',
+            data: cum,
+            borderColor: 'rgba(220,180,0,1)',
+            backgroundColor: 'rgba(220,180,0,0)',
+            borderWidth: 2,
+            tension: 0,
+            pointRadius: 0
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: {
+          mode: 'index',
+          intersect: false
+        },
+        plugins: {
+          legend: {
+            display: true,
+            position: 'top'
+          },
+          tooltip: {
+            callbacks: {
+              label: function (ctx) {
+                const v = ctx.parsed.y;
+                return `${ctx.dataset.label}: ${fmtInt(v)}`;
+              }
+            }
+          }
+        },
+        scales: {
+          x: {
+            display: true,
+            title: { display: true, text: '週期' },
+            ticks: {
+              maxRotation: 0,
+              minRotation: 0,
+              callback: function (value, index) {
+                // 月初 / 季初才顯示，以免太擠
+                const d = weekDates[index];
+                if (!d) return '';
+                const day = d.getDate();
+                if (day > 7) return '';
+                const y = d.getFullYear();
+                const m = (d.getMonth() + 1).toString().padStart(2, '0');
+                return `${y}/${m}`;
+              }
+            }
+          },
+          y: {
+            display: true,
+            title: { display: true, text: '每週損益 / 累積（金額）' },
+            grid: {
+              zeroLineWidth: 1
+            }
+          }
+        }
+      }
+    });
+  }
+
+  // ===== 畫交易明細表格、主圖、副圖 =====
   function renderTrades(parsed) {
     const tbody = $('#tradesBody');
     tbody.innerHTML = '';
     renderKpi(null, null);
+    renderWeeklyPnlChart([], []); // 清空副圖
 
     if (!parsed || !parsed.trades.length) {
       if (gChart) { gChart.destroy(); gChart = null; }
@@ -1077,10 +1191,12 @@
       tbody.appendChild(tr2);
     });
 
+    // KPI：理論 vs 含滑價
     const kpiTheo = calcKpi(parsed.trades, theoPnls, theoEquity, 0);
     const kpiAct  = calcKpi(parsed.trades, actPnls,  actEquity,  CFG.slipPerSide);
     renderKpi(kpiTheo, kpiAct);
 
+    // 主圖：累積損益線（從 0 起） & 長短拆線
     const totalTheo = [0], totalAct = [0];
     const longTheo  = [0], longAct  = [0];
     const shortTheo = [0], shortAct = [0];
@@ -1118,6 +1234,29 @@
 
     renderEquityChartWeekly(datesForChart, totalTheo, totalAct,
                             longTheo, longAct, shortTheo, shortAct);
+
+    // 副圖：每週實際損益（含滑價）
+    const weekMap = {};
+    for (let i = 0; i < actPnls.length; i++) {
+      const d = exitDates[i];
+      if (!d) continue;
+      const key = dateWeekKey(d);
+      if (!weekMap[key]) {
+        weekMap[key] = { sum: 0, date: d };
+      } else if (d > weekMap[key].date) {
+        // 同一週用最後一次出場日期當 label
+        weekMap[key].date = d;
+      }
+      weekMap[key].sum += actPnls[i];
+    }
+    const weekKeys = Object.keys(weekMap).sort();
+    const weekDatesArr = [];
+    const weekPnlsArr  = [];
+    weekKeys.forEach(k => {
+      weekDatesArr.push(weekMap[k].date);
+      weekPnlsArr.push(weekMap[k].sum);
+    });
+    renderWeeklyPnlChart(weekDatesArr, weekPnlsArr);
   }
 
   // ===== 事件 =====
