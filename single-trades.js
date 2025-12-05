@@ -1134,13 +1134,13 @@
     renderKpi(null, null);
     renderWeeklyPnlChart([], []); // 清空副圖
 
-    // ★ 新增：參數列顯示 TXT 第一行 header
-    const paramLineEl = $('#paramLine');
-    if (paramLineEl) {
+    // ★ 參數列顯示 TXT 第一行，沒有「參數：」字樣
+    const paramLine = $('#paramLine');
+    if (paramLine) {
       if (parsed && parsed.header) {
-        paramLineEl.textContent = '參數：' + parsed.header;
+        paramLine.textContent = parsed.header;
       } else {
-        paramLineEl.textContent = '';
+        paramLine.textContent = '';
       }
     }
 
