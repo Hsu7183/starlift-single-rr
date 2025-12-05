@@ -111,15 +111,15 @@
       max-width: 380px;
     }
 
-    /* 參數列 */
+    /* 參數列：允許換行、全部顯示 */
     .param-line {
       max-width: 1100px;
       margin: 0 auto 4px auto;
       font-size: 11px;
       color: #555;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
+      white-space: normal;   /* 允許換行 */
+      overflow: visible;     /* 不裁切 */
+      word-break: break-all; /* 過長字串也能斷行 */
     }
 
     /* KPI 區塊共用 */
