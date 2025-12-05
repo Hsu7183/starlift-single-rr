@@ -67,7 +67,7 @@
       flex: 1 1 auto;
       margin: 0;
       display: flex;
-      flex-wrap: nowrap;        /* 都擠在同一行，窄螢幕用橫向捲動 */
+      flex-wrap: nowrap;        /* 都擠在同一行，窄螢幕改成橫向捲動 */
       gap: 8px;
       align-items: center;
       justify-content: flex-start;
@@ -111,15 +111,21 @@
       max-width: 380px;
     }
 
-    /* 參數列：允許換行、全部顯示 */
+    /* 參數列：美化 + 允許換行顯示完整內容 */
     .param-line {
       max-width: 1100px;
-      margin: 0 auto 4px auto;
+      margin: 0 auto 6px auto;
       font-size: 11px;
-      color: #555;
-      white-space: normal;   /* 允許換行 */
-      overflow: visible;     /* 不裁切 */
-      word-break: break-all; /* 過長字串也能斷行 */
+      color: #444;
+      background: #fafafa;
+      border: 1px solid #e5e7eb;
+      border-radius: 6px;
+      padding: 4px 8px;
+      line-height: 1.5;
+      white-space: normal;      /* 允許自動換行 */
+      word-break: break-all;    /* 參數太長時仍可斷行 */
+      font-family: "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono",
+                   "Courier New", monospace;
     }
 
     /* KPI 區塊共用 */
@@ -268,7 +274,7 @@
     </div>
   </div>
 
-  <!-- TXT 第一行參數 -->
+  <!-- 參數列（顯示 TXT 第一行 header，JS 會填入文字） -->
   <div class="param-line" id="paramLine"></div>
 
   <!-- 主資產曲線 -->
@@ -332,7 +338,7 @@
         <th>理論淨損益</th>
         <th>累積理論淨損益</th>
         <th>實際淨損益</th>
-        <th>累積實際淨損益</th>
+        <th>累積實際損益</th>
       </tr>
     </thead>
     <tbody id="tradesBody"></tbody>
