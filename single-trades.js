@@ -1134,6 +1134,16 @@
     renderKpi(null, null);
     renderWeeklyPnlChart([], []); // 清空副圖
 
+    // ★ 新增：參數列顯示 TXT 第一行 header
+    const paramLineEl = $('#paramLine');
+    if (paramLineEl) {
+      if (parsed && parsed.header) {
+        paramLineEl.textContent = '參數：' + parsed.header;
+      } else {
+        paramLineEl.textContent = '';
+      }
+    }
+
     if (!parsed || !parsed.trades.length) {
       if (gChart) { gChart.destroy(); gChart = null; }
       return;
