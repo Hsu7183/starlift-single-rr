@@ -6,95 +6,180 @@
   <title>上傳檔案</title>
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
   <style>
+    :root{
+      --primary:#2563eb;
+      --primary-dark:#1d4ed8;
+      --danger:#ef4444;
+      --danger-dark:#b91c1c;
+      --bg:#f3f4f6;
+      --card-bg:#ffffff;
+      --border:#e5e7eb;
+      --text-main:#111827;
+      --text-muted:#6b7280;
+    }
+    *{box-sizing:border-box}
     body{
-      font-family:Arial,"微軟正黑體",sans-serif;
-      background:#f8f9fa;
-      color:#333;
-      margin:20px
+      font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans TC",
+                   "Microsoft JhengHei",sans-serif;
+      background:var(--bg);
+      color:var(--text-main);
+      margin:0;
+      padding:20px 12px 40px;
     }
-    h1{margin:8px 0}
-    .topbar{
-      display:flex;
-      align-items:center;
-      gap:10px;
-      margin-bottom:8px
+    .container{
+      max-width:1100px;
+      margin:0 auto;
     }
-    .badge{
-      background:#eef4ff;
-      color:#0d6efd;
-      padding:4px 8px;
-      border-radius:999px;
-      font-size:12px
+    h1{
+      margin:4px 0 2px 0;
+      font-size:20px;
+      letter-spacing:0.03em;
+    }
+    .subtitle{
+      margin:0 0 12px 0;
+      font-size:13px;
+      color:var(--text-muted);
+    }
+    code{
+      background:#e5e7eb;
+      padding:1px 5px;
+      border-radius:4px;
+      font-size:12px;
     }
     .panel{
-      background:#fff;
-      padding:16px;
-      border-radius:10px;
-      box-shadow:0 2px 6px rgba(0,0,0,.08);
-      margin-bottom:16px
+      background:var(--card-bg);
+      padding:16px 18px;
+      border-radius:14px;
+      box-shadow:0 8px 20px rgba(15,23,42,.06);
+      margin-bottom:18px;
+      border:1px solid rgba(148,163,184,.3);
+    }
+    .panel-title{
+      font-size:15px;
+      font-weight:600;
+      margin:0 0 8px 0;
     }
     .row{
       display:flex;
       flex-wrap:wrap;
-      gap:10px;
-      align-items:center
+      gap:12px;
+      align-items:center;
     }
-    input[type="file"]{padding:6px}
-    button{
-      padding:8px 14px;
-      border:0;
-      border-radius:8px;
-      cursor:pointer
+
+    /* 按鈕樣式 */
+    .btn{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      gap:4px;
+      padding:8px 16px;
+      border-radius:999px;
+      font-size:14px;
+      border:1px solid transparent;
+      cursor:pointer;
+      transition:background .15s ease,border-color .15s ease,transform .08s ease,
+                 box-shadow .15s ease,color .15s ease;
+      text-decoration:none;
+      user-select:none;
+      white-space:nowrap;
     }
-    .primary{background:#0d6efd;color:#fff}
-    .danger{background:#dc3545;color:#fff}
-    .link{
-      background:transparent;
-      color:#0d6efd;
-      text-decoration:underline;
-      padding:0;
-      border:none;
-      cursor:pointer
+    .btn-sm{
+      padding:5px 11px;
+      font-size:13px;
     }
-    .muted{color:#666}
+    .btn-primary{
+      background:var(--primary);
+      border-color:var(--primary);
+      color:#fff;
+      box-shadow:0 6px 14px rgba(37,99,235,.3);
+    }
+    .btn-primary:hover{
+      background:var(--primary-dark);
+      border-color:var(--primary-dark);
+      transform:translateY(-1px);
+      box-shadow:0 10px 24px rgba(37,99,235,.35);
+    }
+    .btn-outline{
+      background:#ffffff;
+      border-color:#c7d2fe;
+      color:var(--primary);
+    }
+    .btn-outline:hover{
+      background:#eff6ff;
+      border-color:var(--primary);
+      transform:translateY(-1px);
+      box-shadow:0 6px 14px rgba(37,99,235,.18);
+    }
+    .btn-danger{
+      background:var(--danger);
+      border-color:var(--danger);
+      color:#fff;
+      box-shadow:0 6px 14px rgba(239,68,68,.3);
+    }
+    .btn-danger:hover{
+      background:var(--danger-dark);
+      border-color:var(--danger-dark);
+      transform:translateY(-1px);
+      box-shadow:0 10px 22px rgba(239,68,68,.35);
+    }
+
+    input[type="file"]{
+      padding:6px 0;
+      font-size:14px;
+    }
+
+    .muted{color:var(--text-muted);font-size:13px;}
+
     table{
       width:100%;
       border-collapse:collapse;
       background:#fff;
-      border-radius:10px;
-      overflow:hidden
+      border-radius:12px;
+      overflow:hidden;
     }
     th,td{
-      border-bottom:1px solid #eee;
-      padding:10px;
+      border-bottom:1px solid var(--border);
+      padding:9px 10px;
       text-align:left;
-      font-size:14px
+      font-size:13px;
     }
-    th{background:#fafafa}
+    th{
+      background:#f9fafb;
+      font-weight:600;
+      color:#4b5563;
+    }
+    tbody tr:nth-child(even){
+      background:#f9fafb;
+    }
+    tbody tr:last-child td{
+      border-bottom:none;
+    }
     .right{text-align:right}
-    .op a{margin-right:8px}
-    .folder{color:#0d6efd;font-weight:600}
+    .op{
+      display:flex;
+      justify-content:flex-end;
+      gap:6px;
+    }
+
+    #uploadMsg{min-height:18px;}
   </style>
 </head>
 <body>
-  <div class="topbar">
-    <span id="projBadge" class="badge">Bucket: reports（Public）</span>
-  </div>
-
+<div class="container">
   <h1>上傳檔案</h1>
-  <p class="muted" style="margin-top:-6px;">
+  <p class="subtitle">
     檔名建議：<code>策略-參數-起始日-結束日.txt</code>（例如：<code>0807-KPI-20231002-20250923.txt</code>）。
   </p>
 
   <!-- 上傳 -->
   <div class="panel">
-    <div class="row" style="margin-top:6px;">
+    <p class="panel-title">選擇檔案</p>
+    <div class="row" style="margin-top:4px;">
       <div>
-        <label class="muted">選擇檔案</label><br/>
         <input type="file" id="fileInput" multiple />
       </div>
-      <div style="align-self:end;">
-        <button class="primary" id="btnUpload">上傳</button>
+      <div style="align-self:flex-end;">
+        <button class="btn btn-primary" id="btnUpload">上傳</button>
       </div>
     </div>
     <div id="uploadMsg" class="muted" style="margin-top:8px;"></div>
@@ -103,7 +188,7 @@
   <!-- 清單 -->
   <div class="panel">
     <div class="row" style="align-items:center; margin-bottom:6px;">
-      <h3 style="margin:0;">檔案清單</h3>
+      <h3 class="panel-title" style="margin-bottom:0;">檔案清單</h3>
     </div>
     <table>
       <thead>
@@ -121,6 +206,7 @@
       </tbody>
     </table>
   </div>
+</div>
 
 <script>
 /* ===== Supabase 設定 ===== */
@@ -133,14 +219,6 @@ const BUCKET_NAME = "reports";
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   global:{ fetch:(url,opts={})=>fetch(url,{...opts,cache:'no-store'}) }
 });
-
-/* 標示目前專案 */
-(function(){
-  const u = new URL(SUPABASE_URL);
-  const proj = (u.hostname||"").split(".")[0];
-  document.getElementById("projBadge").textContent =
-    `Bucket: ${BUCKET_NAME}（Public）｜Project: ${proj}`;
-})();
 
 /* DOM */
 const fileInput = document.getElementById('fileInput');
@@ -252,9 +330,11 @@ async function showAll(){
       <td>${meta.range}</td>
       <td class="right">${sizeStr}</td>
       <td>${updated}</td>
-      <td class="right op">
-        <a class="link" href="${dlUrl}">下載</a>
-        <button class="danger" data-path="${fullPath}">刪除</button>
+      <td class="right">
+        <div class="op">
+          <a class="btn btn-outline btn-sm" href="${dlUrl}">下載</a>
+          <button class="btn btn-danger btn-sm danger" data-path="${fullPath}">刪除</button>
+        </div>
       </td>`;
     tbody.appendChild(tr);
   }
@@ -295,7 +375,7 @@ document.getElementById('btnUpload').onclick = async ()=>{
       contentType: f.type || 'text/plain'
     });
     if(error){
-      uploadMsg.innerHTML = `<span style="color:#b90">上傳失敗：${error.message}</span>`;
+      uploadMsg.innerHTML = `<span style="color:#b91c1c">上傳失敗：${error.message}</span>`;
       return;
     }
   }
