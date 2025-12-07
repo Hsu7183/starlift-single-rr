@@ -1,8 +1,5 @@
 // multi-pro.js
-// 三劍客量化科技機構級多檔分析（期貨版）
-// - 讀取多個 0807 / 期貨 TXT（含 INPOS）
-// - 沿用 single-trades.js：parseTxt + calcKpi + KPI 評級 + Score 邏輯
-// - 每檔輸出：製作時間 / 參數 / Score / 核心 KPI（可排序 & 紅黃綠）
+// 三劍客量化科技機構級多檔分析（期貨版 - 多檔排名 + 頂檔資產曲線）
 
 (function () {
   'use strict';
@@ -18,6 +15,7 @@
   const table        = $('#resultTable');
   const tbody        = table.querySelector('tbody');
   const scoreChartEl = $('#scoreChart');
+  const chartTitleEl = $('#chartTitle');
 
   // ===== 全域狀態 =====
   const CFG = {
@@ -28,7 +26,7 @@
     capital: 1000000
   };
 
-  let gResults = [];  // [{ fileName, dateTag, params, score, kpiAct }, ...]
+  let gResults = [];  // [{ fileName, dateTag, params, score, kpiAct, equitySeries }, ...]
   let gSort = { key: 'score', dir: 'desc' };
   let gChart = null;
 
@@ -45,10 +43,23 @@
     if (x == null || !isFinite(x)) return '—';
     return x.toFixed(d);
   };
-  const last8DigitsFromName = (name) => {
-    const m = name.match(/(\d{8})(?!.*\d)/);
-    return m ? m[1] : name;
-  };
+
+  // 製作時間壓到「日_時間」→ 20251208_065140 → 08_065140
+  function makeCompactTag(name) {
+    const m = name.match(/(\d{8})_(\d{6})/);
+    if (!m) return name;
+    const day = m[1].slice(6, 8);
+    return `${day}_${m[2]}`;
+  }
+
+  // 參數列只保留數值
+  function headerToValues(header) {
+    if (!header) return '';
+    return header.split(',').map(seg => {
+      const idx = seg.indexOf('=');
+      return idx >= 0 ? seg.slice(idx + 1) : seg;
+    }).join(',');
+  }
 
   // ===== 時間工具（沿用 single-trades） =====
   function tsToDate(ts) {
@@ -79,7 +90,7 @@
     return tmp.getUTCFullYear() + '-W' + (weekNo < 10 ? '0' + weekNo : weekNo);
   }
 
-  // ===== INPOS 判斷方向（沿用 single-trades）=====
+  // ===== INPOS 判斷方向 =====
   function getDirFromInpos(lines, startIdx) {
     const maxLookAhead = 300;
     const total = lines.length;
@@ -99,7 +110,7 @@
     return 1;
   }
 
-  // ===== 解析 0807 TXT → trades（沿用 single-trades 版本精簡）=====
+  // ===== 解析 TXT（0807 IND / TRD 交易格式） =====
   function parseTxt(text) {
     const allLines = text.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
     if (!allLines.length) return { header: null, trades: [] };
@@ -158,7 +169,7 @@
     return { header, trades };
   }
 
-  // ===== KPI 計算（直接貼 single-trades 的 calcKpi）=====
+  // ===== KPI 計算（沿用 single-trades 的 calcKpi）=====
   function calcKpi(trades, pnls, equity) {
     const n = pnls.length;
     if (!n) return null;
@@ -421,7 +432,7 @@
     };
   }
 
-  // ===== KPI 評級（沿用 single-trades 的 rateMetric）=====
+  // ===== KPI 評級（沿用單檔版）=====
   function rateMetric(key, value) {
     if (value == null || !isFinite(value)) return null;
 
@@ -429,69 +440,59 @@
     let css   = 'rating-adequate';
 
     switch (key) {
-      case 'maxdd_pct': {
-        // value: 0.2 → 20%
+      case 'maxdd_pct':
         if (value <= 0.20)       { label = 'Strong';  css = 'rating-strong';  }
         else if (value <= 0.30)  { label = 'Adequate'; }
         else                     { label = 'Improve'; css = 'rating-improve'; }
         break;
-      }
       case 'total_return':
-      case 'cagr': {
+      case 'cagr':
         if (value >= 0.15)       { label = 'Strong';  css = 'rating-strong';  }
         else if (value >= 0.05)  { label = 'Adequate'; }
         else                     { label = 'Improve'; css = 'rating-improve'; }
         break;
-      }
-      case 'pf': {
+      case 'pf':
         if (value >= 1.5)        { label = 'Strong';  css = 'rating-strong';  }
         else if (value >= 1.1)   { label = 'Adequate'; }
         else                     { label = 'Improve'; css = 'rating-improve'; }
         break;
-      }
-      case 'winrate': {
+      case 'winrate':
         if (value >= 0.55)       { label = 'Strong';  css = 'rating-strong';  }
         else if (value >= 0.45)  { label = 'Adequate'; }
         else                     { label = 'Improve'; css = 'rating-improve'; }
         break;
-      }
-      case 'sharpe': {
+      case 'sharpe':
         if (value >= 1.5)        { label = 'Strong';  css = 'rating-strong';  }
         else if (value >= 0.8)   { label = 'Adequate'; }
         else                     { label = 'Improve'; css = 'rating-improve'; }
         break;
-      }
-      case 'sortino': {
+      case 'sortino':
         if (value >= 2)          { label = 'Strong';  css = 'rating-strong';  }
         else if (value >= 1)     { label = 'Adequate'; }
         else                     { label = 'Improve'; css = 'rating-improve'; }
         break;
-      }
-      case 'calmar': {
+      case 'calmar':
         if (value >= 0.5)        { label = 'Strong';  css = 'rating-strong';  }
         else if (value >= 0.2)   { label = 'Adequate'; }
         else                     { label = 'Improve'; css = 'rating-improve'; }
         break;
-      }
-      case 'risk_ruin': {
+      case 'risk_ruin':
         if (value <= 0.05)       { label = 'Strong';  css = 'rating-strong';  }
         else if (value <= 0.20)  { label = 'Adequate'; }
         else                     { label = 'Improve'; css = 'rating-improve'; }
         break;
-      }
-      case 'cost_ratio': {
+      case 'cost_ratio':
         if (value <= 0.20)       { label = 'Strong';  css = 'rating-strong';  }
         else if (value <= 0.40)  { label = 'Adequate'; }
         else                     { label = 'Improve'; css = 'rating-improve'; }
         break;
-      }
       default:
         return null;
     }
     return { label, cssClass: css };
   }
 
-  // ===== 期貨綜合分數（沿用單檔版：10 個 KPI 平均 90 / 75 / 60）=====
+  // ===== 綜合分數（與單檔版一致）=====
   function computeScore(k) {
     if (!k) return null;
     const metrics = [
@@ -512,8 +513,8 @@
       const r = rateMetric(m.key, m.v);
       if (!r) return;
       let pts = 0;
-      if (r.label === 'Strong')          pts = 90;
-      else if (r.label === 'Adequate')   pts = 75;
+      if (r.label === 'Strong')               pts = 90;
+      else if (r.label === 'Adequate')        pts = 75;
       else if (r.label.startsWith('Improve')) pts = 60;
       sum += pts;
       cnt++;
@@ -564,9 +565,7 @@
         const parsed = parseTxt(text);
         const trades = parsed.trades;
 
-        if (!trades.length) {
-          continue;
-        }
+        if (!trades.length) continue;
 
         let cumTheo = 0;
         let cumAct  = 0;
@@ -576,7 +575,11 @@
         const actEquity  = [];
         const slipCostPerTrade = CFG.pointValue * CFG.slipPerSide * 2;
 
-        trades.forEach(t => {
+        const eqX = [0];
+        const eqY = [0];
+        let cumForEq = 0;
+
+        trades.forEach((t, idx) => {
           cumTheo += t.theoNet;
           const actualNet = t.theoNet - slipCostPerTrade;
           cumAct  += actualNet;
@@ -586,6 +589,10 @@
 
           actPnls.push(actualNet);
           actEquity.push(cumAct);
+
+          cumForEq += actualNet;
+          eqX.push(idx + 1);
+          eqY.push(cumForEq);
         });
 
         const kpiTheo = calcKpi(trades, theoPnls, theoEquity);
@@ -594,11 +601,12 @@
 
         gResults.push({
           fileName: f.name,
-          dateTag:  last8DigitsFromName(f.name),
-          params:   parsed.header || '',
+          dateTag:  makeCompactTag(f.name),           // ✅ 短格式
+          params:   headerToValues(parsed.header),    // ✅ 只留數值
           score,
           kpi: kpiAct,
-          kpiTheo
+          kpiTheo,
+          equitySeries: { x: eqX, y: eqY }
         });
 
         statusLine.textContent = `計算中…… ${i + 1} / ${files.length}`;
@@ -656,7 +664,6 @@
         return td;
       }
 
-      // 依重要度：CAGR、TotalReturn、MaxDD%、PF、Hit%、Sharpe、Sortino、Calmar、RiskOfRuin、CostRatio...
       tr.appendChild(kpiCell(k.cagr,           'pct', 'cagr'));
       tr.appendChild(kpiCell(k.totalReturnPct, 'pct', 'total_return'));
       tr.appendChild(kpiCell(k.maxDdPct,       'pct', 'maxdd_pct'));
@@ -690,28 +697,39 @@
     });
   }
 
-  // ===== Chart（Score 分布）=====
+  // ===== 圖表：顯示分數最高那一檔的資產曲線 =====
   function renderChart() {
     if (!scoreChartEl || !window.Chart) return;
-    const ctx = scoreChartEl.getContext('2d');
 
     if (gChart) {
       gChart.destroy();
       gChart = null;
     }
 
-    if (!gResults.length) return;
+    if (!gResults.length) {
+      chartTitleEl.textContent = '頂檔資產曲線（含滑價累積損益）';
+      return;
+    }
 
-    const labels = gResults.map(r => r.dateTag);
-    const data   = gResults.map(r => (r.score || 0));
+    const top = gResults[0];
+    const eq = top.equitySeries || { x: [], y: [] };
+    const labels = eq.x;
+    const data   = eq.y;
+
+    const ctx = scoreChartEl.getContext('2d');
+
+    chartTitleEl.textContent =
+      `頂檔資產曲線（含滑價累積損益）｜${top.fileName}`;
 
     gChart = new Chart(ctx, {
-      type: 'bar',
+      type: 'line',
       data: {
         labels,
         datasets: [{
-          label: 'Score',
-          data
+          label: '含滑價累積損益',
+          data,
+          borderWidth: 2,
+          pointRadius: 0
         }]
       },
       options: {
@@ -721,23 +739,16 @@
           legend: { display: false },
           tooltip: {
             callbacks: {
-              label: function (ctx) {
-                const r = gResults[ctx.dataIndex];
-                return `Score: ${ctx.parsed.y.toFixed(1)}（${r.fileName}）`;
-              }
+              label: (ctx) => `累積損益：${fmtInt(ctx.parsed.y)}`
             }
           }
         },
         scales: {
           x: {
-            ticks: {
-              autoSkip: true,
-              maxTicksLimit: 20
-            }
+            title: { display: true, text: '交易序號' }
           },
           y: {
-            beginAtZero: true,
-            title: { display: true, text: 'Score' }
+            title: { display: true, text: '累積損益（含滑價）' }
           }
         }
       }
