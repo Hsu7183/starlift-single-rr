@@ -83,14 +83,14 @@
       margin-bottom: 4px;
     }
 
-    /* ✅ 固定圖表高度，避免無限拉長 */
+    /* ✅ 固定圖表高度（顯示頂檔資產曲線） */
     .chart-box {
       width: 100%;
-      height: 260px;          /* 你覺得太高可以再調，例如 220px */
+      height: 260px;
     }
     .chart-box canvas {
       width: 100% !important;
-      height: 100% !important; /* 讓 Chart.js 填滿這個固定高度 */
+      height: 100% !important;
       display: block;
     }
 
@@ -181,7 +181,7 @@
       border: 1px solid #a3e6a3;
     }
 
-    /* KPI 顏色 */
+    /* KPI 顏色（沿用單檔版 Strong / Adequate / Improve） */
     .rating-strong  { background:#ffe5e5; color:#e60000; font-weight:600; }
     .rating-adequate{ background:#fff9db; color:#c9a500; font-weight:600; }
     .rating-improve { background:#e7f7e7; color:#008000; font-weight:600; }
@@ -225,9 +225,9 @@
     說明：一次可選擇多個 0807/期貨 TXT（含 INPOS），將依單檔分析的 KPI 與分數邏輯計算。
   </div>
 
-  <!-- Score 分布圖：用了固定高度的 chart-box -->
+  <!-- ✅ 圖表改為：分數最高那一檔的資產曲線 -->
   <div class="card">
-    <div class="card-title">綜合分數分布（每檔一點）</div>
+    <div class="card-title" id="chartTitle">頂檔資產曲線（含滑價累積損益）</div>
     <div class="chart-box">
       <canvas id="scoreChart"></canvas>
     </div>
@@ -239,7 +239,7 @@
       <thead>
         <tr>
           <th class="sortable" data-key="dateTag">製作時間</th>
-          <th>參數</th>
+          <th>參數（只顯示數值）</th>
           <th class="sortable" data-key="score">分數</th>
           <th class="sortable" data-key="cagr">CAGR</th>
           <th class="sortable" data-key="totalReturn">總報酬</th>
@@ -267,10 +267,10 @@
   </div>
 
   <div class="hint">
-    提示：點欄位名稱可切換升序／降序。KPI 顏色依單檔版評級（Strong / Adequate / Improve）標示。
+    提示：1）製作時間只保留「日_時間」，例如 08_065140。2）參數欄只顯示數值。3）圖表顯示分數最高那一檔的資產曲線。
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="multi-pro.js?v=20251204"></script>
+  <script src="multi-pro.js?v=20251208"></script>
 </body>
 </html>
