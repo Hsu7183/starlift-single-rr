@@ -1,26 +1,15 @@
 // stock-single-research.js
 // 三劍客量化科技 股票策略研究（1031 TXT 單檔分析）
-//
-// - 讀取 1031 指標版 TXT（DipBuy_1m_1031_IND_T2）
-// - 第一行為參數列：日期,時間,價格,動作,說明,_BeginT=..., ...,_FeeRate=...,_IsETF=...,_TaxRateOverride=...
-// - 之後每行：
-//   日線：20240129,000000,21.38,日線,closeD=21.38,
-//   買進：20240131,90500,21.35,買進,層=1,tid=1,...,lotShares=1000,...
-//   賣出：20240215,90500,24.71,賣出,tid=1,avgRef=...,累計成本=...,價格差=...,
-//                    稅後損益=...,報酬率%=...,累積損益=...,MAE%=...,MFE%=...,holdBars=...,holdMin=...,...
-//
-// - 單筆淨損益使用「稅後損益」(NTD)
-// - 股數使用 tid 對應買進列的 lotShares（最後一個值）
-// - KPI 以本金（預設 100 萬）為基準計算
-// - 主圖：累積損益（週聚合，X 軸 5 個刻度）
-// - 副圖：每週損益長條圖
 
 (function () {
   'use strict';
 
   // ===== 全域設定 =====
   const CFG = {
-    capital: 1000000  // 本金，從 input 調整
+    capital: 1000000,   // 本金
+    feeRate: 0.001425,  // 手續費率（只作顯示 / 之後可延伸）
+    minFee: 20,         // 最低手續費
+    isETF: true
   };
 
   let gParsed = null;
@@ -101,7 +90,7 @@
     return tmp.getUTCFullYear() + '-W' + (weekNo < 10 ? '0' + weekNo : weekNo);
   }
 
-  // ===== 解析 1031 TXT =====
+  // ===== 解析 1031 TXT（含加碼 / 再加碼） =====
   function parseStockTxt(text) {
     const lines = text.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
     if (!lines.length) return { header: null, params: {}, trades: [], daily: {} };
@@ -109,7 +98,7 @@
     const headerLine = lines[0];
     const headerCols = headerLine.split(',');
 
-    // 解析參數（從第 6 欄開始）
+    // 解析參數
     const params = {};
     headerCols.slice(5).forEach(tok => {
       const t = tok.trim();
@@ -122,8 +111,19 @@
       params[key] = isFinite(num) ? num : valStr;
     });
 
+    // 同步 CFG 中的費率 & 商品類型
+    if (params.FeeRate != null && isFinite(params.FeeRate)) {
+      CFG.feeRate = Number(params.FeeRate);
+    }
+    if (params.MinFee != null && isFinite(params.MinFee)) {
+      CFG.minFee = Number(params.MinFee);
+    }
+    if (params.IsETF != null) {
+      CFG.isETF = Number(params.IsETF) === 1;
+    }
+
     const dailyClose = {};      // date -> closeD
-    const tidInfo   = {};       // tid -> { entryDate, entryTime, entryAvgRef, lastLotShares }
+    const tidInfo   = {};       // tid -> 聚合資訊
     const trades    = [];
     let cumNet      = 0;
 
@@ -138,7 +138,6 @@
       const action = cols[3];
       const tail = cols.slice(4).map(s => s.trim()).filter(Boolean);
 
-      // 把 key=value 轉成 kv 物件（支援中英文 key）
       const kv = {};
       tail.forEach(tok => {
         if (!tok) return;
@@ -149,37 +148,45 @@
         kv[k] = v;
       });
 
+      // 日線
       if (action === '日線') {
         const closeStr = kv['closeD'] || kv['close'] || '';
         const c = Number(closeStr);
-        if (isFinite(c)) {
-          dailyClose[date] = c;
-        }
+        if (isFinite(c)) dailyClose[date] = c;
         continue;
       }
 
-      if (action === '買進') {
+      // 首次買進 & 之後加碼：只更新 tidInfo，不產生 trade
+      if (action === '買進' || action === '加碼攤平' || action === '再加碼攤平') {
         const tid = kv['tid'];
         if (!tid) continue;
-        const lotShares = Number(kv['lotShares'] || 0);
-        const avgRef = Number(kv['avgRef'] || price);
+
+        const lotShares = Number(kv['lotShares'] || 0);      // 每單位股數
+        const totalUnits = Number(kv['總單位'] || kv['本次單位'] || 1);
+        const avgRefBuy  = Number(kv['avgRef'] || price);
 
         if (!tidInfo[tid]) {
           tidInfo[tid] = {
             tid,
             entryDate: date,
             entryTime: time,
-            entryAvgRef: avgRef,
-            lastLotShares: lotShares
+            entryAvgRef: avgRefBuy,
+            lotSharesBase: lotShares || 0,
+            totalUnits: totalUnits || 1
           };
         } else {
           const info = tidInfo[tid];
-          info.entryAvgRef = avgRef || info.entryAvgRef;
-          if (lotShares) info.lastLotShares = lotShares;
+          // 保留最早進場時間，只更新均價與口數
+          if (!info.entryDate) info.entryDate = date;
+          if (!info.entryTime) info.entryTime = time;
+          if (isFinite(avgRefBuy)) info.entryAvgRef = avgRefBuy;
+          if (lotShares) info.lotSharesBase = lotShares;
+          if (totalUnits) info.totalUnits = totalUnits;
         }
         continue;
       }
 
+      // 賣出：tid 對應整筆交易（含加碼）
       if (action === '賣出') {
         const tid = kv['tid'];
         if (!tid) continue;
@@ -189,7 +196,8 @@
           entryDate: date,
           entryTime: time,
           entryAvgRef: Number(kv['avgRef'] || price),
-          lastLotShares: 0
+          lotSharesBase: Number(kv['lotShares'] || 0),
+          totalUnits: 1
         };
 
         const avgRef = Number(kv['avgRef'] || info.entryAvgRef || price);
@@ -204,7 +212,10 @@
         const minPxInHold = Number(kv['minPxInHold'] || 0);
         const maxPxInHold = Number(kv['maxPxInHold'] || 0);
 
-        const shares = info.lastLotShares || 0;
+        const lotBase = info.lotSharesBase || Number(kv['lotShares'] || 0);
+        const units   = info.totalUnits || 1;
+        const shares  = lotBase * units;
+
         let gross = null;
         let cost = null;
         if (isFinite(priceDiff) && shares) {
@@ -248,7 +259,7 @@
     };
   }
 
-  // ===== KPI 評等規則 =====
+  // ===== KPI 評等規則（股票版） =====
   function rateMetric(key, value) {
     if (value == null || !isFinite(value)) return null;
 
@@ -321,6 +332,13 @@
         else                     { label = 'Improve'; css = 'rating-improve'; }
         break;
 
+      case 'stabilityR2':
+        ref = '≥0.90 強；0.70–0.90 可接受；<0.70 需優化';
+        if (value >= 0.90)       { label = 'Strong';  css = 'rating-strong';  }
+        else if (value >= 0.70)  { label = 'Adequate'; }
+        else                     { label = 'Improve'; css = 'rating-improve'; }
+        break;
+
       default:
         return null;
     }
@@ -355,11 +373,11 @@
     card.innerHTML = `
       <div class="score-title">綜合分數</div>
       <div class="score-value ${cls}">${v}</div>
-      <div class="score-desc">${label}｜以核心 KPI 加權計算</div>
+      <div class="score-desc">${label}｜以股票核心 KPI 加權計算</div>
     `;
   }
 
-  // ===== KPI 計算（股票版本：單一淨損益序列） =====
+  // ===== KPI 計算（股票版） =====
   function calcKpiStock(trades) {
     const n = trades.length;
     if (!n) return null;
@@ -537,7 +555,7 @@
       riskOfRuin = Math.min(1, Math.max(0, r));
     }
 
-    // 成本 / 週轉（以 gross 與 cost 欄位近似）
+    // 成本 / 週轉（用 gross & cost 近似）
     let totalCost = 0;
     let totalGrossAbs = 0;
     let notionalTraded = 0;
@@ -551,7 +569,6 @@
         : Math.abs(t.pnlNet);
       totalGrossAbs += grossAbs;
 
-      // 名目金額，用平均價 * 股數 近似
       if (t.entryAvgRef && t.shares) {
         notionalTraded += t.entryAvgRef * t.shares;
       }
@@ -632,7 +649,7 @@
     };
   }
 
-  // ===== KPI 呈現 =====
+  // ===== KPI 呈現（股票版，核心 KPI 加權） =====
   function renderKpiStock(kpi) {
     const tbody   = $('#kpiBody');
     const badBody = $('#kpiBadBody');
@@ -670,9 +687,10 @@
 
     const badList = [];
     let scoreSum   = 0;
-    let scoreCount = 0;
+    let scoreWsum  = 0;
 
-    const addRow = (key, name, fmt, val, desc) => {
+    // weight 只對核心 KPI 給 >0，其餘 0（不進綜合分數）
+    const addRow = (key, name, fmt, val, desc, weight) => {
       const sVal = toStr(fmt, val);
 
       const rating = key ? rateMetric(key, val) : null;
@@ -690,13 +708,13 @@
         });
       }
 
-      if (rating) {
+      if (rating && weight && weight > 0) {
         let pts = 0;
         if (rating.label === 'Strong')          pts = 90;
         else if (rating.label === 'Adequate')   pts = 75;
         else if (rating.label.startsWith('Improve')) pts = 60;
-        scoreSum   += pts;
-        scoreCount += 1;
+        scoreSum  += pts * weight;
+        scoreWsum += weight;
       }
 
       const tr = document.createElement('tr');
@@ -712,131 +730,131 @@
 
     const a = kpi;
 
-    // Tier 1
+    // Tier 1：風險 / 生存
     addSection('Tier 1．生存與尾端風險（Risk / Survival）');
     addRow('maxdd_pct', '最大回撤率 Max Drawdown %',
       'pct', a.maxDdPct,
-      '以本金為基準的最大淨值跌幅');
+      '以本金為基準的最大淨值跌幅', 3);
     addRow(null, '最大回撤金額 Max Drawdown',
       'int', a.maxDd,
-      '累積淨損益的最大下跌金額');
+      '累積淨損益的最大下跌金額', 0);
     addRow('risk_ruin', '破產風險 Risk of Ruin（近似）',
       'pct', a.riskOfRuin,
-      '以 Brownian 近似估算的長期觸及破產線機率（相對排序用）');
+      '以 Brownian 近似估算的長期觸及破產線機率（相對排序用）', 2);
     addRow(null, '最差單日損益 Worst Day PnL',
       'int', a.worstDayPnl,
-      '以出場日統計的單日最差實際損益');
+      '以出場日統計的單日最差實際損益', 0);
     addRow(null, '最差單週損益 Worst Week PnL',
       'int', a.worstWeekPnl,
-      '以出場週統計的單週最差實際損益');
+      '以出場週統計的單週最差實際損益', 0);
     addRow(null, '95% VaR（單筆）',
       'int', a.varLoss,
-      '以單筆損益分布估算的 95% Value-at-Risk 左尾損失門檻');
+      '以單筆損益分布估算的 95% Value-at-Risk 左尾損失門檻', 0);
     addRow(null, '95% CVaR（單筆）',
       'int', a.cvarLoss,
-      'VaR 左尾區間平均損失，衡量尾端風險嚴重度');
+      'VaR 左尾區間平均損失，衡量尾端風險嚴重度', 0);
     addRow(null, '回神時間 Time to Recovery（筆）',
       'int', a.timeToRecoveryTrades,
-      '最大回撤發生至重新創新高所需交易筆數');
+      '最大回撤發生至重新創新高所需交易筆數', 0);
     addRow(null, 'Ulcer Index',
       'f4', a.ulcerIndex,
-      '以 NAV 下跌深度與持續時間綜合計算之痛苦指標');
+      '以 NAV 下跌深度與持續時間綜合計算之痛苦指標', 0);
     addRow(null, 'Recovery Factor',
       'f2', a.recoveryFactor,
-      '總淨利 / 最大回撤，衡量從虧損中恢復能力');
+      '總淨利 / 最大回撤，衡量從虧損中恢復能力', 0);
 
-    // Tier 2
+    // Tier 2：報酬 / 風險調整後報酬
     addSection('Tier 2．報酬與風險調整後報酬（Return / Risk-Adjusted）');
     addRow(null, '總淨利 Net Profit',
       'int', a.totalNet,
-      '全部實際淨損益加總');
+      '全部實際淨損益加總', 0);
     addRow('total_return', '總報酬率 Total Return',
       'pct', a.totalReturnPct,
-      '總淨利 / 本金，未年化');
+      '總淨利 / 本金，未年化', 1);
     addRow('cagr', '年化報酬率 CAGR',
       'pct', a.cagr,
-      '以第一筆與最後一筆出場日期估算年化報酬率');
+      '以第一筆與最後一筆出場日期估算年化報酬率', 4);
     addRow(null, '單筆波動（交易級 Volatility）',
       'int', a.volPerTrade,
-      '單筆實際損益標準差，未年化');
+      '單筆實際損益標準差，未年化', 0);
     addRow('sharpe', 'Sharpe Ratio（交易級）',
       'f2', a.sharpeTrade,
-      '以單筆期望 / 單筆波動估算 Sharpe');
+      '以單筆期望 / 單筆波動估算 Sharpe', 3);
     addRow('sortino', 'Sortino Ratio（交易級）',
       'f2', a.sortinoTrade,
-      '只用負報酬計算下行風險的 Sharpe 變形');
+      '只用負報酬計算下行風險的 Sharpe 變形', 1);
     addRow('calmar', 'Calmar Ratio',
       'f2', a.calmar,
-      '年化報酬率 / 最大回撤率');
+      '年化報酬率 / 最大回撤率', 2);
 
-    // Tier 3
+    // Tier 3：交易品質
     addSection('Tier 3．交易品質與結構（Trade Quality / Structure）');
     addRow(null, '交易筆數 #Trades',
       'int', a.nTrades,
-      '完整進出場筆數');
+      '完整進出場筆數', 0);
     addRow('winrate', '勝率 Hit Rate',
       'pct', a.winRate,
-      '獲利筆數 / 總筆數');
+      '獲利筆數 / 總筆數', 2);
     addRow(null, '平均單筆損益 Avg Trade PnL',
       'int', a.avg,
-      '實際淨損益平均值');
+      '實際淨損益平均值', 0);
     addRow(null, '平均獲利 Avg Win',
       'int', a.avgWin,
-      '所有獲利單平均損益');
+      '所有獲利單平均損益', 0);
     addRow(null, '平均虧損 Avg Loss',
       'int', a.avgLoss,
-      '所有虧損單平均損益');
+      '所有虧損單平均損益', 0);
     addRow(null, '賺賠比 Payoff Ratio',
       'f2', a.payoff,
-      '平均獲利 / |平均虧損|，需與勝率一起看');
+      '平均獲利 / |平均虧損|，需與勝率一起看', 1);
     addRow(null, '單筆期望值 Expectancy',
       'int', a.expectancy,
-      '每筆交易期望損益');
+      '每筆交易期望損益', 0);
     addRow('pf', '獲利因子 Profit Factor',
       'f2', a.pf,
-      '總獲利 / |總虧損|');
+      '總獲利 / |總虧損|', 1);
     addRow(null, '總獲利 Gross Profit',
       'int', a.grossProfit,
-      '所有獲利單損益加總');
+      '所有獲利單損益加總', 0);
     addRow(null, '總虧損 Gross Loss',
       'int', a.grossLoss,
-      '所有虧損單損益加總');
+      '所有虧損單損益加總', 0);
     addRow(null, '最大獲利單 Largest Win',
       'int', a.largestWin,
-      '單筆最大實際獲利');
+      '單筆最大實際獲利', 0);
     addRow(null, '最大虧損單 Largest Loss',
       'int', a.largestLoss,
-      '單筆最大實際虧損');
+      '單筆最大實際虧損', 0);
     addRow(null, 'Kelly Fraction（理論值）',
       'f2', a.kelly,
-      '依勝率與賺賠比估算之 Kelly 槓桿（僅供參考）');
+      '依勝率與賺賠比估算之 Kelly 槓桿（僅供參考）', 0);
 
-    // Tier 4
+    // Tier 4：穩定度
     addSection('Tier 4．路徑與穩定度（Path / Stability）');
-    addRow(null, 'Equity Stability R²',
+    addRow('stabilityR2', 'Equity Stability R²',
       'f3', a.stabilityR2,
-      '以 NAV 對時間做線性回歸的 R²，越接近 1 越平滑');
+      '以 NAV 對時間做線性回歸的 R²，越接近 1 越平滑', 2);
 
-    // Tier 5
+    // Tier 5：成本 / 週轉
     addSection('Tier 5．成本、槓桿與執行（Cost / Turnover / Execution）');
     addRow(null, '交易天數 Trading Days',
       'int', a.tradingDays,
-      '有出場交易的日期數');
+      '有出場交易的日期數', 0);
     addRow(null, '平均每日交易數 Trades / Day',
       'f2', a.tradesPerDay,
-      '交易筆數 / 交易天數');
+      '交易筆數 / 交易天數', 0);
     addRow(null, '平均持倉時間 Avg Holding Time（分鐘）',
       'f1', a.avgHoldMin,
-      '進場到出場的平均持有時間');
+      '進場到出場的平均持有時間', 0);
     addRow(null, '名目週轉率 Turnover（Notional / Capital）',
       'f2', a.turnover,
-      '所有進場名目金額 / 本金');
+      '所有進場名目金額 / 本金', 0);
     addRow('cost_ratio', '成本佔交易金額比 Transaction Cost Ratio',
       'pct', a.costRatio,
-      '近似：(手續費+稅) / (總交易金額)');
+      '近似：(手續費+稅) / (總交易金額)', 2);
     addRow(null, '總交易成本 Total Trading Cost',
       'int', a.totalCost,
-      '以 (價格差 * 股數 - 稅後損益) 估計之成本總額');
+      '以 (價格差 * 股數 - 稅後損益) 估計之成本總額', 0);
 
     if (!badList.length) {
       badBody.innerHTML =
@@ -856,11 +874,11 @@
       });
     }
 
-    const score = scoreCount > 0 ? (scoreSum / scoreCount) : null;
+    const score = scoreWsum > 0 ? (scoreSum / scoreWsum) : null;
     renderScore(score);
   }
 
-  // ===== 每週聚合 =====
+  // ===== 每週聚合（主圖用） =====
   function aggregateWeekly(dates, vals) {
     const outDates = [];
     const outVals  = [];
@@ -1017,8 +1035,8 @@
     });
   }
 
-  // ===== 每週損益圖 =====
-  function renderWeeklyPnlChart(weekDates, weekPnls) {
+  // ===== 每週損益圖（補零週） =====
+  function renderWeeklyPnlChartFromTrades(trades) {
     const canvas = $('#weeklyPnlChart');
     if (!canvas || !window.Chart) return;
     const ctx = canvas.getContext('2d');
@@ -1027,23 +1045,61 @@
       gWeeklyChart.destroy();
       gWeeklyChart = null;
     }
-    if (!weekDates.length) return;
+    if (!trades.length) return;
 
-    const labels = weekDates.map((d, i) => i + 1);
+    const weekMap = {};
+    const exitDates = trades.map(t => tsToDate(t.exitDate + (t.exitTime || '')));
+
+    trades.forEach((t, i) => {
+      const d = exitDates[i];
+      if (!d) return;
+      const key = dateWeekKey(d);
+      if (!weekMap[key]) {
+        weekMap[key] = { sum: 0, date: d };
+      } else if (d > weekMap[key].date) {
+        weekMap[key].date = d;
+      }
+      weekMap[key].sum += t.pnlNet;
+    });
+
+    const firstDate = exitDates[0];
+    const lastDate  = exitDates[exitDates.length - 1];
+    if (!firstDate || !lastDate) return;
+
+    const weekDatesArr = [];
+    const weekPnlsArr  = [];
+
+    let cur = new Date(firstDate.getTime());
+    cur.setHours(0,0,0,0);
+
+    while (cur <= lastDate) {
+      const key = dateWeekKey(cur);
+      const rec = weekMap[key];
+      if (rec) {
+        weekDatesArr.push(rec.date);
+        weekPnlsArr.push(rec.sum);
+      } else {
+        weekDatesArr.push(new Date(cur.getTime()));
+        weekPnlsArr.push(0);
+      }
+      cur.setDate(cur.getDate() + 7);
+    }
+
+    const labels = weekDatesArr.map((d, i) => i + 1);
     const tickIndexToLabel = {};
-    const last = weekDates.length - 1;
+    const last = weekDatesArr.length - 1;
     const ratios = [0, 0.25, 0.5, 0.75, 1];
     ratios.forEach(r => {
       const idx = Math.round(last * r);
-      const d   = weekDates[idx];
+      const d   = weekDatesArr[idx];
       if (!d) return;
       const y = d.getFullYear();
       const m = d.getMonth() + 1;
       tickIndexToLabel[idx] = `${y}/${m}`;
     });
 
-    const pos = weekPnls.map(v => (v > 0 ? v : null));
-    const neg = weekPnls.map(v => (v < 0 ? v : null));
+    const pos = weekPnlsArr.map(v => (v > 0 ? v : null));
+    const neg = weekPnlsArr.map(v => (v < 0 ? v : null));
 
     gWeeklyChart = new Chart(ctx, {
       type: 'bar',
@@ -1086,7 +1142,7 @@
             callbacks: {
               title: function (items) {
                 const idx = items[0].dataIndex;
-                const d   = weekDates[idx];
+                const d   = weekDatesArr[idx];
                 if (!d) return '';
                 const y = d.getFullYear();
                 const m = (d.getMonth() + 1).toString().padStart(2, '0');
@@ -1132,10 +1188,15 @@
       paramLine.textContent = parsed && parsed.header ? parsed.header : '';
     }
 
+    // 更新工具列 FeeRate / MinFee / 商品
+    $('#feeRateInput').value = CFG.feeRate;
+    $('#minFeeInput').value = CFG.minFee;
+    $('#assetType').value   = CFG.isETF ? 'etf' : 'stock';
+
     if (!parsed || !parsed.trades.length) {
       renderKpiStock(null);
       renderEquityChart([], []);
-      renderWeeklyPnlChart([], []);
+      if (gWeeklyChart) { gWeeklyChart.destroy(); gWeeklyChart = null; }
       return;
     }
 
@@ -1168,26 +1229,7 @@
     const equitySeries = trades.map(t => t.cumNet);
     renderEquityChart(exitDates, equitySeries);
 
-    const weekMap = {};
-    trades.forEach(t => {
-      const d = tsToDate(t.exitDate + (t.exitTime || ''));
-      if (!d) return;
-      const key = dateWeekKey(d);
-      if (!weekMap[key]) {
-        weekMap[key] = { sum: 0, date: d };
-      } else if (d > weekMap[key].date) {
-        weekMap[key].date = d;
-      }
-      weekMap[key].sum += t.pnlNet;
-    });
-    const weekKeys = Object.keys(weekMap).sort();
-    const weekDatesArr = [];
-    const weekPnlsArr  = [];
-    weekKeys.forEach(k => {
-      weekDatesArr.push(weekMap[k].date);
-      weekPnlsArr.push(weekMap[k].sum);
-    });
-    renderWeeklyPnlChart(weekDatesArr, weekPnlsArr);
+    renderWeeklyPnlChartFromTrades(trades);
   }
 
   // ===== 事件綁定 =====
@@ -1204,6 +1246,21 @@
     }
   });
 
+  $('#assetType').addEventListener('change', function () {
+    CFG.isETF = (this.value === 'etf');
+    // 目前只記錄，不改動既有稅後損益；之後若有需要可讓 KPI 針對 ETF / 股票做不同解讀
+  });
+
+  $('#feeRateInput').addEventListener('change', function () {
+    const v = Number(this.value);
+    if (isFinite(v) && v > 0) CFG.feeRate = v;
+  });
+
+  $('#minFeeInput').addEventListener('change', function () {
+    const v = Number(this.value);
+    if (isFinite(v) && v >= 0) CFG.minFee = v;
+  });
+
   $('#runBtn').addEventListener('click', function () {
     if (!gFile) {
       alert('請先選擇 1031 TXT 檔案');
@@ -1216,7 +1273,7 @@
       gParsed = parsed;
       renderTrades(parsed);
     };
-    // ★ 關鍵修正：指定用 Big5 解碼（XQ 1031 TXT 預設 Big5）
+    // XQ 1031 TXT 多半為 Big5 編碼
     reader.readAsText(gFile, 'big5');
   });
 
