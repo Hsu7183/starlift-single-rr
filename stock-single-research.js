@@ -4,13 +4,12 @@
 (function () {
   'use strict';
 
-  // ===== 全域設定 =====
   const CFG = {
     capital: 1000000,
     feeRate: 0.001425,
     minFee: 20,
     isETF: true,
-    taxRate: 0.001      // 預設 ETF 稅率
+    taxRate: 0.001    // ETF 預設 0.1%
   };
 
   let gParsed = null;
@@ -20,27 +19,11 @@
 
   const $ = (s) => document.querySelector(s);
 
-  const fmtInt = (n) => {
-    if (n == null || !isFinite(n)) return '—';
-    return Math.round(n).toLocaleString('en-US');
-  };
-  const fmtSignedInt = (n) => {
-    if (n == null || !isFinite(n)) return '—';
-    const v = Math.round(n);
-    return v.toLocaleString('en-US');
-  };
-  const fmtPct = (p) => {
-    if (p == null || !isFinite(p)) return '—';
-    return (p * 100).toFixed(2) + '%';
-  };
-  const fmtFloat = (x, d) => {
-    if (x == null || !isFinite(x)) return '—';
-    return x.toFixed(d);
-  };
-  const clsForNumber = (n) => {
-    if (n == null || !isFinite(n) || n === 0) return '';
-    return n > 0 ? 'num-pos' : 'num-neg';
-  };
+  const fmtInt = (n) => (n == null || !isFinite(n) ? '—' : Math.round(n).toLocaleString('en-US'));
+  const fmtSignedInt = (n) => (n == null || !isFinite(n) ? '—' : Math.round(n).toLocaleString('en-US'));
+  const fmtPct = (p) => (p == null || !isFinite(p) ? '—' : (p * 100).toFixed(2) + '%');
+  const fmtFloat = (x, d) => (x == null || !isFinite(x) ? '—' : x.toFixed(d));
+  const clsForNumber = (n) => (!n || !isFinite(n) ? '' : (n > 0 ? 'num-pos' : 'num-neg'));
 
   function tsToDate(ts) {
     if (!ts) return null;
@@ -63,10 +46,7 @@
     const m = parseInt(d.slice(4, 6), 10);
     const dd = parseInt(d.slice(6, 8), 10);
     let hh = '00', mm = '00';
-    if (t.length >= 4) {
-      hh = t.slice(0, 2);
-      mm = t.slice(2, 4);
-    }
+    if (t.length >= 4) { hh = t.slice(0, 2); mm = t.slice(2, 4); }
     return `${y}/${m}/${dd} ${hh}:${mm}`;
   }
 
@@ -86,7 +66,7 @@
     return tmp.getUTCFullYear() + '-W' + (weekNo < 10 ? '0' + weekNo : weekNo);
   }
 
-  // ===== 解析 1031 TXT（含加碼 / 再加碼） =====
+  // ===== 解析 1031 TXT（包含買進 / 加碼 / 再加碼） =====
   function parseStockTxt(text) {
     const lines = text.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
     if (!lines.length) return { header: null, params: {}, trades: [], daily: {} };
@@ -106,20 +86,12 @@
       params[key] = isFinite(num) ? num : valStr;
     });
 
-    // Fee / MinFee / IsETF / TaxRate
-    if (params.FeeRate != null && isFinite(params.FeeRate)) {
-      CFG.feeRate = Number(params.FeeRate);
-    }
-    if (params.MinFee != null && isFinite(params.MinFee)) {
-      CFG.minFee = Number(params.MinFee);
-    }
-    if (params.IsETF != null) {
-      CFG.isETF = Number(params.IsETF) === 1;
-    }
+    if (params.FeeRate != null && isFinite(params.FeeRate)) CFG.feeRate = Number(params.FeeRate);
+    if (params.MinFee != null && isFinite(params.MinFee)) CFG.minFee   = Number(params.MinFee);
+    if (params.IsETF  != null) CFG.isETF = Number(params.IsETF) === 1;
 
     const taxOverride = (params.TaxRateOverride != null && isFinite(params.TaxRateOverride))
-      ? Number(params.TaxRateOverride)
-      : 0;
+      ? Number(params.TaxRateOverride) : 0;
     if (taxOverride > 0) {
       CFG.taxRate = taxOverride;
     } else {
@@ -127,20 +99,20 @@
     }
 
     const dailyClose = {};
-    const tidInfo   = {};   // tid -> { legs:[], entryDate, entryTime, entryAvgRef }
-    const trades    = [];
-    let cumNet      = 0;
+    const tidInfo = {};  // tid -> { entryDate, entryTime, entryAvgRef, legs:[{kind,price,units,lotShares}] }
+    const trades  = [];
+    let cumNet    = 0;
 
     for (let i = 1; i < lines.length; i++) {
       const line = lines[i];
       const cols = line.split(',');
       if (cols.length < 5) continue;
 
-      const date = cols[0];
-      const time = cols[1];
-      const price = Number(cols[2]);
+      const date   = cols[0];
+      const time   = cols[1];
+      const price  = Number(cols[2]);
       const action = cols[3];
-      const tail = cols.slice(4).map(s => s.trim()).filter(Boolean);
+      const tail   = cols.slice(4).map(s => s.trim()).filter(Boolean);
 
       const kv = {};
       tail.forEach(tok => {
@@ -152,6 +124,7 @@
         kv[k] = v;
       });
 
+      // 日線
       if (action === '日線') {
         const closeStr = kv['closeD'] || kv['close'] || '';
         const c = Number(closeStr);
@@ -159,6 +132,7 @@
         continue;
       }
 
+      // 買進 / 加碼 / 再加碼：記錄 legs
       if (action === '買進' || action === '加碼攤平' || action === '再加碼攤平') {
         const tid = kv['tid'];
         if (!tid) continue;
@@ -182,6 +156,7 @@
         if (isFinite(avgRefBuy)) info.entryAvgRef = avgRefBuy;
 
         info.legs.push({
+          kind: action,
           date,
           time,
           price,
@@ -191,6 +166,7 @@
         continue;
       }
 
+      // 賣出：整筆交易結算
       if (action === '賣出') {
         const tid = kv['tid'];
         if (!tid) continue;
@@ -203,17 +179,22 @@
           legs: []
         };
 
-        // 聚合股數與本金
         let totalShares = 0;
         let buyNotional = 0;
+        let nBuy = 0, nAdd1 = 0, nAdd2 = 0;
+
         info.legs.forEach(leg => {
           const sharesLeg = (leg.units || 0) * (leg.lotShares || 0);
           if (!sharesLeg) return;
           totalShares += sharesLeg;
           buyNotional += leg.price * sharesLeg;
+
+          if (leg.kind === '買進') nBuy += leg.units || 0;
+          else if (leg.kind === '加碼攤平') nAdd1 += leg.units || 0;
+          else if (leg.kind === '再加碼攤平') nAdd2 += leg.units || 0;
         });
 
-        // 若 legs 沒有，從「累計成本 / avgRef」反推股數（fallback）
+        // 如果 legs 為空，用 avgRef + 累計成本 反推
         if (!totalShares) {
           const avgRef4 = Number(kv['avgRef'] || info.entryAvgRef || price);
           const accCost = Number(kv['累計成本'] || 0);
@@ -238,7 +219,7 @@
         const exitPrice = price;
         const sellNotional = totalShares ? exitPrice * totalShares : 0;
 
-        // 用價格差推總 cost，再拆手續費 + 交易稅
+        // 用價格差推總成本，再拆稅 / 手續費
         let gross = null;
         let cost = null;
         if (isFinite(priceDiff) && totalShares) {
@@ -257,6 +238,11 @@
         const avgCostPerShare = totalShares ? (totalCost / totalShares) : null;
 
         cumNet += pnlNet;
+
+        // 進出結構描述
+        const structure = {
+          nBuy, nAdd1, nAdd2
+        };
 
         trades.push({
           idx: trades.length + 1,
@@ -285,7 +271,8 @@
           maxPxInHold,
           gross,
           cost,
-          cumPnlFromFile
+          cumPnlFromFile,
+          structure
         });
       }
     }
@@ -415,7 +402,7 @@
     `;
   }
 
-  // ===== KPI 計算（與前一版相同，略過註解） =====
+  // ===== KPI 計算（與上一版相同，保留） =====
   function calcKpiStock(trades) {
     const n = trades.length;
     if (!n) return null;
@@ -454,9 +441,7 @@
     const sharpeTrade = stdev > 0 ? (mean / stdev) * Math.sqrt(n) : null;
 
     let downsideSq = 0, downsideCnt = 0;
-    pnls.forEach(p => {
-      if (p < 0) { downsideSq += p * p; downsideCnt++; }
-    });
+    pnls.forEach(p => { if (p < 0) { downsideSq += p * p; downsideCnt++; } });
     const downsideDev  = downsideCnt > 0 ? Math.sqrt(downsideSq / downsideCnt) : 0;
     const sortinoTrade = downsideDev > 0 ? (mean / downsideDev) * Math.sqrt(n) : null;
 
@@ -543,11 +528,9 @@
     }
 
     let riskOfRuin = null;
-    if (varT <= 0) {
-      riskOfRuin = null;
-    } else if (avg <= 0) {
-      riskOfRuin = 1;
-    } else {
+    if (varT <= 0)      riskOfRuin = null;
+    else if (avg <= 0)  riskOfRuin = 1;
+    else {
       const mu     = avg;
       const sigma2 = varT;
       const exponent = -2 * mu * CFG.capital / sigma2;
@@ -557,9 +540,9 @@
 
     let totalCost = 0, totalGrossAbs = 0, notionalTraded = 0;
     trades.forEach(t => {
-      if (t.totalCost != null && isFinite(t.totalCost)) {
-        totalCost += Math.max(0, t.totalCost - t.buyNotional);
-      }
+      const feeTax = (t.totalCost != null && isFinite(t.totalCost))
+        ? (t.totalCost - t.buyNotional) : 0;
+      totalCost += Math.max(0, feeTax);
       const grossAbs = t.buyNotional + t.sellNotional;
       totalGrossAbs += grossAbs;
       if (t.buyNotional) notionalTraded += t.buyNotional;
@@ -637,7 +620,7 @@
     };
   }
 
-  // ===== KPI 呈現（股票版，核心 KPI 加權） =====
+  // ===== KPI 呈現（股票核心 KPI 加權） =====
   function renderKpiStock(kpi) {
     const tbody   = $('#kpiBody');
     const badBody = $('#kpiBadBody');
@@ -660,10 +643,10 @@
         if (v < 0.0001) return '<0.01%';
         return fmtPct(v);
       }
-      if (fmt === 'f1')   return fmtFloat(v, 1);
-      if (fmt === 'f2')   return fmtFloat(v, 2);
-      if (fmt === 'f3')   return fmtFloat(v, 3);
-      if (fmt === 'f4')   return fmtFloat(v, 4);
+      if (fmt === 'f1') return fmtFloat(v, 1);
+      if (fmt === 'f2') return fmtFloat(v, 2);
+      if (fmt === 'f3') return fmtFloat(v, 3);
+      if (fmt === 'f4') return fmtFloat(v, 4);
       return fmtInt(v);
     };
 
@@ -677,6 +660,8 @@
     let scoreSum   = 0;
     let scoreWsum  = 0;
 
+    // 權重：CAGR(4) / Sharpe(3) / MaxDD%(3) / TotalReturn(1) / Calmar(2) /
+    //       WinRate(2) / Payoff(1) / PF(1) / CostRatio(2) / StabilityR2(2) / RiskOfRuin(1)
     const addRow = (key, name, fmt, val, desc, weight) => {
       const sVal = toStr(fmt, val);
 
@@ -686,19 +671,13 @@
       const refRange    = rating ? rating.ref      : '—';
 
       if (rating && rating.label && rating.label.startsWith('Improve')) {
-        badList.push({
-          name,
-          valueStr: sVal,
-          ratingLabel,
-          ratingClass,
-          refRange
-        });
+        badList.push({ name, valueStr: sVal, ratingLabel, ratingClass, refRange });
       }
 
       if (rating && weight && weight > 0) {
         let pts = 0;
-        if (rating.label === 'Strong')          pts = 90;
-        else if (rating.label === 'Adequate')   pts = 75;
+        if (rating.label === 'Strong')             pts = 90;
+        else if (rating.label === 'Adequate')      pts = 75;
         else if (rating.label.startsWith('Improve')) pts = 60;
         scoreSum  += pts * weight;
         scoreWsum += weight;
@@ -717,16 +696,41 @@
 
     const a = kpi;
 
-    addSection('Tier 1．生存與尾端風險（Risk / Survival）');
+    // Tier 1：報酬 + 風險調整後報酬（股票核心）
+    addSection('Tier 1．報酬與風險調整後報酬（Return / Risk-Adjusted）');
+    addRow('cagr', '年化報酬率 CAGR',
+      'pct', a.cagr,
+      '以第一筆與最後一筆出場日期估算年化報酬率', 4);
+    addRow('total_return', '總報酬率 Total Return',
+      'pct', a.totalReturnPct,
+      '總淨利 / 本金，未年化', 1);
+    addRow(null, '總淨利 Net Profit',
+      'int', a.totalNet,
+      '全部實際淨損益加總', 0);
+    addRow(null, '單筆波動（交易級 Volatility）',
+      'int', a.volPerTrade,
+      '單筆實際損益標準差，未年化', 1);
+    addRow('sharpe', 'Sharpe Ratio（交易級）',
+      'f2', a.sharpeTrade,
+      '以單筆期望 / 單筆波動估算 Sharpe', 3);
+    addRow('sortino', 'Sortino Ratio（交易級）',
+      'f2', a.sortinoTrade,
+      '只用負報酬計算下行風險的 Sharpe 變形', 1);
+
+    // Tier 2：風險與 drawdown
+    addSection('Tier 2．風險與 Drawdown（Risk / Drawdown）');
     addRow('maxdd_pct', '最大回撤率 Max Drawdown %',
       'pct', a.maxDdPct,
       '以本金為基準的最大淨值跌幅', 3);
     addRow(null, '最大回撤金額 Max Drawdown',
       'int', a.maxDd,
       '累積淨損益的最大下跌金額', 0);
+    addRow('calmar', 'Calmar Ratio',
+      'f2', a.calmar,
+      '年化報酬率 / 最大回撤率', 2);
     addRow('risk_ruin', '破產風險 Risk of Ruin（近似）',
       'pct', a.riskOfRuin,
-      '以 Brownian 近似估算的長期觸及破產線機率（相對排序用）', 2);
+      '長期觸及破產線估算機率（排序用）', 1);
     addRow(null, '最差單日損益 Worst Day PnL',
       'int', a.worstDayPnl,
       '以出場日統計的單日最差實際損益', 0);
@@ -739,39 +743,17 @@
     addRow(null, '95% CVaR（單筆）',
       'int', a.cvarLoss,
       'VaR 左尾區間平均損失，衡量尾端風險嚴重度', 0);
-    addRow(null, '回神時間 Time to Recovery（筆）',
-      'int', a.timeToRecoveryTrades,
-      '最大回撤發生至重新創新高所需交易筆數', 0);
     addRow(null, 'Ulcer Index',
       'f4', a.ulcerIndex,
       '以 NAV 下跌深度與持續時間綜合計算之痛苦指標', 0);
     addRow(null, 'Recovery Factor',
       'f2', a.recoveryFactor,
       '總淨利 / 最大回撤，衡量從虧損中恢復能力', 0);
+    addRow(null, '回神時間 Time to Recovery（筆）',
+      'int', a.timeToRecoveryTrades,
+      '最大回撤發生至重新創高所需交易筆數', 0);
 
-    addSection('Tier 2．報酬與風險調整後報酬（Return / Risk-Adjusted）');
-    addRow(null, '總淨利 Net Profit',
-      'int', a.totalNet,
-      '全部實際淨損益加總', 0);
-    addRow('total_return', '總報酬率 Total Return',
-      'pct', a.totalReturnPct,
-      '總淨利 / 本金，未年化', 1);
-    addRow('cagr', '年化報酬率 CAGR',
-      'pct', a.cagr,
-      '以第一筆與最後一筆出場日期估算年化報酬率', 4);
-    addRow(null, '單筆波動（交易級 Volatility）',
-      'int', a.volPerTrade,
-      '單筆實際損益標準差，未年化', 0);
-    addRow('sharpe', 'Sharpe Ratio（交易級）',
-      'f2', a.sharpeTrade,
-      '以單筆期望 / 單筆波動估算 Sharpe', 3);
-    addRow('sortino', 'Sortino Ratio（交易級）',
-      'f2', a.sortinoTrade,
-      '只用負報酬計算下行風險的 Sharpe 變形', 1);
-    addRow('calmar', 'Calmar Ratio',
-      'f2', a.calmar,
-      '年化報酬率 / 最大回撤率', 2);
-
+    // Tier 3：交易品質
     addSection('Tier 3．交易品質與結構（Trade Quality / Structure）');
     addRow(null, '交易筆數 #Trades',
       'int', a.nTrades,
@@ -813,12 +795,14 @@
       'f2', a.kelly,
       '依勝率與賺賠比估算之 Kelly 槓桿（僅供參考）', 0);
 
+    // Tier 4：路徑穩定度
     addSection('Tier 4．路徑與穩定度（Path / Stability）');
     addRow('stabilityR2', 'Equity Stability R²',
       'f3', a.stabilityR2,
       '以 NAV 對時間做線性回歸的 R²，越接近 1 越平滑', 2);
 
-    addSection('Tier 5．成本、槓桿與執行（Cost / Turnover / Execution）');
+    // Tier 5：成本與週轉
+    addSection('Tier 5．成本、週轉與執行（Cost / Turnover / Execution）');
     addRow(null, '交易天數 Trading Days',
       'int', a.tradingDays,
       '有出場交易的日期數', 0);
@@ -836,7 +820,7 @@
       '近似：(手續費+稅) / (總交易金額)', 2);
     addRow(null, '總交易成本 Total Trading Cost',
       'int', a.totalCost,
-      '以 (價格差 * 股數 - 稅後損益) 估計之成本總額', 0);
+      '手續費 + 稅之總和', 0);
 
     if (!badList.length) {
       badBody.innerHTML =
@@ -860,7 +844,7 @@
     renderScore(score);
   }
 
-  // ===== 每週聚合（主圖） =====
+  // ===== 主資產曲線（週聚合） =====
   function aggregateWeekly(dates, vals) {
     const outDates = [];
     const outVals  = [];
@@ -993,9 +977,7 @@
               autoSkip: false,
               maxRotation: 0,
               minRotation: 0,
-              callback: function (value, index) {
-                return tickIndexToLabel[index] || '';
-              }
+              callback: (value, index) => tickIndexToLabel[index] || ''
             }
           },
           y: {
@@ -1057,8 +1039,7 @@
     const labels = weekDatesArr.map((d, i) => i + 1);
     const tickIndexToLabel = {};
     const last = weekDatesArr.length - 1;
-    const ratios = [0, 0.25, 0.5, 0.75, 1];
-    ratios.forEach(r => {
+    [0,0.25,0.5,0.75,1].forEach(r => {
       const idx = Math.round(last * r);
       const d   = weekDatesArr[idx];
       if (!d) return;
@@ -1127,9 +1108,7 @@
               autoSkip: false,
               maxRotation: 0,
               minRotation: 0,
-              callback: function (value, index) {
-                return tickIndexToLabel[index] || '';
-              }
+              callback: (value, index) => tickIndexToLabel[index] || ''
             }
           },
           y: {
@@ -1141,7 +1120,25 @@
     });
   }
 
-  // ===== 交易明細 + 重新計算 =====
+  // ===== 交易明細（美化 + 結構 chips） =====
+  function buildStructureChips(structure) {
+    const parts = [];
+    if (structure) {
+      if (structure.nBuy) {
+        parts.push(`<span class="leg-chip leg-buy">買${structure.nBuy}</span>`);
+      }
+      if (structure.nAdd1) {
+        parts.push(`<span class="leg-chip leg-add1">加${structure.nAdd1}</span>`);
+      }
+      if (structure.nAdd2) {
+        parts.push(`<span class="leg-chip leg-add2">再${structure.nAdd2}</span>`);
+      }
+    }
+    // 賣出固定顯示一個綠色 chip
+    parts.push(`<span class="leg-chip leg-sell">賣</span>`);
+    return parts.join('');
+  }
+
   function renderTrades(parsed) {
     const tbody = $('#tradesBody');
     tbody.innerHTML = '';
@@ -1151,7 +1148,7 @@
       paramLine.textContent = parsed && parsed.header ? parsed.header : '';
     }
 
-    // 更新工具列 Fee / MinFee / 稅率 / 商品
+    // 工具列同步 Fee / MinFee / 稅率 / 商品
     $('#feeRateInput').value   = CFG.feeRate;
     $('#minFeeInput').value    = CFG.minFee;
     $('#assetType').value      = CFG.isETF ? 'etf' : 'stock';
@@ -1171,6 +1168,7 @@
       tr.innerHTML = `
         <td>${t.idx}</td>
         <td>${t.tid}</td>
+        <td style="text-align:left;">${buildStructureChips(t.structure)}</td>
         <td>${formatTs(t.entryDate, t.entryTime)}</td>
         <td>${formatTs(t.exitDate, t.exitTime)}</td>
         <td>${fmtInt(t.shares)}</td>
@@ -1196,7 +1194,6 @@
     const exitDates = trades.map(t => tsToDate(t.exitDate + (t.exitTime || '')));
     const equitySeries = trades.map(t => t.cumNet);
     renderEquityChart(exitDates, equitySeries);
-
     renderWeeklyPnlChartFromTrades(trades);
   }
 
@@ -1214,19 +1211,22 @@
     }
   });
 
+  // 商品切換時，同步交易稅率（即使尚未載入 TXT）
   $('#assetType').addEventListener('change', function () {
     CFG.isETF = (this.value === 'etf');
-    if (gParsed) {
-      const override = (gParsed.params.TaxRateOverride != null &&
-                        isFinite(gParsed.params.TaxRateOverride))
-                        ? Number(gParsed.params.TaxRateOverride) : 0;
-      if (override > 0) {
-        CFG.taxRate = override;
-      } else {
-        CFG.taxRate = CFG.isETF ? 0.001 : 0.003;
-      }
-      renderTrades(gParsed);
+    let override = 0;
+    if (gParsed && gParsed.params &&
+        gParsed.params.TaxRateOverride != null &&
+        isFinite(gParsed.params.TaxRateOverride)) {
+      override = Number(gParsed.params.TaxRateOverride);
     }
+    if (override > 0) {
+      CFG.taxRate = override;
+    } else {
+      CFG.taxRate = CFG.isETF ? 0.001 : 0.003;
+    }
+    $('#taxRateDisplay').value = CFG.taxRate.toFixed(6);
+    if (gParsed) renderTrades(gParsed);
   });
 
   $('#feeRateInput').addEventListener('change', function () {
@@ -1251,7 +1251,7 @@
       gParsed = parsed;
       renderTrades(parsed);
     };
-    reader.readAsText(gFile, 'big5');   // 1031 TXT 為 Big5
+    reader.readAsText(gFile, 'big5');   // 1031 TXT 為 Big5 編碼
   });
 
 })();
