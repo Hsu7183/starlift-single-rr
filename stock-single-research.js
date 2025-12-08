@@ -248,7 +248,7 @@
     };
   }
 
-  // ===== KPI 評等規則（沿用 single-trades 的邏輯） =====
+  // ===== KPI 評等規則 =====
   function rateMetric(key, value) {
     if (value == null || !isFinite(value)) return null;
 
@@ -632,7 +632,7 @@
     };
   }
 
-  // ===== KPI 呈現（單一版本） =====
+  // ===== KPI 呈現 =====
   function renderKpiStock(kpi) {
     const tbody   = $('#kpiBody');
     const badBody = $('#kpiBadBody');
@@ -838,7 +838,6 @@
       'int', a.totalCost,
       '以 (價格差 * 股數 - 稅後損益) 估計之成本總額');
 
-    // 建議優化指標卡片
     if (!badList.length) {
       badBody.innerHTML =
         '<tr><td colspan="5" style="color:#777;">目前沒有需要特別優化的指標。</td></tr>';
@@ -861,7 +860,7 @@
     renderScore(score);
   }
 
-  // ===== 每週聚合工具（主圖用） =====
+  // ===== 每週聚合 =====
   function aggregateWeekly(dates, vals) {
     const outDates = [];
     const outVals  = [];
@@ -892,7 +891,7 @@
     return { dates: outDates, vals: outVals };
   }
 
-  // ===== 主資產曲線（週聚合） =====
+  // ===== 主資產曲線 =====
   function renderEquityChart(exitDates, equitySeries) {
     const canvas = $('#equityChart');
     if (!canvas || !window.Chart) return;
@@ -903,7 +902,6 @@
     const vals      = agg.vals;
     const labels    = vals.map((_, i) => i + 1);
 
-    // 最高 / 最低點
     let maxVal = -Infinity, minVal = Infinity;
     let maxIdx = null,      minIdx = null;
     for (let i = 1; i < vals.length; i++) {
@@ -1141,9 +1139,8 @@
       return;
     }
 
-    const trades = parsed.trades.slice(); // 已經排序依照 TXT 順序
+    const trades = parsed.trades.slice();
 
-    // 填交易表格
     trades.forEach(t => {
       const tr = document.createElement('tr');
       tr.innerHTML = `
@@ -1164,16 +1161,13 @@
       tbody.appendChild(tr);
     });
 
-    // KPI
     const kpi = calcKpiStock(trades);
     renderKpiStock(kpi);
 
-    // 主圖：累積損益
     const exitDates = trades.map(t => tsToDate(t.exitDate + (t.exitTime || '')));
     const equitySeries = trades.map(t => t.cumNet);
     renderEquityChart(exitDates, equitySeries);
 
-    // 副圖：每週損益
     const weekMap = {};
     trades.forEach(t => {
       const d = tsToDate(t.exitDate + (t.exitTime || ''));
@@ -1222,7 +1216,8 @@
       gParsed = parsed;
       renderTrades(parsed);
     };
-    reader.readAsText(gFile);
+    // ★ 關鍵修正：指定用 Big5 解碼（XQ 1031 TXT 預設 Big5）
+    reader.readAsText(gFile, 'big5');
   });
 
 })();
