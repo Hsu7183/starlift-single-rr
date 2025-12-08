@@ -62,12 +62,12 @@
       line-height: 1.3;
     }
 
-    /* 工具列（本金 / 商品 / 手續費 / 交易稅 / TXT） */
+    /* 工具列（本金 / 商品 / 交易稅 / 手續費 / TXT） */
     .toolbar {
       flex: 1 1 auto;
       margin: 0;
       display: flex;
-      flex-wrap: wrap;          /* ✅ 允許換行，TXT 放第二行 */
+      flex-wrap: wrap;          /* 允許換行，TXT 放第二行 */
       gap: 8px;
       align-items: center;
       justify-content: flex-start;
@@ -98,7 +98,7 @@
       white-space: nowrap;
     }
 
-    /* 專門讓 TXT + 按鈕整個換到下一行 */
+    /* TXT 檔放在第二行 */
     .toolbar-block {
       flex: 1 1 100%;
       display: flex;
@@ -181,12 +181,8 @@
       border-radius: 4px;
       padding: 8px;
     }
-    .chart-main {
-      height: 420px;
-    }
-    .chart-weekly {
-      height: 260px;
-    }
+    .chart-main { height: 420px; }
+    .chart-weekly { height: 260px; }
 
     table.trade-table {
       border-collapse: collapse;
@@ -228,6 +224,19 @@
 
     .num-pos { color: #e60000; }
     .num-neg { color: #0a7f00; }
+
+    /* 進出結構的小標籤 */
+    .leg-chip {
+      display: inline-block;
+      padding: 1px 4px;
+      border-radius: 4px;
+      font-size: 10px;
+      margin-right: 2px;
+    }
+    .leg-buy  { background: #ffe5e5; color: #b30000; }
+    .leg-add1 { background: #ffd5d5; color: #b30000; }
+    .leg-add2 { background: #fff0f0; color: #b30000; }
+    .leg-sell{ background: #e5ffe5; color: #006600; }
   </style>
 </head>
 
@@ -257,6 +266,11 @@
       </label>
 
       <label>
+        交易稅率：
+        <input type="number" id="taxRateDisplay" value="0.001000" step="0.0001" disabled>
+      </label>
+
+      <label>
         手續費率：
         <input type="number" id="feeRateInput" value="0.001425" step="0.0001">
       </label>
@@ -264,11 +278,6 @@
       <label>
         最低手續費：
         <input type="number" id="minFeeInput" value="20" step="1">
-      </label>
-
-      <label>
-        交易稅率：
-        <input type="number" id="taxRateDisplay" value="0.001000" step="0.0001" disabled>
       </label>
 
       <!-- 第二行：TXT 檔 + 計算 -->
@@ -331,12 +340,13 @@
     </table>
   </div>
 
-  <!-- 交易明細：一筆交易一行（買 / 加碼 / 再加碼 / 賣出合併） -->
+  <!-- 交易明細：一筆交易一行 -->
   <table class="trade-table">
     <thead class="trade-head">
       <tr>
         <th>#</th>
         <th>tid</th>
+        <th>進出結構</th>
         <th>進場時間</th>
         <th>出場時間</th>
         <th>股數</th>
