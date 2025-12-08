@@ -62,12 +62,12 @@
       line-height: 1.3;
     }
 
-    /* 工具列（本金 / 商品類型 / 手續費 / TXT / 計算） */
+    /* 工具列（本金 / 商品 / 手續費 / 交易稅 / TXT） */
     .toolbar {
       flex: 1 1 auto;
       margin: 0;
       display: flex;
-      flex-wrap: nowrap;
+      flex-wrap: wrap;          /* ✅ 允許換行，TXT 放第二行 */
       gap: 8px;
       align-items: center;
       justify-content: flex-start;
@@ -96,6 +96,14 @@
       padding: 2px 10px;
       cursor: pointer;
       white-space: nowrap;
+    }
+
+    /* 專門讓 TXT + 按鈕整個換到下一行 */
+    .toolbar-block {
+      flex: 1 1 100%;
+      display: flex;
+      align-items: center;
+      gap: 8px;
     }
 
     /* 參數列 */
@@ -259,11 +267,18 @@
       </label>
 
       <label>
-        TXT 檔：
-        <input type="file" id="fileInput" accept=".txt,.csv">
+        交易稅率：
+        <input type="number" id="taxRateDisplay" value="0.001000" step="0.0001" disabled>
       </label>
 
-      <button id="runBtn">計算</button>
+      <!-- 第二行：TXT 檔 + 計算 -->
+      <div class="toolbar-block">
+        <label>
+          TXT 檔：
+          <input type="file" id="fileInput" accept=".txt,.csv">
+        </label>
+        <button id="runBtn">計算</button>
+      </div>
     </div>
   </div>
 
@@ -316,20 +331,24 @@
     </table>
   </div>
 
-  <!-- 交易明細 -->
+  <!-- 交易明細：一筆交易一行（買 / 加碼 / 再加碼 / 賣出合併） -->
   <table class="trade-table">
     <thead class="trade-head">
       <tr>
         <th>#</th>
         <th>tid</th>
         <th>進場時間</th>
-        <th>進場均價</th>
         <th>出場時間</th>
-        <th>出場價</th>
         <th>股數</th>
+        <th>買進本金</th>
+        <th>手續費</th>
+        <th>交易稅</th>
+        <th>總成本</th>
+        <th>每股成本</th>
+        <th>賣出金額</th>
         <th>稅後損益</th>
-        <th>報酬率%</th>
         <th>累積損益</th>
+        <th>報酬率%</th>
         <th>MAE%</th>
         <th>MFE%</th>
         <th>持有(分)</th>
