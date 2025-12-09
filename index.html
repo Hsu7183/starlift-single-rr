@@ -49,7 +49,6 @@
       margin:0 auto 28px;
     }
     .strategy-col{ display:flex; flex-direction:column; gap:12px }
-    .strategy-col.research{ grid-column:1 / span 3; } /* 研發中獨立下一列 */
     .subcat{
       font-weight:700; font-size:16px;
       color:#c62828; margin:0 0 4px 0; text-align:center;
@@ -279,7 +278,7 @@
       <div class="strategy-col">
         <p class="subcat">逆勢型</p>
         <a class="card" href="etf-00909.html">
-          <p class="card-title red">00909-ETF版本</p>
+          <p class="card-title gray">台股-00909版本(研發中)</p>
           <div class="lines">
             <p class="line"><span class="label">近1週報酬率</span><span id="wk1-range-00909" class="range">—</span><span id="wk1-00909" class="val neu">—</span></p>
             <p class="line"><span class="label">近2週報酬率</span><span id="wk2-range-00909" class="range">—</span><span id="wk2-00909" class="val neu">—</span></p>
@@ -310,34 +309,7 @@
         <!-- 目前預留，未來放盤整策略 -->
       </div>
 
-      <!-- 4) 研發中（獨立下一行） -->
-      <div class="strategy-col research">
-        <p class="subcat" style="color:#111">研發中</p>
-        <a class="card" href="tw-1031.html">
-          <p class="card-title red">台股-1031版本</p>
-          <div class="lines">
-            <p class="line"><span class="label">近1週報酬率</span><span id="wk1-range-1031" class="range">—</span><span id="wk1-1031" class="val neu">—</span></p>
-            <p class="line"><span class="label">近2週報酬率</span><span id="wk2-range-1031" class="range">—</span><span id="wk2-1031" class="val neu">—</span></p>
-            <p class="line"><span class="label">近3週報酬率</span><span id="wk3-range-1031" class="range">—</span><span id="wk3-1031" class="val neu">—</span></p>
-            <p class="line"><span class="label">近4週報酬率</span><span id="wk4-range-1031" class="range">—</span><span id="wk4-1031" class="val neu">—</span></p>
-
-            <p class="line"><span class="label">近1月報酬率</span><span id="m1-range-1031"  class="range">—</span><span id="m1-1031"  class="val neu">—</span></p>
-            <p class="line"><span class="label">近2月報酬率</span><span id="m2-range-1031"  class="range">—</span><span id="m2-1031"  class="val neu">—</span></p>
-            <p class="line"><span class="label">近3月報酬率</span><span id="m3-range-1031"  class="range">—</span><span id="m3-1031"  class="val neu">—</span></p>
-            <p class="line"><span class="label">近4月報酬率</span><span id="m4-range-1031"  class="range">—</span><span id="m4-1031"  class="val neu">—</span></p>
-            <p class="line"><span class="label">近5月報酬率</span><span id="m5-range-1031"  class="range">—</span><span id="m5-1031"  class="val neu">—</span></p>
-            <p class="line"><span class="label">近6月報酬率</span><span id="m6-range-1031"  class="range">—</span><span id="m6-1031"  class="val neu">—</span></p>
-
-            <p class="line"><span class="label">近1年報酬率</span><span id="y1-range-1031"  class="range">—</span><span id="y1-1031"  class="val neu">—</span></p>
-            <p class="line"><span class="label">近2年報酬率</span><span id="y2-range-1031"  class="range">—</span><span id="y2-1031"  class="val neu">—</span></p>
-            <p class="line"><span class="label">近3年報酬率</span><span id="y3-range-1031"  class="range">—</span><span id="y3-1031"  class="val neu">—</span></p>
-            <p class="line"><span class="label">近4年報酬率</span><span id="y4-range-1031"  class="range">—</span><span id="y4-1031"  class="val neu">—</span></p>
-            <p class="line"><span class="label">近5年報酬率</span><span id="y5-range-1031"  class="range">—</span><span id="y5-1031"  class="val neu">—</span></p>
-
-            <p class="period">期間：<span id="period-1031">—</span></p>
-          </div>
-        </a>
-      </div>
+      <!-- 研發中卡片已刪除 -->
     </div>
 
     <hr>
@@ -463,7 +435,7 @@
       const v=(pwd.value||'').trim();
       if(!v){
         err.textContent='請輸入密碼 / Please enter password.';
-        err.style.display='';
+        err.display='';
         return;
       }
       const t0=Date.now();
@@ -846,7 +818,7 @@
           fillCard("0807"),
           fillCard("1001"),
           fillCard("00909"),
-          fillCard("1031")
+          fillCard("1031")  // 雖然沒有 1031 卡片，但保留計算不影響
         ]);
       })();
     }
