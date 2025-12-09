@@ -92,7 +92,7 @@
     .lines{ margin-top:2px }
     .line{
       display:grid;
-      grid-template-columns:1.1fr 1.8fr 0.9fr 0.9fr;
+      grid-template-columns:1.1fr 1.8fr 0.9fr 1.4fr;
       align-items:center;
       margin:2px 0;
       font-size:12px;
@@ -108,6 +108,7 @@
     .val{
       text-align:center;
       font-weight:700;
+      font-size:12px;
     }
     .val.pos{ color:#d32f2f }
     .val.neg{ color:#10b981 }
@@ -197,7 +198,7 @@
         <a class="card" href="0807.html">
           <p class="card-title red">台指近-0807版本</p>
           <div class="lines">
-            <!-- 週：左＝當週，右＝累計 -->
+            <!-- 週：左＝當週，右＝累計（含區間） -->
             <p class="line">
               <span class="label">近1週報酬率</span>
               <span id="wk1-range-0807" class="range">—</span>
@@ -917,19 +918,47 @@
         }
 
         async function fillCard(key){
-          const set     =(suf,v)=>setVal(`${suf}-${key}`,v);
-          const setR    =(suf,r)=>setText(`${suf}-range-${key}`,r);
-          const setCur  =(suf,v)=>setVal(`${suf}c-${key}`,v);
           const setPeriod=text=>{
             const el=document.getElementById(`period-${key}`);
             if(el) el.textContent=text;
+          };
+          const setCurRange=(suf,label,range)=>{
+            const fullId = `${suf}-range-${key}`;
+            const txt = range && range !== '---'
+              ? `${label}${range}`
+              : `${label}---`;
+            setText(fullId, txt);
+          };
+          const setCurVal=(suf,v)=>{
+            setVal(`${suf}c-${key}`, v);
+          };
+          const setCum=(suf,v,range)=>{
+            const id=`${suf}-${key}`;
+            const el=document.getElementById(id);
+            if(!el) return;
+            el.classList.remove('pos','neg','neu');
+            if(v==null){
+              el.textContent='---';
+              el.classList.add('neu');
+            }else{
+              const pct=(v*100).toFixed(2)+'%';
+              const txt = range && range !== '---'
+                ? `${range} ${pct}`
+                : pct;
+              el.textContent = txt;
+              el.classList.add(v>0?'pos':(v<0?'neg':'neu'));
+            }
           };
 
           try{
             const latest=await resolveLatest(key);
             if(!latest){
-              ALL_KEYS.forEach(k=>{ set(k,null); setR(k,'---'); });
-              WEEK_KEYS.concat(MONTH_KEYS).concat(YEAR_KEYS).forEach(k=>setCur(k,null));
+              ALL_KEYS.forEach(k=>{
+                setText(`${k}-range-${key}`,'---');
+                setVal(`${k}c-${key}`, null);
+                const el=document.getElementById(`${k}-${key}`);
+                if(el){ el.textContent='---'; el.classList.remove('pos','neg'); el.classList.add('neu'); }
+              });
               setPeriod('—');
               return;
             }
@@ -966,33 +995,41 @@
             const Y5=simpleReturnYearWindowWithRange(days, vals, 1825);
             const Ycur=Y1; // 當年：最近365天
 
-            // 週
+            // 週：左邊顯示「當週區間＋當週報酬率」，右邊顯示「各區間累計」
             const W = {wk1:W1, wk2:W2, wk3:W3, wk4:W4};
             WEEK_KEYS.forEach(k=>{
               const r=W[k];
-              set(k,r.ret); setR(k,r.range);
-              setCur(k,Wcur.ret);
+              setCurRange(k, '當週：', Wcur.range);
+              setCurVal(k, Wcur.ret);
+              setCum(k, r.ret, r.range);
             });
 
-            // 月
+            // 月：左邊顯示「當月(最近30天)」，右邊顯示「各月數累計」
             const M = {m1:M1, m2:M2, m3:M3, m4:M4, m5:M5, m6:M6};
             MONTH_KEYS.forEach(k=>{
               const r=M[k];
-              set(k,r.ret); setR(k,r.range);
-              setCur(k,Mcur.ret);
+              setCurRange(k, '當月：', Mcur.range);
+              setCurVal(k, Mcur.ret);
+              setCum(k, r.ret, r.range);
             });
 
-            // 年
+            // 年：左邊顯示「當年(最近365天)」，右邊顯示「各年數累計」
             const Y = {y1:Y1, y2:Y2, y3:Y3, y4:Y4, y5:Y5};
             YEAR_KEYS.forEach(k=>{
               const r=Y[k];
-              set(k,r.ret); setR(k,r.range);
-              setCur(k,Ycur.ret);
+              setCurRange(k, '當年：', Ycur.range);
+              setCurVal(k, Ycur.ret);
+              setCum(k, r.ret, r.range);
             });
 
             setPeriod(`${start8||'—'} - ${end8||'—'}`);
           }catch(e){
-            ALL_KEYS.forEach(k=>{ set(k,null); setR(k,'---'); setCur(k,null); });
+            ALL_KEYS.forEach(k=>{
+              setText(`${k}-range-${key}`,'---');
+              setVal(`${k}c-${key}`, null);
+              const el=document.getElementById(`${k}-${key}`);
+              if(el){ el.textContent='---'; el.classList.remove('pos','neg'); el.classList.add('neu'); }
+            });
             setPeriod('—');
           }
         }
