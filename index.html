@@ -202,7 +202,7 @@
         <a class="card" href="0807.html">
           <p class="card-title red">台指近-0807版本</p>
           <div class="lines">
-            <!-- 4 週累計（每週=星期一~星期五） -->
+            <!-- 4 週：每週=星期一~星期五，若資料未到週五就截到最後一筆 -->
             <p class="line">
               <span class="label">近1週報酬率</span>
               <span id="wk1-range-0807" class="range">—</span>
@@ -224,7 +224,7 @@
               <span id="wk4-0807" class="val neu">—</span>
             </p>
 
-            <!-- 6 月累計（每月=1號~30/31號） -->
+            <!-- 6 月：calendar month 1~30/31（若當月尚未結束就截到最後一筆） -->
             <p class="line">
               <span class="label">近1月報酬率</span>
               <span id="m1-range-0807" class="range">—</span>
@@ -256,7 +256,7 @@
               <span id="m6-0807" class="val neu">—</span>
             </p>
 
-            <!-- 5 年累計（暫時沿用滾動 1~5 年窗） -->
+            <!-- 5 年：仍採最近 1~5 年滾動窗 -->
             <p class="line">
               <span class="label">近1年報酬率</span>
               <span id="y1-range-0807" class="range">—</span>
@@ -794,37 +794,37 @@
           return p;
         }
 
-        // 近 N 週：以「完整週 Mon–Fri」為單位。
-        // 近1週：最後一個有資料的星期，從該週星期一~星期五；
-        // 近2週：往前推一週；依此類推。
+        // 近 N 週：calendar week（Mon–Fri），但如果週五在最後一筆資料之後，就截到最後一筆
         function weekReturnFixed(days, vals, weekIndex){
           if(!days.length) return {ret:null, range:'---'};
           const pref = buildPrefix(vals);
           const lastIdx = days.length - 1;
           const lastDate = d8(days[lastIdx]);
 
-          // 找出「基準週」的 Friday（<= lastDate）
-          function lastFridayOnOrBefore(date){
-            const d = new Date(date.getTime());
-            while(d.getDay() !== 5){ d.setDate(d.getDate() - 1); }
-            return d;
-          }
+          const dow = lastDate.getDay();                 // 0=Sun,1=Mon,...
+          const offsetToMonday = (dow + 6) % 7;          // Mon=0
+          const baseMonday = new Date(
+            lastDate.getFullYear(),
+            lastDate.getMonth(),
+            lastDate.getDate() - offsetToMonday
+          );
+          const baseFriday = new Date(baseMonday.getTime() + 4*86400000);
 
-          const baseFriday = lastFridayOnOrBefore(lastDate);
-          const targetFriday = new Date(baseFriday.getTime() - (weekIndex-1)*7*86400000);
-          const targetMonday = new Date(targetFriday.getTime() - 4*86400000); // Mon=Fri-4
+          const startMonday = new Date(baseMonday.getTime() - (weekIndex-1)*7*86400000);
+          const endFriday   = new Date(baseFriday.getTime() - (weekIndex-1)*7*86400000);
 
-          // 沒有資料涵蓋這一週就回傳 null
-          if(targetFriday < d8(days[0]) || targetMonday > d8(days[lastIdx])){
-            return {ret:null, range:'---'};
-          }
+          const effStart = startMonday;
+          const effEnd   = endFriday < lastDate ? endFriday : lastDate;
 
-          // 找 index 範圍
+          if(effEnd < effStart) return {ret:null, range:'---'};
+          if(effEnd < d8(days[0]) || effStart > d8(days[lastIdx])) return {ret:null, range:'---'};
+
           let i=0;
-          while(i<=lastIdx && d8(days[i]) < targetMonday) i++;
+          while(i<=lastIdx && d8(days[i]) < effStart) i++;
           if(i>lastIdx) return {ret:null, range:'---'};
+
           let j=lastIdx;
-          while(j>=0 && d8(days[j]) > targetFriday) j--;
+          while(j>=0 && d8(days[j]) > effEnd) j--;
           if(j<i) return {ret:null, range:'---'};
 
           const sum = pref[j+1] - pref[i];
@@ -834,7 +834,7 @@
           return { ret: sum/1_000_000, range:`${startStr}~${endStr}` };
         }
 
-        // 近 N 月：calendar month（1 號 ~ 30/31 號）
+        // 近 N 月：calendar month（1 號~月底），若當月尚未結束就截到最後一筆
         function monthReturnFixed(days, vals, monthIndex){
           if(!days.length) return {ret:null, range:'---'};
           const pref = buildPrefix(vals);
@@ -842,10 +842,10 @@
           const lastDate = d8(days[lastIdx]);
 
           const tmp = new Date(lastDate.getFullYear(), lastDate.getMonth(), 1);
-          tmp.setMonth(tmp.getMonth() - (monthIndex-1)); // 目標月份的 1 號
+          tmp.setMonth(tmp.getMonth() - (monthIndex-1));
 
           const start = new Date(tmp.getFullYear(), tmp.getMonth(), 1);
-          const fullEnd = new Date(tmp.getFullYear(), tmp.getMonth()+1, 0); // 月底
+          const fullEnd = new Date(tmp.getFullYear(), tmp.getMonth()+1, 0);
           const end = fullEnd <= lastDate ? fullEnd : lastDate;
 
           if(end < start) return {ret:null, range:'---'};
@@ -854,6 +854,7 @@
           let i=0;
           while(i<=lastIdx && d8(days[i]) < start) i++;
           if(i>lastIdx) return {ret:null, range:'---'};
+
           let j=lastIdx;
           while(j>=0 && d8(days[j]) > end) j--;
           if(j<i) return {ret:null, range:'---'};
@@ -865,7 +866,7 @@
           return { ret: sum/1_000_000, range:`${startStr}~${endStr}` };
         }
 
-        // 年度：仍採「最近 N 年滾動窗」
+        // 年度：仍採最近 N 年滾動窗
         function simpleReturnYearWindowWithRange(days, vals, winDays){
           if(!days.length) return {ret:null, range:'---'};
           const first=days[0], last=days[days.length-1];
@@ -947,7 +948,7 @@
 
             const {days, vals}=dailySeriesFromMerged(latestText);
 
-            // 週：4 個 calendar weeks（Mon–Fri）
+            // 週：4 個 calendar weeks（Mon–Fri），部分週截到最後一筆
             const W1=weekReturnFixed(days, vals, 1);
             const W2=weekReturnFixed(days, vals, 2);
             const W3=weekReturnFixed(days, vals, 3);
@@ -973,7 +974,7 @@
               setVal(`${k}-${key}`, r.ret);
             });
 
-            // 年：維持滾動 1~5 年
+            // 年：最近 1~5 年滾動窗
             const Y1=simpleReturnYearWindowWithRange(days, vals, 365);
             const Y2=simpleReturnYearWindowWithRange(days, vals, 730);
             const Y3=simpleReturnYearWindowWithRange(days, vals, 1095);
