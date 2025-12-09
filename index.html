@@ -224,12 +224,7 @@
               <span id="wk4-0807" class="val neu">—</span>
             </p>
 
-            <!-- 6 月 -->
-            <p class="line">
-              <span class="label">近1月報酬率</span>
-              <span id="m1-range-0807" class="range">—</span>
-              <span id="m1-0807" class="val neu">—</span>
-            </p>
+            <!-- 近1月刪除，只保留 2~6 月 -->
             <p class="line">
               <span class="label">近2月報酬率</span>
               <span id="m2-range-0807" class="range">—</span>
@@ -256,28 +251,28 @@
               <span id="m6-0807" class="val neu">—</span>
             </p>
 
-            <!-- 5 年 -->
-            <p class="line">
+            <!-- 年：加上 row-* 方便 JS 控制顯示/隱藏 -->
+            <p class="line" id="row-y1-0807">
               <span class="label">近1年報酬率</span>
               <span id="y1-range-0807" class="range">—</span>
               <span id="y1-0807" class="val neu">—</span>
             </p>
-            <p class="line">
+            <p class="line" id="row-y2-0807">
               <span class="label">近2年報酬率</span>
               <span id="y2-range-0807" class="range">—</span>
               <span id="y2-0807" class="val neu">—</span>
             </p>
-            <p class="line">
+            <p class="line" id="row-y3-0807">
               <span class="label">近3年報酬率</span>
               <span id="y3-range-0807" class="range">—</span>
               <span id="y3-0807" class="val neu">—</span>
             </p>
-            <p class="line">
+            <p class="line" id="row-y4-0807">
               <span class="label">近4年報酬率</span>
               <span id="y4-range-0807" class="range">—</span>
               <span id="y4-0807" class="val neu">—</span>
             </p>
-            <p class="line">
+            <p class="line" id="row-y5-0807">
               <span class="label">近5年報酬率</span>
               <span id="y5-range-0807" class="range">—</span>
               <span id="y5-0807" class="val neu">—</span>
@@ -312,11 +307,6 @@
             </p>
 
             <p class="line">
-              <span class="label">近1月報酬率</span>
-              <span id="m1-range-1001" class="range">—</span>
-              <span id="m1-1001" class="val neu">—</span>
-            </p>
-            <p class="line">
               <span class="label">近2月報酬率</span>
               <span id="m2-range-1001" class="range">—</span>
               <span id="m2-1001" class="val neu">—</span>
@@ -342,27 +332,27 @@
               <span id="m6-1001" class="val neu">—</span>
             </p>
 
-            <p class="line">
+            <p class="line" id="row-y1-1001">
               <span class="label">近1年報酬率</span>
               <span id="y1-range-1001" class="range">—</span>
               <span id="y1-1001" class="val neu">—</span>
             </p>
-            <p class="line">
+            <p class="line" id="row-y2-1001">
               <span class="label">近2年報酬率</span>
               <span id="y2-range-1001" class="range">—</span>
               <span id="y2-1001" class="val neu">—</span>
             </p>
-            <p class="line">
+            <p class="line" id="row-y3-1001">
               <span class="label">近3年報酬率</span>
               <span id="y3-range-1001" class="range">—</span>
               <span id="y3-1001" class="val neu">—</span>
             </p>
-            <p class="line">
+            <p class="line" id="row-y4-1001">
               <span class="label">近4年報酬率</span>
               <span id="y4-range-1001" class="range">—</span>
               <span id="y4-1001" class="val neu">—</span>
             </p>
-            <p class="line">
+            <p class="line" id="row-y5-1001">
               <span class="label">近5年報酬率</span>
               <span id="y5-range-1001" class="range">—</span>
               <span id="y5-1001" class="val neu">—</span>
@@ -401,11 +391,6 @@
             </p>
 
             <p class="line">
-              <span class="label">近1月報酬率</span>
-              <span id="m1-range-00909" class="range">—</span>
-              <span id="m1-00909" class="val neu">—</span>
-            </p>
-            <p class="line">
               <span class="label">近2月報酬率</span>
               <span id="m2-range-00909" class="range">—</span>
               <span id="m2-00909" class="val neu">—</span>
@@ -431,27 +416,27 @@
               <span id="m6-00909" class="val neu">—</span>
             </p>
 
-            <p class="line">
+            <p class="line" id="row-y1-00909">
               <span class="label">近1年報酬率</span>
               <span id="y1-range-00909" class="range">—</span>
               <span id="y1-00909" class="val neu">—</span>
             </p>
-            <p class="line">
+            <p class="line" id="row-y2-00909">
               <span class="label">近2年報酬率</span>
               <span id="y2-range-00909" class="range">—</span>
               <span id="y2-00909" class="val neu">—</span>
             </p>
-            <p class="line">
+            <p class="line" id="row-y3-00909">
               <span class="label">近3年報酬率</span>
               <span id="y3-range-00909" class="range">—</span>
               <span id="y3-00909" class="val neu">—</span>
             </p>
-            <p class="line">
+            <p class="line" id="row-y4-00909">
               <span class="label">近4年報酬率</span>
               <span id="y4-range-00909" class="range">—</span>
               <span id="y4-00909" class="val neu">—</span>
             </p>
-            <p class="line">
+            <p class="line" id="row-y5-00909">
               <span class="label">近5年報酬率</span>
               <span id="y5-range-00909" class="range">—</span>
               <span id="y5-00909" class="val neu">—</span>
@@ -794,7 +779,7 @@
           return p;
         }
 
-        // 近 N 週：以該週星期一為起點，迄今（最後一筆資料日）
+        // 起＝那一週的星期一，迄＝最後一筆資料日
         function weekReturnFixed(days, vals, weekIndex){
           if(!days.length) return {ret:null, range:'---'};
           const pref = buildPrefix(vals);
@@ -830,7 +815,7 @@
           return { ret: sum/1_000_000, range:`${startStr}~${endStr}` };
         }
 
-        // 近 N 月：calendar month 的 1 號為起點，迄今（最後一筆資料日）
+        // 起＝該月1號，迄＝最後一筆資料日
         function monthReturnFixed(days, vals, monthIndex){
           if(!days.length) return {ret:null, range:'---'};
           const pref = buildPrefix(vals);
@@ -861,7 +846,7 @@
           return { ret: sum/1_000_000, range:`${startStr}~${endStr}` };
         }
 
-        // 近 N 年：calendar year 的 1/1 為起點，迄今
+        // 起＝該年1/1，迄＝最後一筆資料日
         function yearReturnFixed(days, vals, yearIndex){
           if(!days.length) return {ret:null, range:'---'};
           const pref = buildPrefix(vals);
@@ -910,7 +895,7 @@
         }
 
         const WEEK_KEYS = ['wk1','wk2','wk3','wk4'];
-        const MONTH_KEYS = ['m1','m2','m3','m4','m5','m6'];
+        const MONTH_KEYS = ['m2','m3','m4','m5','m6'];   // 近1月已刪除
         const YEAR_KEYS  = ['y1','y2','y3','y4','y5'];
         const ALL_KEYS   = WEEK_KEYS.concat(MONTH_KEYS).concat(YEAR_KEYS);
 
@@ -918,6 +903,11 @@
           ALL_KEYS.forEach(k=>{
             setText(`${k}-range-${key}`,'—');
             setVal(`${k}-${key}`, null);
+          });
+          // 年度列也隱藏
+          YEAR_KEYS.forEach(k=>{
+            const row=document.getElementById(`row-${k}-${key}`);
+            if(row) row.style.display='none';
           });
         }
 
@@ -959,7 +949,7 @@
 
             const {days, vals}=dailySeriesFromMerged(latestText);
 
-            // 週：4 個區間，起=那一週星期一，迄=最後一筆資料日
+            // 4 週
             const W1=weekReturnFixed(days, vals, 1);
             const W2=weekReturnFixed(days, vals, 2);
             const W3=weekReturnFixed(days, vals, 3);
@@ -971,21 +961,20 @@
               setVal(`${k}-${key}`, r.ret);
             });
 
-            // 月：6 個區間，起=該月1號，迄=最後一筆資料日
-            const M1=monthReturnFixed(days, vals, 1);
+            // 2~6 月
             const M2=monthReturnFixed(days, vals, 2);
             const M3=monthReturnFixed(days, vals, 3);
             const M4=monthReturnFixed(days, vals, 4);
             const M5=monthReturnFixed(days, vals, 5);
             const M6=monthReturnFixed(days, vals, 6);
-            const M={m1:M1,m2:M2,m3:M3,m4:M4,m5:M5,m6:M6};
+            const M={m2:M2,m3:M3,m4:M4,m5:M5,m6:M6};
             MONTH_KEYS.forEach(k=>{
               const r=M[k];
               setText(`${k}-range-${key}`, r.range);
               setVal(`${k}-${key}`, r.ret);
             });
 
-            // 年：5 個區間，起=該年1/1，迄=最後一筆資料日
+            // 年：有資料才顯示列
             const Y1=yearReturnFixed(days, vals, 1);
             const Y2=yearReturnFixed(days, vals, 2);
             const Y3=yearReturnFixed(days, vals, 3);
@@ -994,8 +983,14 @@
             const Y={y1:Y1,y2:Y2,y3:Y3,y4:Y4,y5:Y5};
             YEAR_KEYS.forEach(k=>{
               const r=Y[k];
-              setText(`${k}-range-${key}`, r.range);
-              setVal(`${k}-${key}`, r.ret);
+              const row=document.getElementById(`row-${k}-${key}`);
+              if(!r || r.ret==null){
+                if(row) row.style.display='none';
+              }else{
+                if(row) row.style.display='grid';
+                setText(`${k}-range-${key}`, r.range);
+                setVal(`${k}-${key}`, r.ret);
+              }
             });
 
             setPeriod(`${start8||'—'} - ${end8||'—'}`);
