@@ -104,7 +104,7 @@
       white-space:nowrap;
     }
 
-    /* 右側：兩行，當期在上、累計在下，左右錯開 */
+    /* 右側：兩行，上＝當週，下＝累計；數字都靠右，上面多退一點 */
     .valblock{
       display:flex;
       flex-direction:column;
@@ -116,9 +116,10 @@
       column-gap:4px;
       font-size:10px;
       white-space:nowrap;
+      justify-content:space-between;
     }
-    .sub-row.cur{ justify-content:flex-start; }   /* 上面：靠左 */
-    .sub-row.cum{ justify-content:flex-end; }    /* 下面：靠右 */
+    .sub-row.cur{ padding-right:2.5em; }  /* 當週數字往左退一點（約全形 3~4 字寬） */
+    .sub-row.cum{ padding-right:0; }      /* 累計數字貼最右 */
 
     .sub-range{
       font-size:10px;
@@ -216,7 +217,7 @@
         <a class="card" href="0807.html">
           <p class="card-title red">台指近-0807版本</p>
           <div class="lines">
-            <!-- 每一列右邊：上＝當期，下＝累計；左右錯開 -->
+            <!-- 週：上行＝當週，下行＝自該週起算累計 -->
             <p class="line">
               <span class="label">近1週報酬率</span>
               <span class="valblock">
@@ -270,7 +271,7 @@
               </span>
             </p>
 
-            <!-- 月 -->
+            <!-- 月：沿用原本邏輯，當月/累計視為區間 + 同區間 -->
             <p class="line">
               <span class="label">近1月報酬率</span>
               <span class="valblock">
@@ -424,7 +425,7 @@
         <a class="card" href="1001.html">
           <p class="card-title red">台指近-1001版本</p>
           <div class="lines">
-            <!-- 1001 同樣結構 -->
+            <!-- 1001 同樣結構，id 改為 1001 -->
             <p class="line">
               <span class="label">近1週報酬率</span>
               <span class="valblock">
@@ -634,6 +635,7 @@
         <a class="card" href="etf-00909.html">
           <p class="card-title gray">台股-00909版本(研發中)</p>
           <div class="lines">
+            <!-- 結構和上面相同，id 改成 00909 -->
             <p class="line">
               <span class="label">近1週報酬率</span>
               <span class="valblock">
@@ -1163,30 +1165,59 @@
         const d8=s=> new Date(`${s.slice(0,4)}-${s.slice(4,6)}-${s.slice(6,8)}T00:00:00`);
         const fmtD8=s=> `${s.slice(0,4)}/${s.slice(4,6)}/${s.slice(6,8)}`;
 
-        function weekReturnWithRange(days, vals, weeks){
-          if(!days.length) return {ret:null, range:'---'};
-          const lastStr = days[days.length-1];
-          const lastDate = d8(lastStr);
-          const dow = lastDate.getDay();
-          const offsetToMonday = (dow + 6) % 7;
-          const mondayThisWeek = new Date(
-            lastDate.getFullYear(),
-            lastDate.getMonth(),
-            lastDate.getDate() - offsetToMonday
-          );
-          const startDate = new Date(mondayThisWeek.getTime() - (weeks-1)*7*86400000);
-
-          let i=0;
-          while(i<days.length && d8(days[i]) < startDate) i++;
-          if(i>=days.length) return {ret:null, range:'---'};
-
-          const startDay = days[i];
-          const pref=[0];
-          for(const v of vals) pref.push(pref[pref.length-1]+v);
-          const sum=pref[vals.length]-pref[i];
-          return { ret:sum/1_000_000, range:`${fmtD8(startDay)} - ${fmtD8(lastStr)}` };
+        function buildPrefix(vals){
+          const p=[0];
+          for(const v of vals){ p.push(p[p.length-1]+v); }
+          return p;
         }
 
+        // --- 週：每列一個「週段」 ＋ 從該週起算到最後一日的累積 ---
+        function weekSegments(days, vals, maxWeeks){
+          const res=[];
+          if(!days.length) return res;
+          const pref=buildPrefix(vals);
+          const lastIdx=days.length-1;
+          const lastDate=d8(days[lastIdx]);
+
+          const dow=lastDate.getDay();
+          const offsetToMonday=(dow+6)%7;
+          const monday0=new Date(
+            lastDate.getFullYear(),
+            lastDate.getMonth(),
+            lastDate.getDate()-offsetToMonday
+          );
+
+          for(let k=0;k<maxWeeks;k++){
+            const startCand=new Date(monday0.getTime()-k*7*86400000);
+            const endCand=new Date(startCand.getTime()+6*86400000);
+
+            let i=0;
+            while(i<=lastIdx && d8(days[i])<startCand) i++;
+            if(i>lastIdx){ res.push(null); continue; }
+
+            let j=i;
+            while(j<=lastIdx && d8(days[j])<=endCand) j++;
+            j--;
+            if(j<i){ res.push(null); continue; }
+
+            const sumCur=pref[j+1]-pref[i];
+            const sumCum=pref[lastIdx+1]-pref[i];
+
+            const startStr=fmtD8(days[i]);
+            const endCurStr=fmtD8(days[j]);
+            const endLastStr=fmtD8(days[lastIdx]);
+
+            res.push({
+              curRange:`${startStr}~${endCurStr}`,
+              curRet:sumCur/1_000_000,
+              cumRange:`${startStr}~${endLastStr}`,
+              cumRet:sumCum/1_000_000
+            });
+          }
+          return res;
+        }
+
+        // 月、年沿用「最近 N 天窗」邏輯
         function simpleReturnWithRange(days, vals, winDays){
           if(!days.length) return {ret:null, range:'---'};
           const end=days[days.length-1];
@@ -1194,9 +1225,9 @@
           let i=0; while(i<days.length && d8(days[i])<thr) i++;
           if(i>=days.length) return {ret:null, range:'---'};
           const startDay=days[i];
-          const pref=[0]; for(const v of vals) pref.push(pref[pref.length-1]+v);
+          const pref=buildPrefix(vals);
           const sum=pref[vals.length]-pref[i];
-          return { ret:sum/1_000_000, range:`${fmtD8(startDay)} - ${fmtD8(end)}` };
+          return { ret:sum/1_000_000, range:`${fmtD8(startDay)}~${fmtD8(end)}` };
         }
 
         function simpleReturnYearWindowWithRange(days, vals, winDays){
@@ -1208,9 +1239,9 @@
           const thr=new Date(d8(end).getTime()-(winDays-1)*86400000);
           let i=0; while(i<days.length && d8(days[i])<thr) i++; if(i>=days.length) i=0;
           const startDay=days[i];
-          const pref=[0]; for(const v of vals) pref.push(pref[pref.length-1]+v);
+          const pref=buildPrefix(vals);
           const sum=pref[vals.length]-pref[i];
-          return { ret:sum/1_000_000, range:`${fmtD8(startDay)} - ${fmtD8(end)}` };
+          return { ret:sum/1_000_000, range:`${fmtD8(startDay)}~${fmtD8(end)}` };
         }
 
         function setVal(id,v){
@@ -1233,10 +1264,6 @@
           }else{
             el.textContent = prefix ? `${prefix}${range}` : range;
           }
-        }
-        function setText(id,text){
-          const el=document.getElementById(id);
-          if(el) el.textContent=text||'—';
         }
 
         const WEEK_KEYS = ['wk1','wk2','wk3','wk4'];
@@ -1298,55 +1325,52 @@
 
             const {days, vals}=dailySeriesFromMerged(latestText);
 
-            // 週
-            const W1=weekReturnWithRange(days, vals, 1);
-            const W2=weekReturnWithRange(days, vals, 2);
-            const W3=weekReturnWithRange(days, vals, 3);
-            const W4=weekReturnWithRange(days, vals, 4);
-            const Wcur=W1;
+            // 週：週段 + 自該週起算至今
+            const segW = weekSegments(days, vals, 4);
+            WEEK_KEYS.forEach((k,idx)=>{
+              const seg=segW[idx];
+              if(!seg){
+                setRange(`${k}-cur-range-${key}`,'當週 ',null);
+                setVal(`${k}-cur-${key}`,null);
+                setRange(`${k}-cum-range-${key}`,'累計 ',null);
+                setVal(`${k}-cum-${key}`,null);
+              }else{
+                setRange(`${k}-cur-range-${key}`,'當週 ',seg.curRange);
+                setVal(`${k}-cur-${key}`,seg.curRet);
+                setRange(`${k}-cum-range-${key}`,'累計 ',seg.cumRange);
+                setVal(`${k}-cum-${key}`,seg.cumRet);
+              }
+            });
 
-            // 月
+            // 月：最近 30/60/... 天窗，當月/累計視為同一區間
             const M1=simpleReturnWithRange(days, vals, 30);
             const M2=simpleReturnWithRange(days, vals, 60);
             const M3=simpleReturnWithRange(days, vals, 90);
             const M4=simpleReturnWithRange(days, vals, 120);
             const M5=simpleReturnWithRange(days, vals, 150);
             const M6=simpleReturnWithRange(days, vals, 180);
-            const Mcur=M1;
+            const M = {m1:M1,m2:M2,m3:M3,m4:M4,m5:M5,m6:M6};
+            MONTH_KEYS.forEach(k=>{
+              const r=M[k];
+              setRange(`${k}-cur-range-${key}`,'當月 ',r.range);
+              setVal(`${k}-cur-${key}`,r.ret);
+              setRange(`${k}-cum-range-${key}`,'累計 ',r.range);
+              setVal(`${k}-cum-${key}`,r.ret);
+            });
 
-            // 年
+            // 年：最近 1/2/3/4/5 年窗
             const Y1=simpleReturnYearWindowWithRange(days, vals, 365);
             const Y2=simpleReturnYearWindowWithRange(days, vals, 730);
             const Y3=simpleReturnYearWindowWithRange(days, vals, 1095);
             const Y4=simpleReturnYearWindowWithRange(days, vals, 1460);
             const Y5=simpleReturnYearWindowWithRange(days, vals, 1825);
-            const Ycur=Y1;
-
-            const W = {wk1:W1, wk2:W2, wk3:W3, wk4:W4};
-            WEEK_KEYS.forEach(k=>{
-              const r=W[k];
-              setRange(`${k}-cur-range-${key}`, '當週：', Wcur.range);
-              setVal(`${k}-cur-${key}`, Wcur.ret);
-              setRange(`${k}-cum-range-${key}`, '累計：', r.range);
-              setVal(`${k}-cum-${key}`, r.ret);
-            });
-
-            const M = {m1:M1, m2:M2, m3:M3, m4:M4, m5:M5, m6:M6};
-            MONTH_KEYS.forEach(k=>{
-              const r=M[k];
-              setRange(`${k}-cur-range-${key}`, '當月：', Mcur.range);
-              setVal(`${k}-cur-${key}`, Mcur.ret);
-              setRange(`${k}-cum-range-${key}`, '累計：', r.range);
-              setVal(`${k}-cum-${key}`, r.ret);
-            });
-
-            const Y = {y1:Y1, y2:Y2, y3:Y3, y4:Y4, y5:Y5};
+            const Y = {y1:Y1,y2:Y2,y3:Y3,y4:Y4,y5:Y5};
             YEAR_KEYS.forEach(k=>{
               const r=Y[k];
-              setRange(`${k}-cur-range-${key}`, '當年：', Ycur.range);
-              setVal(`${k}-cur-${key}`, Ycur.ret);
-              setRange(`${k}-cum-range-${key}`, '累計：', r.range);
-              setVal(`${k}-cum-${key}`, r.ret);
+              setRange(`${k}-cur-range-${key}`,'當年 ',r.range);
+              setVal(`${k}-cur-${key}`,r.ret);
+              setRange(`${k}-cum-range-${key}`,'累計 ',r.range);
+              setVal(`${k}-cum-${key}`,r.ret);
             });
 
             setPeriod(`${start8||'—'} - ${end8||'—'}`);
