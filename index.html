@@ -251,7 +251,7 @@
               <span id="m6-0807" class="val neu">—</span>
             </p>
 
-            <!-- 年：加上 row-* 方便 JS 控制顯示/隱藏 -->
+            <!-- 年：row-* 方便 JS 控制顯示/隱藏 -->
             <p class="line" id="row-y1-0807">
               <span class="label">近1年報酬率</span>
               <span id="y1-range-0807" class="range">—</span>
@@ -846,12 +846,17 @@
           return { ret: sum/1_000_000, range:`${startStr}~${endStr}` };
         }
 
-        // 起＝該年1/1，迄＝最後一筆資料日
+        // 起＝該年1/1，迄＝最後一筆資料日；若總資料長度不足 N 年（預留60天誤差）視為「沒資料」
         function yearReturnFixed(days, vals, yearIndex){
           if(!days.length) return {ret:null, range:'---'};
           const pref = buildPrefix(vals);
+          const firstDate = d8(days[0]);
           const lastIdx = days.length - 1;
           const lastDate = d8(days[lastIdx]);
+
+          const coverDays = Math.round((lastDate - firstDate) / 86400000) + 1;
+          const minCover  = 365 * yearIndex - 60;   // 至少 N 年−60 天才算有資料
+          if(coverDays < minCover) return {ret:null, range:'---'};
 
           const tmp = new Date(lastDate.getFullYear(), 0, 1);
           tmp.setFullYear(tmp.getFullYear() - (yearIndex-1));
@@ -860,7 +865,7 @@
           const endDate   = lastDate;
 
           if(endDate < startDate) return {ret:null, range:'---'};
-          if(endDate < d8(days[0]) || startDate > d8(days[lastIdx])) return {ret:null, range:'---'};
+          if(endDate < firstDate || startDate > lastDate) return {ret:null, range:'---'};
 
           let i=0;
           while(i<=lastIdx && d8(days[i]) < startDate) i++;
@@ -904,7 +909,6 @@
             setText(`${k}-range-${key}`,'—');
             setVal(`${k}-${key}`, null);
           });
-          // 年度列也隱藏
           YEAR_KEYS.forEach(k=>{
             const row=document.getElementById(`row-${k}-${key}`);
             if(row) row.style.display='none';
@@ -974,7 +978,7 @@
               setVal(`${k}-${key}`, r.ret);
             });
 
-            // 年：有資料才顯示列
+            // 年：有資料才顯示列（資料不足 N 年的會被 yearReturnFixed 回傳 null）
             const Y1=yearReturnFixed(days, vals, 1);
             const Y2=yearReturnFixed(days, vals, 2);
             const Y3=yearReturnFixed(days, vals, 3);
