@@ -202,7 +202,7 @@
         <a class="card" href="0807.html">
           <p class="card-title red">台指近-0807版本</p>
           <div class="lines">
-            <!-- 4 週：每週=星期一~星期五，若資料未到週五就截到最後一筆 -->
+            <!-- 4 週 -->
             <p class="line">
               <span class="label">近1週報酬率</span>
               <span id="wk1-range-0807" class="range">—</span>
@@ -224,7 +224,7 @@
               <span id="wk4-0807" class="val neu">—</span>
             </p>
 
-            <!-- 6 月：calendar month 1~30/31（若當月尚未結束就截到最後一筆） -->
+            <!-- 6 月 -->
             <p class="line">
               <span class="label">近1月報酬率</span>
               <span id="m1-range-0807" class="range">—</span>
@@ -256,7 +256,7 @@
               <span id="m6-0807" class="val neu">—</span>
             </p>
 
-            <!-- 5 年：仍採最近 1~5 年滾動窗 -->
+            <!-- 5 年 -->
             <p class="line">
               <span class="label">近1年報酬率</span>
               <span id="y1-range-0807" class="range">—</span>
@@ -794,7 +794,7 @@
           return p;
         }
 
-        // 近 N 週：calendar week（Mon–Fri），但如果週五在最後一筆資料之後，就截到最後一筆
+        // 近 N 週：以該週星期一為起點，迄今（最後一筆資料日）
         function weekReturnFixed(days, vals, weekIndex){
           if(!days.length) return {ret:null, range:'---'};
           const pref = buildPrefix(vals);
@@ -808,23 +808,19 @@
             lastDate.getMonth(),
             lastDate.getDate() - offsetToMonday
           );
-          const baseFriday = new Date(baseMonday.getTime() + 4*86400000);
 
-          const startMonday = new Date(baseMonday.getTime() - (weekIndex-1)*7*86400000);
-          const endFriday   = new Date(baseFriday.getTime() - (weekIndex-1)*7*86400000);
+          const startDate = new Date(baseMonday.getTime() - (weekIndex-1)*7*86400000);
+          const endDate   = lastDate;
 
-          const effStart = startMonday;
-          const effEnd   = endFriday < lastDate ? endFriday : lastDate;
-
-          if(effEnd < effStart) return {ret:null, range:'---'};
-          if(effEnd < d8(days[0]) || effStart > d8(days[lastIdx])) return {ret:null, range:'---'};
+          if(endDate < startDate) return {ret:null, range:'---'};
+          if(endDate < d8(days[0]) || startDate > d8(days[lastIdx])) return {ret:null, range:'---'};
 
           let i=0;
-          while(i<=lastIdx && d8(days[i]) < effStart) i++;
+          while(i<=lastIdx && d8(days[i]) < startDate) i++;
           if(i>lastIdx) return {ret:null, range:'---'};
 
           let j=lastIdx;
-          while(j>=0 && d8(days[j]) > effEnd) j--;
+          while(j>=0 && d8(days[j]) > endDate) j--;
           if(j<i) return {ret:null, range:'---'};
 
           const sum = pref[j+1] - pref[i];
@@ -834,7 +830,7 @@
           return { ret: sum/1_000_000, range:`${startStr}~${endStr}` };
         }
 
-        // 近 N 月：calendar month（1 號~月底），若當月尚未結束就截到最後一筆
+        // 近 N 月：calendar month 的 1 號為起點，迄今（最後一筆資料日）
         function monthReturnFixed(days, vals, monthIndex){
           if(!days.length) return {ret:null, range:'---'};
           const pref = buildPrefix(vals);
@@ -844,19 +840,18 @@
           const tmp = new Date(lastDate.getFullYear(), lastDate.getMonth(), 1);
           tmp.setMonth(tmp.getMonth() - (monthIndex-1));
 
-          const start = new Date(tmp.getFullYear(), tmp.getMonth(), 1);
-          const fullEnd = new Date(tmp.getFullYear(), tmp.getMonth()+1, 0);
-          const end = fullEnd <= lastDate ? fullEnd : lastDate;
+          const startDate = new Date(tmp.getFullYear(), tmp.getMonth(), 1);
+          const endDate   = lastDate;
 
-          if(end < start) return {ret:null, range:'---'};
-          if(end < d8(days[0]) || start > d8(days[lastIdx])) return {ret:null, range:'---'};
+          if(endDate < startDate) return {ret:null, range:'---'};
+          if(endDate < d8(days[0]) || startDate > d8(days[lastIdx])) return {ret:null, range:'---'};
 
           let i=0;
-          while(i<=lastIdx && d8(days[i]) < start) i++;
+          while(i<=lastIdx && d8(days[i]) < startDate) i++;
           if(i>lastIdx) return {ret:null, range:'---'};
 
           let j=lastIdx;
-          while(j>=0 && d8(days[j]) > end) j--;
+          while(j>=0 && d8(days[j]) > endDate) j--;
           if(j<i) return {ret:null, range:'---'};
 
           const sum = pref[j+1] - pref[i];
@@ -866,19 +861,35 @@
           return { ret: sum/1_000_000, range:`${startStr}~${endStr}` };
         }
 
-        // 年度：仍採最近 N 年滾動窗
-        function simpleReturnYearWindowWithRange(days, vals, winDays){
+        // 近 N 年：calendar year 的 1/1 為起點，迄今
+        function yearReturnFixed(days, vals, yearIndex){
           if(!days.length) return {ret:null, range:'---'};
-          const first=days[0], last=days[days.length-1];
-          const cover=Math.max(1, Math.round((d8(last)-d8(first))/86400000)+1);
-          if(cover < winDays-60) return {ret:null, range:'---'};
-          const end=last;
-          const thr=new Date(d8(end).getTime()-(winDays-1)*86400000);
-          let i=0; while(i<days.length && d8(days[i])<thr) i++; if(i>=days.length) i=0;
-          const startDay=days[i];
-          const pref=buildPrefix(vals);
-          const sum=pref[vals.length]-pref[i];
-          return { ret:sum/1_000_000, range:`${fmtD8(startDay)}~${fmtD8(end)}` };
+          const pref = buildPrefix(vals);
+          const lastIdx = days.length - 1;
+          const lastDate = d8(days[lastIdx]);
+
+          const tmp = new Date(lastDate.getFullYear(), 0, 1);
+          tmp.setFullYear(tmp.getFullYear() - (yearIndex-1));
+
+          const startDate = new Date(tmp.getFullYear(), 0, 1);
+          const endDate   = lastDate;
+
+          if(endDate < startDate) return {ret:null, range:'---'};
+          if(endDate < d8(days[0]) || startDate > d8(days[lastIdx])) return {ret:null, range:'---'};
+
+          let i=0;
+          while(i<=lastIdx && d8(days[i]) < startDate) i++;
+          if(i>lastIdx) return {ret:null, range:'---'};
+
+          let j=lastIdx;
+          while(j>=0 && d8(days[j]) > endDate) j--;
+          if(j<i) return {ret:null, range:'---'};
+
+          const sum = pref[j+1] - pref[i];
+          const startStr = fmtD8(days[i]);
+          const endStr   = fmtD8(days[j]);
+
+          return { ret: sum/1_000_000, range:`${startStr}~${endStr}` };
         }
 
         function setVal(id,v){
@@ -948,7 +959,7 @@
 
             const {days, vals}=dailySeriesFromMerged(latestText);
 
-            // 週：4 個 calendar weeks（Mon–Fri），部分週截到最後一筆
+            // 週：4 個區間，起=那一週星期一，迄=最後一筆資料日
             const W1=weekReturnFixed(days, vals, 1);
             const W2=weekReturnFixed(days, vals, 2);
             const W3=weekReturnFixed(days, vals, 3);
@@ -960,7 +971,7 @@
               setVal(`${k}-${key}`, r.ret);
             });
 
-            // 月：6 個 calendar months
+            // 月：6 個區間，起=該月1號，迄=最後一筆資料日
             const M1=monthReturnFixed(days, vals, 1);
             const M2=monthReturnFixed(days, vals, 2);
             const M3=monthReturnFixed(days, vals, 3);
@@ -974,12 +985,12 @@
               setVal(`${k}-${key}`, r.ret);
             });
 
-            // 年：最近 1~5 年滾動窗
-            const Y1=simpleReturnYearWindowWithRange(days, vals, 365);
-            const Y2=simpleReturnYearWindowWithRange(days, vals, 730);
-            const Y3=simpleReturnYearWindowWithRange(days, vals, 1095);
-            const Y4=simpleReturnYearWindowWithRange(days, vals, 1460);
-            const Y5=simpleReturnYearWindowWithRange(days, vals, 1825);
+            // 年：5 個區間，起=該年1/1，迄=最後一筆資料日
+            const Y1=yearReturnFixed(days, vals, 1);
+            const Y2=yearReturnFixed(days, vals, 2);
+            const Y3=yearReturnFixed(days, vals, 3);
+            const Y4=yearReturnFixed(days, vals, 4);
+            const Y5=yearReturnFixed(days, vals, 5);
             const Y={y1:Y1,y2:Y2,y3:Y3,y4:Y4,y5:Y5};
             YEAR_KEYS.forEach(k=>{
               const r=Y[k];
