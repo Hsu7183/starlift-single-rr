@@ -1,3 +1,384 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>三劍客量化科技(籌備中)</title>
+  <meta name="robots" content="noindex,nofollow" />
+  <!-- CSP + 反嵌入 -->
+  <meta http-equiv="Content-Security-Policy"
+    content="default-src 'self';
+             script-src 'self' https://unpkg.com https://byhbmmnacezzgkwfkozs.supabase.co 'unsafe-inline';
+             style-src 'self' 'unsafe-inline';
+             img-src 'self' data: https://byhbmmnacezzgkwfkozs.supabase.co;
+             connect-src 'self' https://byhbmmnacezzgkwfkozs.supabase.co https://unpkg.com;
+             frame-ancestors 'none';
+             base-uri 'none';
+             form-action 'self'">
+  <style>
+    :root { --card-r:12px; }
+    body{
+      font-family: Arial,"微軟正黑體",sans-serif;
+      margin:20px;
+      background:#f8f9fa;
+      color:#333;
+      -webkit-font-smoothing:antialiased;
+    }
+    h1{ text-align:center; margin:0 0 6px 0; font-weight:800; letter-spacing:.5px }
+    .subtitle{ text-align:center; color:#666; margin:0 0 18px 0; font-size:14px }
+    hr{ border:none; border-top:1px solid #ddd; margin:20px auto; max-width:1100px }
+
+    .section-title-red{
+      max-width:1100px; margin:10px auto 12px;
+      font-size:20px; font-weight:800; color:#d32f2f; letter-spacing:.5px;
+    }
+    .section-title-blue{
+      max-width:1100px; margin:10px auto 12px;
+      font-size:20px; font-weight:800; color:#0d6efd; letter-spacing:.5px;
+    }
+    .section-title-black{
+      max-width:1100px; margin:10px auto 12px;
+      font-size:20px; font-weight:800; color:#111; letter-spacing:.5px;
+    }
+
+    .strategy-grid{
+      display:grid;
+      grid-template-columns:repeat(3,1fr);
+      gap:20px;
+      max-width:1100px;
+      margin:0 auto 28px;
+    }
+    .strategy-col{ display:flex; flex-direction:column; gap:12px }
+    .strategy-col.research{ grid-column:1 / span 3; } /* 研發中獨立下一列 */
+    .subcat{
+      font-weight:700; font-size:16px;
+      color:#c62828; margin:0 0 4px 0; text-align:center;
+    }
+
+    .nav{
+      display:grid;
+      grid-template-columns:repeat(3,1fr);
+      gap:20px;
+      max-width:1100px;
+      margin:0 auto 28px;
+    }
+
+    a.card{
+      display:block;
+      background:#fff;
+      padding:18px 16px;
+      border-radius:12px;
+      box-shadow:0 2px 8px rgba(0,0,0,.08);
+      text-decoration:none;
+      color:inherit;
+      transition:transform .15s, box-shadow .15s;
+      border:1px solid #e5e7eb;
+    }
+    a.card:hover{
+      transform:translateY(-4px);
+      box-shadow:0 10px 22px rgba(0,0,0,.12);
+    }
+    .card-title{
+      font-weight:700;
+      font-size:18px;
+      margin:0 0 8px 0;
+      text-align:center;
+    }
+    .card-title.big{ font-size:22px; }  /* 主要入口放大字體 */
+    .card-title.red{ color:#d32f2f }
+    .card-title.blue{ color:#0d6efd }
+    .card-title.gray{ color:#6c757d }
+    .card-title.black{ color:#111 }
+
+    .card-desc{ margin:0; color:#666; font-size:14px; line-height:1.5; text-align:left }
+
+    .lines{ margin-top:2px }
+    .line{
+      display:grid;
+      grid-template-columns:1fr 1.8fr 1fr;
+      align-items:center;
+      margin:2px 0;
+      font-size:12px;
+      column-gap:6px;
+    }
+    .label{ text-align:center; color:#111 }
+    .range{
+      text-align:center;
+      color:#999;
+      font-size:10px;
+      white-space:nowrap;
+    }
+    .val{
+      text-align:center;
+      font-weight:700;
+    }
+    .val.pos{ color:#d32f2f }
+    .val.neg{ color:#10b981 }
+    .val.neu{ color:#666 }
+
+    .period{
+      margin-top:6px;
+      color:#666;
+      font-size:12px;
+      text-align:center;
+    }
+
+    .strategy-col .card-desc{ display:none }
+
+    .tag{
+      display:inline-block;
+      font-size:12px;
+      background:#eef4ff;
+      color:#0d6efd;
+      border-radius:999px;
+      padding:3px 8px;
+      margin-left:8px;
+      vertical-align:middle;
+    }
+
+    .gate{
+      max-width:960px;
+      margin:20px auto;
+      background:#fff;
+      border:1px solid #e5e7eb;
+      border-radius:12px;
+      box-shadow:0 2px 10px rgba(0,0,0,.05);
+      padding:16px;
+    }
+    .row{ display:flex; gap:12px; align-items:center; flex-wrap:wrap }
+    .btn{
+      background:#0d6efd;
+      color:#fff;
+      border:0;
+      border-radius:10px;
+      padding:10px 14px;
+      cursor:pointer;
+    }
+    .btn.gray{ background:#6c757d }
+    input[type="password"]{
+      width:100%; padding:10px;
+      border:1px solid #e5e7eb;
+      border-radius:8px;
+    }
+    .error{ color:#c62828; font-size:12px; margin-top:6px; display:none }
+    .hidden{ display:none }
+
+    .restrict{
+      position:sticky;
+      top:-20px;
+      margin:-20px -20px 12px -20px;
+      padding:6px 10px;
+      background:#111;
+      color:#fff;
+      text-align:center;
+      font-size:12px;
+      letter-spacing:.5px;
+      z-index:9999;
+    }
+
+    html,body{
+      -webkit-user-select:none;
+      -moz-user-select:none;
+      user-select:none;
+      -webkit-touch-callout:none;
+    }
+    a,button,input{
+      -webkit-user-select:auto;
+      user-select:auto;
+    }
+    #shield{
+      position:fixed;
+      inset:0;
+      display:none;
+      align-items:center;
+      justify-content:center;
+      background:rgba(3,7,18,.96);
+      color:#fff;
+      z-index:2147483647;
+      text-align:center;
+      padding:24px;
+    }
+  </style>
+</head>
+<body translate="no">
+  <div id="shield"><div><h3>頁面受保護</h3>偵測到嘗試檢視原始碼或開發者工具，請關閉後重新整理。</div></div>
+
+  <!-- (A) 密碼門檻 -->
+  <div id="gate" class="gate">
+    <div class="row" style="margin-top:12px;max-width:420px">
+      <input id="pwd" type="password" placeholder="密碼 / Password" autocomplete="current-password" />
+      <button class="btn" id="btnLogin">進入 / Enter</button>
+      <button class="btn gray" id="btnClear">清除 / Clear</button>
+      <div id="err" class="error">密碼錯誤，請再試一次。/ Incorrect password.</div>
+    </div>
+  </div>
+
+  <!-- (B) 內容 -->
+  <div id="app" class="hidden">
+    <hr>
+
+    <h3 class="section-title-red">交易策略</h3>
+    <div class="strategy-grid">
+      <!-- 1) 順勢型 -->
+      <div class="strategy-col">
+        <p class="subcat">順勢型</p>
+
+        <a class="card" href="0807.html">
+          <p class="card-title red">台指近-0807版本</p>
+          <div class="lines">
+            <!-- 4 週 -->
+            <p class="line"><span class="label">近1週報酬率</span><span id="wk1-range-0807" class="range">—</span><span id="wk1-0807" class="val neu">—</span></p>
+            <p class="line"><span class="label">近2週報酬率</span><span id="wk2-range-0807" class="range">—</span><span id="wk2-0807" class="val neu">—</span></p>
+            <p class="line"><span class="label">近3週報酬率</span><span id="wk3-range-0807" class="range">—</span><span id="wk3-0807" class="val neu">—</span></p>
+            <p class="line"><span class="label">近4週報酬率</span><span id="wk4-range-0807" class="range">—</span><span id="wk4-0807" class="val neu">—</span></p>
+            <!-- 6 月 -->
+            <p class="line"><span class="label">近1月報酬率</span><span id="m1-range-0807"  class="range">—</span><span id="m1-0807"  class="val neu">—</span></p>
+            <p class="line"><span class="label">近2月報酬率</span><span id="m2-range-0807"  class="range">—</span><span id="m2-0807"  class="val neu">—</span></p>
+            <p class="line"><span class="label">近3月報酬率</span><span id="m3-range-0807"  class="range">—</span><span id="m3-0807"  class="val neu">—</span></p>
+            <p class="line"><span class="label">近4月報酬率</span><span id="m4-range-0807"  class="range">—</span><span id="m4-0807"  class="val neu">—</span></p>
+            <p class="line"><span class="label">近5月報酬率</span><span id="m5-range-0807"  class="range">—</span><span id="m5-0807"  class="val neu">—</span></p>
+            <p class="line"><span class="label">近6月報酬率</span><span id="m6-range-0807"  class="range">—</span><span id="m6-0807"  class="val neu">—</span></p>
+            <!-- 5 年 -->
+            <p class="line"><span class="label">近1年報酬率</span><span id="y1-range-0807"  class="range">—</span><span id="y1-0807"  class="val neu">—</span></p>
+            <p class="line"><span class="label">近2年報酬率</span><span id="y2-range-0807"  class="range">—</span><span id="y2-0807"  class="val neu">—</span></p>
+            <p class="line"><span class="label">近3年報酬率</span><span id="y3-range-0807"  class="range">—</span><span id="y3-0807"  class="val neu">—</span></p>
+            <p class="line"><span class="label">近4年報酬率</span><span id="y4-range-0807"  class="range">—</span><span id="y4-0807"  class="val neu">—</span></p>
+            <p class="line"><span class="label">近5年報酬率</span><span id="y5-range-0807"  class="range">—</span><span id="y5-0807"  class="val neu">—</span></p>
+
+            <p class="period">期間：<span id="period-0807">—</span></p>
+          </div>
+        </a>
+
+        <a class="card" href="1001.html">
+          <p class="card-title red">台指近-1001版本</p>
+          <div class="lines">
+            <p class="line"><span class="label">近1週報酬率</span><span id="wk1-range-1001" class="range">—</span><span id="wk1-1001" class="val neu">—</span></p>
+            <p class="line"><span class="label">近2週報酬率</span><span id="wk2-range-1001" class="range">—</span><span id="wk2-1001" class="val neu">—</span></p>
+            <p class="line"><span class="label">近3週報酬率</span><span id="wk3-range-1001" class="range">—</span><span id="wk3-1001" class="val neu">—</span></p>
+            <p class="line"><span class="label">近4週報酬率</span><span id="wk4-range-1001" class="range">—</span><span id="wk4-1001" class="val neu">—</span></p>
+
+            <p class="line"><span class="label">近1月報酬率</span><span id="m1-range-1001"  class="range">—</span><span id="m1-1001"  class="val neu">—</span></p>
+            <p class="line"><span class="label">近2月報酬率</span><span id="m2-range-1001"  class="range">—</span><span id="m2-1001"  class="val neu">—</span></p>
+            <p class="line"><span class="label">近3月報酬率</span><span id="m3-range-1001"  class="range">—</span><span id="m3-1001"  class="val neu">—</span></p>
+            <p class="line"><span class="label">近4月報酬率</span><span id="m4-range-1001"  class="range">—</span><span id="m4-1001"  class="val neu">—</span></p>
+            <p class="line"><span class="label">近5月報酬率</span><span id="m5-range-1001"  class="range">—</span><span id="m5-1001"  class="val neu">—</span></p>
+            <p class="line"><span class="label">近6月報酬率</span><span id="m6-range-1001"  class="range">—</span><span id="m6-1001"  class="val neu">—</span></p>
+
+            <p class="line"><span class="label">近1年報酬率</span><span id="y1-range-1001"  class="range">—</span><span id="y1-1001"  class="val neu">—</span></p>
+            <p class="line"><span class="label">近2年報酬率</span><span id="y2-range-1001"  class="range">—</span><span id="y2-1001"  class="val neu">—</span></p>
+            <p class="line"><span class="label">近3年報酬率</span><span id="y3-range-1001"  class="range">—</span><span id="y3-1001"  class="val neu">—</span></p>
+            <p class="line"><span class="label">近4年報酬率</span><span id="y4-range-1001"  class="range">—</span><span id="y4-1001"  class="val neu">—</span></p>
+            <p class="line"><span class="label">近5年報酬率</span><span id="y5-range-1001"  class="range">—</span><span id="y5-1001"  class="val neu">—</span></p>
+
+            <p class="period">期間：<span id="period-1001">—</span></p>
+          </div>
+        </a>
+      </div>
+
+      <!-- 2) 逆勢型 -->
+      <div class="strategy-col">
+        <p class="subcat">逆勢型</p>
+        <a class="card" href="etf-00909.html">
+          <p class="card-title red">00909-ETF版本</p>
+          <div class="lines">
+            <p class="line"><span class="label">近1週報酬率</span><span id="wk1-range-00909" class="range">—</span><span id="wk1-00909" class="val neu">—</span></p>
+            <p class="line"><span class="label">近2週報酬率</span><span id="wk2-range-00909" class="range">—</span><span id="wk2-00909" class="val neu">—</span></p>
+            <p class="line"><span class="label">近3週報酬率</span><span id="wk3-range-00909" class="range">—</span><span id="wk3-00909" class="val neu">—</span></p>
+            <p class="line"><span class="label">近4週報酬率</span><span id="wk4-range-00909" class="range">—</span><span id="wk4-00909" class="val neu">—</span></p>
+
+            <p class="line"><span class="label">近1月報酬率</span><span id="m1-range-00909"  class="range">—</span><span id="m1-00909"  class="val neu">—</span></p>
+            <p class="line"><span class="label">近2月報酬率</span><span id="m2-range-00909"  class="range">—</span><span id="m2-00909"  class="val neu">—</span></p>
+            <p class="line"><span class="label">近3月報酬率</span><span id="m3-range-00909"  class="range">—</span><span id="m3-00909"  class="val neu">—</span></p>
+            <p class="line"><span class="label">近4月報酬率</span><span id="m4-range-00909"  class="range">—</span><span id="m4-00909"  class="val neu">—</span></p>
+            <p class="line"><span class="label">近5月報酬率</span><span id="m5-range-00909"  class="range">—</span><span id="m5-00909"  class="val neu">—</span></p>
+            <p class="line"><span class="label">近6月報酬率</span><span id="m6-range-00909"  class="range">—</span><span id="m6-00909"  class="val neu">—</span></p>
+
+            <p class="line"><span class="label">近1年報酬率</span><span id="y1-range-00909"  class="range">—</span><span id="y1-00909"  class="val neu">—</span></p>
+            <p class="line"><span class="label">近2年報酬率</span><span id="y2-range-00909"  class="range">—</span><span id="y2-00909"  class="val neu">—</span></p>
+            <p class="line"><span class="label">近3年報酬率</span><span id="y3-range-00909"  class="range">—</span><span id="y3-00909"  class="val neu">—</span></p>
+            <p class="line"><span class="label">近4年報酬率</span><span id="y4-range-00909"  class="range">—</span><span id="y4-00909"  class="val neu">—</span></p>
+            <p class="line"><span class="label">近5年報酬率</span><span id="y5-range-00909"  class="range">—</span><span id="y5-00909"  class="val neu">—</span></p>
+
+            <p class="period">期間：<span id="period-00909">—</span></p>
+          </div>
+        </a>
+      </div>
+
+      <!-- 3) 盤整型 -->
+      <div class="strategy-col">
+        <p class="subcat">盤整型</p>
+        <!-- 目前預留，未來放盤整策略 -->
+      </div>
+
+      <!-- 4) 研發中（獨立下一行） -->
+      <div class="strategy-col research">
+        <p class="subcat" style="color:#111">研發中</p>
+        <a class="card" href="tw-1031.html">
+          <p class="card-title red">台股-1031版本</p>
+          <div class="lines">
+            <p class="line"><span class="label">近1週報酬率</span><span id="wk1-range-1031" class="range">—</span><span id="wk1-1031" class="val neu">—</span></p>
+            <p class="line"><span class="label">近2週報酬率</span><span id="wk2-range-1031" class="range">—</span><span id="wk2-1031" class="val neu">—</span></p>
+            <p class="line"><span class="label">近3週報酬率</span><span id="wk3-range-1031" class="range">—</span><span id="wk3-1031" class="val neu">—</span></p>
+            <p class="line"><span class="label">近4週報酬率</span><span id="wk4-range-1031" class="range">—</span><span id="wk4-1031" class="val neu">—</span></p>
+
+            <p class="line"><span class="label">近1月報酬率</span><span id="m1-range-1031"  class="range">—</span><span id="m1-1031"  class="val neu">—</span></p>
+            <p class="line"><span class="label">近2月報酬率</span><span id="m2-range-1031"  class="range">—</span><span id="m2-1031"  class="val neu">—</span></p>
+            <p class="line"><span class="label">近3月報酬率</span><span id="m3-range-1031"  class="range">—</span><span id="m3-1031"  class="val neu">—</span></p>
+            <p class="line"><span class="label">近4月報酬率</span><span id="m4-range-1031"  class="range">—</span><span id="m4-1031"  class="val neu">—</span></p>
+            <p class="line"><span class="label">近5月報酬率</span><span id="m5-range-1031"  class="range">—</span><span id="m5-1031"  class="val neu">—</span></p>
+            <p class="line"><span class="label">近6月報酬率</span><span id="m6-range-1031"  class="range">—</span><span id="m6-1031"  class="val neu">—</span></p>
+
+            <p class="line"><span class="label">近1年報酬率</span><span id="y1-range-1031"  class="range">—</span><span id="y1-1031"  class="val neu">—</span></p>
+            <p class="line"><span class="label">近2年報酬率</span><span id="y2-range-1031"  class="range">—</span><span id="y2-1031"  class="val neu">—</span></p>
+            <p class="line"><span class="label">近3年報酬率</span><span id="y3-range-1031"  class="range">—</span><span id="y3-1031"  class="val neu">—</span></p>
+            <p class="line"><span class="label">近4年報酬率</span><span id="y4-range-1031"  class="range">—</span><span id="y4-1031"  class="val neu">—</span></p>
+            <p class="line"><span class="label">近5年報酬率</span><span id="y5-range-1031"  class="range">—</span><span id="y5-1031"  class="val neu">—</span></p>
+
+            <p class="period">期間：<span id="period-1031">—</span></p>
+          </div>
+        </a>
+      </div>
+    </div>
+
+    <hr>
+
+    <h3 class="section-title-blue">分析</h3>
+    <div style="height:8px;"></div>
+
+    <!-- 第一排：期貨策略研究 + 期貨最佳化參數研究 -->
+    <div class="nav">
+      <a class="card" href="single-trades.html">
+        <p class="card-title blue big">期貨策略研究</p>
+        <p class="card-desc"></p>
+      </a>
+
+      <a class="card" href="multi-pro.html">
+        <p class="card-title blue big">期貨最佳化參數研究</p>
+        <p class="card-desc"></p>
+      </a>
+    </div>
+
+    <div style="height:12px;"></div>
+
+    <!-- 第二排：股票策略研究 -->
+    <div class="nav">
+      <a class="card" href="stock-multi-cloud.html">
+        <p class="card-title blue big">股票策略研究</p>
+        <p class="card-desc"></p>
+      </a>
+    </div>
+
+    <hr>
+
+    <h3 class="section-title-black">資料</h3>
+    <div class="nav">
+      <a class="card" href="upload.html">
+        <p class="card-title black big">上傳檔案</p>
+        <p class="card-desc"></p>
+      </a>
+    </div>
+  </div>
+
   <!-- ===== JS：門檻 + 讀檔 + 報酬填值 + 安控補強 + 1031 CSV 解析 ===== -->
   <script>
   (function(){
@@ -34,8 +415,16 @@
     function isLocked(){ const until=+(sessionStorage.getItem(LOCK_UNTIL_KEY)||0); return Date.now()<until; }
     function remainingLockSec(){ const until=+(sessionStorage.getItem(LOCK_UNTIL_KEY)||0); return Math.max(0, Math.ceil((until-Date.now())/1000)); }
     function setLock(seconds){ sessionStorage.setItem(LOCK_UNTIL_KEY, String(Date.now()+seconds*1000)); }
-    function addFailAndMaybeLock(){ const n=(+(sessionStorage.getItem(FAIL_KEY)||0))+1; sessionStorage.setItem(FAIL_KEY,String(n)); if(n>=5){ const m=Math.min(60, Math.pow(2, n-5)); setLock(m*60); } }
+    function addFailAndMaybeLock(){
+      const n=(+(sessionStorage.getItem(FAIL_KEY)||0))+1;
+      sessionStorage.setItem(FAIL_KEY,String(n));
+      if(n>=5){
+        const m=Math.min(60, Math.pow(2, n-5));
+        setLock(m*60);
+      }
+    }
     function resetFails(){ sessionStorage.removeItem(FAIL_KEY); sessionStorage.removeItem(LOCK_UNTIL_KEY); }
+
     let idleTimer=null;
     function startIdleLogout(){
       const kick=()=>{ sessionStorage.removeItem(KEY_OK); location.reload(); };
@@ -45,8 +434,13 @@
     }
 
     function enableDevtoolsWatchAfterLogin(){
-      let suspect=0; const trig=()=>{ if(++suspect>=3) shield.style.display='flex'; };
-      setInterval(()=>{ if (Math.abs(window.outerWidth-window.innerWidth)>250 || Math.abs(window.outerHeight-window.innerHeight)>250) trig(); else suspect=0; }, 1000);
+      let suspect=0;
+      function trig(){ if(++suspect>=3) shield.style.display='flex'; }
+      setInterval(()=>{
+        if (Math.abs(window.outerWidth-window.innerWidth)>250 ||
+            Math.abs(window.outerHeight-window.innerHeight)>250) trig();
+        else suspect=0;
+      }, 1000);
       (function loop(p){
         const n=performance.now();
         if(n-p>1200) trig(); else suspect=0;
@@ -58,24 +452,44 @@
       const buf=await crypto.subtle.digest('SHA-256', new TextEncoder().encode(t));
       return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
     }
+
     async function enter(){
       err.style.display='none';
-      if(isLocked()){ err.textContent=`嘗試次數過多，請 ${remainingLockSec()} 秒後再試。`; err.style.display=''; return; }
+      if(isLocked()){
+        err.textContent=`嘗試次數過多，請 ${remainingLockSec()} 秒後再試。`;
+        err.style.display='';
+        return;
+      }
       const v=(pwd.value||'').trim();
-      if(!v){ err.textContent='請輸入密碼 / Please enter password.'; err.style.display=''; return; }
+      if(!v){
+        err.textContent='請輸入密碼 / Please enter password.';
+        err.style.display='';
+        return;
+      }
       const t0=Date.now();
       if(await sha256Hex(v)===PASS_HASH){
         sessionStorage.setItem(KEY_OK,'1'); resetFails();
         gate.classList.add('hidden'); app.classList.remove('hidden');
         startIdleLogout(); enableDevtoolsWatchAfterLogin(); loadDepsAndRun();
       }else{
-        const delay = 1000 + Math.random()*600 - (Date.now()-t0); if(delay>0) await new Promise(r=>setTimeout(r, delay));
-        addFailAndMaybeLock(); err.textContent='密碼錯誤，請再試一次。/ Incorrect password.'; err.style.display='';
+        const delay = 1000 + Math.random()*600 - (Date.now()-t0);
+        if(delay>0) await new Promise(r=>setTimeout(r, delay));
+        addFailAndMaybeLock();
+        err.textContent='密碼錯誤，請再試一次。/ Incorrect password.';
+        err.style.display='';
       }
     }
+
     btnLogin.addEventListener('click', enter);
-    btnClear.addEventListener('click', ()=>{ pwd.value=''; err.style.display='none'; resetFails(); sessionStorage.removeItem(KEY_OK); pwd.focus(); });
+    btnClear.addEventListener('click', ()=>{
+      pwd.value='';
+      err.style.display='none';
+      resetFails();
+      sessionStorage.removeItem(KEY_OK);
+      pwd.focus();
+    });
     pwd.addEventListener('keydown', e=>{ if(e.key==='Enter') enter(); });
+
     (function boot(){
       if(sessionStorage.getItem(KEY_OK)==='1'){
         gate.classList.add('hidden'); app.classList.remove('hidden');
@@ -98,7 +512,9 @@
       await loadScript('shared.js?v=txfee45tax2');
 
       (async function(){
-        const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { global:{ fetch:(u,o={})=>fetch(u,{...o,cache:'no-store'}) } });
+        const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+          global:{ fetch:(u,o={})=>fetch(u,{...o,cache:'no-store'}) }
+        });
 
         const WANT = {
           "0807": /(0807)/i,
@@ -110,7 +526,10 @@
 
         async function listDir(prefix){
           const p = (prefix && !prefix.endsWith('/')) ? prefix + '/' : (prefix || '');
-          const { data } = await sb.storage.from(BUCKET).list(p, { limit:1000, sortBy:{ column:'name', order:'asc' }});
+          const { data } = await sb.storage.from(BUCKET).list(p, {
+            limit:1000,
+            sortBy:{ column:'name', order:'asc' }
+          });
           return (data || []).map(it => ({ ...it, fullPath: p + it.name }));
         }
 
@@ -151,7 +570,8 @@
           files.sort((a,b)=>{
             const sa=scoreByPath(a.fullPath), sb=scoreByPath(b.fullPath);
             if(sa!==sb) return sb-sa;
-            const ta=Date.parse(a.updated_at||0)||0, tb=Date.parse(b.updated_at||0)||0;
+            const ta=Date.parse(a.updated_at||0)||0;
+            const tb=Date.parse(b.updated_at||0)||0;
             if(ta!==tb) return tb-ta;
             return (b.metadata?.size||0)-(a.metadata?.size||0);
           });
@@ -182,22 +602,35 @@
           if(/^賣出$/i.test(act)) return '平賣';
           return act;
         }
+
         function normalizeText(raw){
           let s=raw.replace(/\ufeff/gi,'').replace(/\u200b|\u200c|\u200d/gi,'');
-          s=s.replace(/[\x00-\x09\x0B-\x1F\x7F]/g,'').replace(/\r\n?/g,'\n').replace(/\u3000/g,' ');
+          s=s.replace(/[\x00-\x09\x0B-\x1F\x7F]/g,'')
+             .replace(/\r\n?/g,'\n')
+             .replace(/\u3000/g,' ');
           return s.split('\n').map(l=>l.replace(/\s+/g,' ').trim()).filter(Boolean).join('\n');
         }
+
         const CSV_LINE_RE=/^(\d{8}),(\d{5,6}),(\d+(?:\.\d+)?),([^,]+?),/;
         function padTime6(t){ t=String(t||'').trim(); return t.padStart(6,'0').slice(0,6); }
 
         function canonicalize(txt){
-          const out=[]; let ok=0; const lines = txt.split('\n');
+          const out=[]; let ok=0;
+          const lines = txt.split('\n');
           for(const l of lines){
             let m=l.match(EXTRACT_RE);
-            if(m){ const ts=m[1], px=Number(m[2]); out.push(`${ts}.000000 ${px.toFixed(6)} ${m[3]}`); ok++; continue; }
+            if(m){
+              const ts=m[1], px=Number(m[2]);
+              out.push(`${ts}.000000 ${px.toFixed(6)} ${m[3]}`);
+              ok++; continue;
+            }
             m = l.match(CSV_LINE_RE);
-            if(m){ const d8=m[1], t6=padTime6(m[2]), px=Number(m[3]), act0=m[4].trim();
-              if(Number.isFinite(px)){ out.push(`${d8}${t6}.000000 ${px.toFixed(6)} ${mapAction(act0)}`); ok++; continue; }
+            if(m){
+              const d8=m[1], t6=padTime6(m[2]), px=Number(m[3]), act0=m[4].trim();
+              if(Number.isFinite(px)){
+                out.push(`${d8}${t6}.000000 ${px.toFixed(6)} ${mapAction(act0)}`);
+                ok++; continue;
+              }
             }
           }
           return { canon: out.join('\n'), ok };
@@ -247,14 +680,18 @@
         const d8=s=> new Date(`${s.slice(0,4)}-${s.slice(4,6)}-${s.slice(6,8)}T00:00:00`);
         const fmtD8=s=> `${s.slice(0,4)}/${s.slice(4,6)}/${s.slice(6,8)}`;
 
-        // 以「週一到今天」為一週，往前推 N 週
+        // 以「週一到最後一筆交易日」為一週，往回累計 N 週
         function weekReturnWithRange(days, vals, weeks){
           if(!days.length) return {ret:null, range:'---'};
           const lastStr = days[days.length-1];
           const lastDate = d8(lastStr);
-          const dow = lastDate.getDay();          // 0=Sun,1=Mon,...6=Sat
+          const dow = lastDate.getDay();          // 0=Sun, 1=Mon, ..., 6=Sat
           const offsetToMonday = (dow + 6) % 7;   // 距離週一幾天
-          const mondayThisWeek = new Date(lastDate.getFullYear(), lastDate.getMonth(), lastDate.getDate() - offsetToMonday);
+          const mondayThisWeek = new Date(
+            lastDate.getFullYear(),
+            lastDate.getMonth(),
+            lastDate.getDate() - offsetToMonday
+          );
           const startDate = new Date(mondayThisWeek.getTime() - (weeks-1)*7*86400000);
 
           let i=0;
@@ -405,8 +842,15 @@
           }
         }
 
-        await Promise.all([fillCard("0807"), fillCard("1001"), fillCard("00909"), fillCard("1031")]);
+        await Promise.all([
+          fillCard("0807"),
+          fillCard("1001"),
+          fillCard("00909"),
+          fillCard("1031")
+        ]);
       })();
     }
   })();
   </script>
+</body>
+</html>
