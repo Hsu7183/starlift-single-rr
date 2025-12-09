@@ -92,9 +92,9 @@
     .lines{ margin-top:2px }
     .line{
       display:grid;
-      grid-template-columns:1.1fr 3.1fr;
+      grid-template-columns:1.1fr 2.4fr 0.9fr;
       align-items:center;
-      margin:4px 0;
+      margin:2px 0;
       font-size:12px;
       column-gap:6px;
     }
@@ -103,35 +103,20 @@
       color:#111;
       white-space:nowrap;
     }
-
-    /* 右側：兩行，上＝當週，下＝累計；數字都靠右，上面多退一點 */
-    .valblock{
-      display:flex;
-      flex-direction:column;
-      row-gap:2px;
-    }
-    .sub-row{
-      display:flex;
-      align-items:center;
-      column-gap:4px;
+    .range{
+      text-align:center;
+      color:#999;
       font-size:10px;
       white-space:nowrap;
-      justify-content:space-between;
     }
-    .sub-row.cur{ padding-right:2.5em; }  /* 當週數字往左退一點（約全形 3~4 字寬） */
-    .sub-row.cum{ padding-right:0; }      /* 累計數字貼最右 */
-
-    .sub-range{
-      font-size:10px;
-      color:#999;
-    }
-    .sub-val{
-      font-size:12px;
+    .val{
+      text-align:right;
       font-weight:700;
+      font-size:12px;
     }
-    .sub-val.pos{ color:#d32f2f }
-    .sub-val.neg{ color:#10b981 }
-    .sub-val.neu{ color:#666 }
+    .val.pos{ color:#d32f2f }
+    .val.neg{ color:#10b981 }
+    .val.neu{ color:#666 }
 
     .period{
       margin-top:6px;
@@ -217,205 +202,85 @@
         <a class="card" href="0807.html">
           <p class="card-title red">台指近-0807版本</p>
           <div class="lines">
-            <!-- 週：上行＝當週，下行＝自該週起算累計 -->
+            <!-- 4 週累計 -->
             <p class="line">
               <span class="label">近1週報酬率</span>
-              <span class="valblock">
-                <span class="sub-row cur">
-                  <span id="wk1-cur-range-0807" class="sub-range">—</span>
-                  <span id="wk1-cur-0807" class="sub-val neu">—</span>
-                </span>
-                <span class="sub-row cum">
-                  <span id="wk1-cum-range-0807" class="sub-range">—</span>
-                  <span id="wk1-cum-0807" class="sub-val neu">—</span>
-                </span>
-              </span>
+              <span id="wk1-range-0807" class="range">—</span>
+              <span id="wk1-0807" class="val neu">—</span>
             </p>
             <p class="line">
               <span class="label">近2週報酬率</span>
-              <span class="valblock">
-                <span class="sub-row cur">
-                  <span id="wk2-cur-range-0807" class="sub-range">—</span>
-                  <span id="wk2-cur-0807" class="sub-val neu">—</span>
-                </span>
-                <span class="sub-row cum">
-                  <span id="wk2-cum-range-0807" class="sub-range">—</span>
-                  <span id="wk2-cum-0807" class="sub-val neu">—</span>
-                </span>
-              </span>
+              <span id="wk2-range-0807" class="range">—</span>
+              <span id="wk2-0807" class="val neu">—</span>
             </p>
             <p class="line">
               <span class="label">近3週報酬率</span>
-              <span class="valblock">
-                <span class="sub-row cur">
-                  <span id="wk3-cur-range-0807" class="sub-range">—</span>
-                  <span id="wk3-cur-0807" class="sub-val neu">—</span>
-                </span>
-                <span class="sub-row cum">
-                  <span id="wk3-cum-range-0807" class="sub-range">—</span>
-                  <span id="wk3-cum-0807" class="sub-val neu">—</span>
-                </span>
-              </span>
+              <span id="wk3-range-0807" class="range">—</span>
+              <span id="wk3-0807" class="val neu">—</span>
             </p>
             <p class="line">
               <span class="label">近4週報酬率</span>
-              <span class="valblock">
-                <span class="sub-row cur">
-                  <span id="wk4-cur-range-0807" class="sub-range">—</span>
-                  <span id="wk4-cur-0807" class="sub-val neu">—</span>
-                </span>
-                <span class="sub-row cum">
-                  <span id="wk4-cum-range-0807" class="sub-range">—</span>
-                  <span id="wk4-cum-0807" class="sub-val neu">—</span>
-                </span>
-              </span>
+              <span id="wk4-range-0807" class="range">—</span>
+              <span id="wk4-0807" class="val neu">—</span>
             </p>
 
-            <!-- 月：沿用原本邏輯，當月/累計視為區間 + 同區間 -->
+            <!-- 6 月累計 -->
             <p class="line">
               <span class="label">近1月報酬率</span>
-              <span class="valblock">
-                <span class="sub-row cur">
-                  <span id="m1-cur-range-0807" class="sub-range">—</span>
-                  <span id="m1-cur-0807" class="sub-val neu">—</span>
-                </span>
-                <span class="sub-row cum">
-                  <span id="m1-cum-range-0807" class="sub-range">—</span>
-                  <span id="m1-cum-0807" class="sub-val neu">—</span>
-                </span>
-              </span>
+              <span id="m1-range-0807" class="range">—</span>
+              <span id="m1-0807" class="val neu">—</span>
             </p>
             <p class="line">
               <span class="label">近2月報酬率</span>
-              <span class="valblock">
-                <span class="sub-row cur">
-                  <span id="m2-cur-range-0807" class="sub-range">—</span>
-                  <span id="m2-cur-0807" class="sub-val neu">—</span>
-                </span>
-                <span class="sub-row cum">
-                  <span id="m2-cum-range-0807" class="sub-range">—</span>
-                  <span id="m2-cum-0807" class="sub-val neu">—</span>
-                </span>
-              </span>
+              <span id="m2-range-0807" class="range">—</span>
+              <span id="m2-0807" class="val neu">—</span>
             </p>
             <p class="line">
               <span class="label">近3月報酬率</span>
-              <span class="valblock">
-                <span class="sub-row cur">
-                  <span id="m3-cur-range-0807" class="sub-range">—</span>
-                  <span id="m3-cur-0807" class="sub-val neu">—</span>
-                </span>
-                <span class="sub-row cum">
-                  <span id="m3-cum-range-0807" class="sub-range">—</span>
-                  <span id="m3-cum-0807" class="sub-val neu">—</span>
-                </span>
-              </span>
+              <span id="m3-range-0807" class="range">—</span>
+              <span id="m3-0807" class="val neu">—</span>
             </p>
             <p class="line">
               <span class="label">近4月報酬率</span>
-              <span class="valblock">
-                <span class="sub-row cur">
-                  <span id="m4-cur-range-0807" class="sub-range">—</span>
-                  <span id="m4-cur-0807" class="sub-val neu">—</span>
-                </span>
-                <span class="sub-row cum">
-                  <span id="m4-cum-range-0807" class="sub-range">—</span>
-                  <span id="m4-cum-0807" class="sub-val neu">—</span>
-                </span>
-              </span>
+              <span id="m4-range-0807" class="range">—</span>
+              <span id="m4-0807" class="val neu">—</span>
             </p>
             <p class="line">
               <span class="label">近5月報酬率</span>
-              <span class="valblock">
-                <span class="sub-row cur">
-                  <span id="m5-cur-range-0807" class="sub-range">—</span>
-                  <span id="m5-cur-0807" class="sub-val neu">—</span>
-                </span>
-                <span class="sub-row cum">
-                  <span id="m5-cum-range-0807" class="sub-range">—</span>
-                  <span id="m5-cum-0807" class="sub-val neu">—</span>
-                </span>
-              </span>
+              <span id="m5-range-0807" class="range">—</span>
+              <span id="m5-0807" class="val neu">—</span>
             </p>
             <p class="line">
               <span class="label">近6月報酬率</span>
-              <span class="valblock">
-                <span class="sub-row cur">
-                  <span id="m6-cur-range-0807" class="sub-range">—</span>
-                  <span id="m6-cur-0807" class="sub-val neu">—</span>
-                </span>
-                <span class="sub-row cum">
-                  <span id="m6-cum-range-0807" class="sub-range">—</span>
-                  <span id="m6-cum-0807" class="sub-val neu">—</span>
-                </span>
-              </span>
+              <span id="m6-range-0807" class="range">—</span>
+              <span id="m6-0807" class="val neu">—</span>
             </p>
 
-            <!-- 年 -->
+            <!-- 5 年累計 -->
             <p class="line">
               <span class="label">近1年報酬率</span>
-              <span class="valblock">
-                <span class="sub-row cur">
-                  <span id="y1-cur-range-0807" class="sub-range">—</span>
-                  <span id="y1-cur-0807" class="sub-val neu">—</span>
-                </span>
-                <span class="sub-row cum">
-                  <span id="y1-cum-range-0807" class="sub-range">—</span>
-                  <span id="y1-cum-0807" class="sub-val neu">—</span>
-                </span>
-              </span>
+              <span id="y1-range-0807" class="range">—</span>
+              <span id="y1-0807" class="val neu">—</span>
             </p>
             <p class="line">
               <span class="label">近2年報酬率</span>
-              <span class="valblock">
-                <span class="sub-row cur">
-                  <span id="y2-cur-range-0807" class="sub-range">—</span>
-                  <span id="y2-cur-0807" class="sub-val neu">—</span>
-                </span>
-                <span class="sub-row cum">
-                  <span id="y2-cum-range-0807" class="sub-range">—</span>
-                  <span id="y2-cum-0807" class="sub-val neu">—</span>
-                </span>
-              </span>
+              <span id="y2-range-0807" class="range">—</span>
+              <span id="y2-0807" class="val neu">—</span>
             </p>
             <p class="line">
               <span class="label">近3年報酬率</span>
-              <span class="valblock">
-                <span class="sub-row cur">
-                  <span id="y3-cur-range-0807" class="sub-range">—</span>
-                  <span id="y3-cur-0807" class="sub-val neu">—</span>
-                </span>
-                <span class="sub-row cum">
-                  <span id="y3-cum-range-0807" class="sub-range">—</span>
-                  <span id="y3-cum-0807" class="sub-val neu">—</span>
-                </span>
-              </span>
+              <span id="y3-range-0807" class="range">—</span>
+              <span id="y3-0807" class="val neu">—</span>
             </p>
             <p class="line">
               <span class="label">近4年報酬率</span>
-              <span class="valblock">
-                <span class="sub-row cur">
-                  <span id="y4-cur-range-0807" class="sub-range">—</span>
-                  <span id="y4-cur-0807" class="sub-val neu">—</span>
-                </span>
-                <span class="sub-row cum">
-                  <span id="y4-cum-range-0807" class="sub-range">—</span>
-                  <span id="y4-cum-0807" class="sub-val neu">—</span>
-                </span>
-              </span>
+              <span id="y4-range-0807" class="range">—</span>
+              <span id="y4-0807" class="val neu">—</span>
             </p>
             <p class="line">
               <span class="label">近5年報酬率</span>
-              <span class="valblock">
-                <span class="sub-row cur">
-                  <span id="y5-cur-range-0807" class="sub-range">—</span>
-                  <span id="y5-cur-0807" class="sub-val neu">—</span>
-                </span>
-                <span class="sub-row cum">
-                  <span id="y5-cum-range-0807" class="sub-range">—</span>
-                  <span id="y5-cum-0807" class="sub-val neu">—</span>
-                </span>
-              </span>
+              <span id="y5-range-0807" class="range">—</span>
+              <span id="y5-0807" class="val neu">—</span>
             </p>
 
             <p class="period">期間：<span id="period-0807">—</span></p>
@@ -425,203 +290,82 @@
         <a class="card" href="1001.html">
           <p class="card-title red">台指近-1001版本</p>
           <div class="lines">
-            <!-- 1001 同樣結構，id 改為 1001 -->
             <p class="line">
               <span class="label">近1週報酬率</span>
-              <span class="valblock">
-                <span class="sub-row cur">
-                  <span id="wk1-cur-range-1001" class="sub-range">—</span>
-                  <span id="wk1-cur-1001" class="sub-val neu">—</span>
-                </span>
-                <span class="sub-row cum">
-                  <span id="wk1-cum-range-1001" class="sub-range">—</span>
-                  <span id="wk1-cum-1001" class="sub-val neu">—</span>
-                </span>
-              </span>
+              <span id="wk1-range-1001" class="range">—</span>
+              <span id="wk1-1001" class="val neu">—</span>
             </p>
             <p class="line">
               <span class="label">近2週報酬率</span>
-              <span class="valblock">
-                <span class="sub-row cur">
-                  <span id="wk2-cur-range-1001" class="sub-range">—</span>
-                  <span id="wk2-cur-1001" class="sub-val neu">—</span>
-                </span>
-                <span class="sub-row cum">
-                  <span id="wk2-cum-range-1001" class="sub-range">—</span>
-                  <span id="wk2-cum-1001" class="sub-val neu">—</span>
-                </span>
-              </span>
+              <span id="wk2-range-1001" class="range">—</span>
+              <span id="wk2-1001" class="val neu">—</span>
             </p>
             <p class="line">
               <span class="label">近3週報酬率</span>
-              <span class="valblock">
-                <span class="sub-row cur">
-                  <span id="wk3-cur-range-1001" class="sub-range">—</span>
-                  <span id="wk3-cur-1001" class="sub-val neu">—</span>
-                </span>
-                <span class="sub-row cum">
-                  <span id="wk3-cum-range-1001" class="sub-range">—</span>
-                  <span id="wk3-cum-1001" class="sub-val neu">—</span>
-                </span>
-              </span>
+              <span id="wk3-range-1001" class="range">—</span>
+              <span id="wk3-1001" class="val neu">—</span>
             </p>
             <p class="line">
               <span class="label">近4週報酬率</span>
-              <span class="valblock">
-                <span class="sub-row cur">
-                  <span id="wk4-cur-range-1001" class="sub-range">—</span>
-                  <span id="wk4-cur-1001" class="sub-val neu">—</span>
-                </span>
-                <span class="sub-row cum">
-                  <span id="wk4-cum-range-1001" class="sub-range">—</span>
-                  <span id="wk4-cum-1001" class="sub-val neu">—</span>
-                </span>
-              </span>
+              <span id="wk4-range-1001" class="range">—</span>
+              <span id="wk4-1001" class="val neu">—</span>
             </p>
 
             <p class="line">
               <span class="label">近1月報酬率</span>
-              <span class="valblock">
-                <span class="sub-row cur">
-                  <span id="m1-cur-range-1001" class="sub-range">—</span>
-                  <span id="m1-cur-1001" class="sub-val neu">—</span>
-                </span>
-                <span class="sub-row cum">
-                  <span id="m1-cum-range-1001" class="sub-range">—</span>
-                  <span id="m1-cum-1001" class="sub-val neu">—</span>
-                </span>
-              </span>
+              <span id="m1-range-1001" class="range">—</span>
+              <span id="m1-1001" class="val neu">—</span>
             </p>
             <p class="line">
               <span class="label">近2月報酬率</span>
-              <span class="valblock">
-                <span class="sub-row cur">
-                  <span id="m2-cur-range-1001" class="sub-range">—</span>
-                  <span id="m2-cur-1001" class="sub-val neu">—</span>
-                </span>
-                <span class="sub-row cum">
-                  <span id="m2-cum-range-1001" class="sub-range">—</span>
-                  <span id="m2-cum-1001" class="sub-val neu">—</span>
-                </span>
-              </span>
+              <span id="m2-range-1001" class="range">—</span>
+              <span id="m2-1001" class="val neu">—</span>
             </p>
             <p class="line">
               <span class="label">近3月報酬率</span>
-              <span class="valblock">
-                <span class="sub-row cur">
-                  <span id="m3-cur-range-1001" class="sub-range">—</span>
-                  <span id="m3-cur-1001" class="sub-val neu">—</span>
-                </span>
-                <span class="sub-row cum">
-                  <span id="m3-cum-range-1001" class="sub-range">—</span>
-                  <span id="m3-cum-1001" class="sub-val neu">—</span>
-                </span>
-              </span>
+              <span id="m3-range-1001" class="range">—</span>
+              <span id="m3-1001" class="val neu">—</span>
             </p>
             <p class="line">
               <span class="label">近4月報酬率</span>
-              <span class="valblock">
-                <span class="sub-row cur">
-                  <span id="m4-cur-range-1001" class="sub-range">—</span>
-                  <span id="m4-cur-1001" class="sub-val neu">—</span>
-                </span>
-                <span class="sub-row cum">
-                  <span id="m4-cum-range-1001" class="sub-range">—</span>
-                  <span id="m4-cum-1001" class="sub-val neu">—</span>
-                </span>
-              </span>
+              <span id="m4-range-1001" class="range">—</span>
+              <span id="m4-1001" class="val neu">—</span>
             </p>
             <p class="line">
               <span class="label">近5月報酬率</span>
-              <span class="valblock">
-                <span class="sub-row cur">
-                  <span id="m5-cur-range-1001" class="sub-range">—</span>
-                  <span id="m5-cur-1001" class="sub-val neu">—</span>
-                </span>
-                <span class="sub-row cum">
-                  <span id="m5-cum-range-1001" class="sub-range">—</span>
-                  <span id="m5-cum-1001" class="sub-val neu">—</span>
-                </span>
-              </span>
+              <span id="m5-range-1001" class="range">—</span>
+              <span id="m5-1001" class="val neu">—</span>
             </p>
             <p class="line">
               <span class="label">近6月報酬率</span>
-              <span class="valblock">
-                <span class="sub-row cur">
-                  <span id="m6-cur-range-1001" class="sub-range">—</span>
-                  <span id="m6-cur-1001" class="sub-val neu">—</span>
-                </span>
-                <span class="sub-row cum">
-                  <span id="m6-cum-range-1001" class="sub-range">—</span>
-                  <span id="m6-cum-1001" class="sub-val neu">—</span>
-                </span>
-              </span>
+              <span id="m6-range-1001" class="range">—</span>
+              <span id="m6-1001" class="val neu">—</span>
             </p>
 
             <p class="line">
               <span class="label">近1年報酬率</span>
-              <span class="valblock">
-                <span class="sub-row cur">
-                  <span id="y1-cur-range-1001" class="sub-range">—</span>
-                  <span id="y1-cur-1001" class="sub-val neu">—</span>
-                </span>
-                <span class="sub-row cum">
-                  <span id="y1-cum-range-1001" class="sub-range">—</span>
-                  <span id="y1-cum-1001" class="sub-val neu">—</span>
-                </span>
-              </span>
+              <span id="y1-range-1001" class="range">—</span>
+              <span id="y1-1001" class="val neu">—</span>
             </p>
             <p class="line">
               <span class="label">近2年報酬率</span>
-              <span class="valblock">
-                <span class="sub-row cur">
-                  <span id="y2-cur-range-1001" class="sub-range">—</span>
-                  <span id="y2-cur-1001" class="sub-val neu">—</span>
-                </span>
-                <span class="sub-row cum">
-                  <span id="y2-cum-range-1001" class="sub-range">—</span>
-                  <span id="y2-cum-1001" class="sub-val neu">—</span>
-                </span>
-              </span>
+              <span id="y2-range-1001" class="range">—</span>
+              <span id="y2-1001" class="val neu">—</span>
             </p>
             <p class="line">
               <span class="label">近3年報酬率</span>
-              <span class="valblock">
-                <span class="sub-row cur">
-                  <span id="y3-cur-range-1001" class="sub-range">—</span>
-                  <span id="y3-cur-1001" class="sub-val neu">—</span>
-                </span>
-                <span class="sub-row cum">
-                  <span id="y3-cum-range-1001" class="sub-range">—</span>
-                  <span id="y3-cum-1001" class="sub-val neu">—</span>
-                </span>
-              </span>
+              <span id="y3-range-1001" class="range">—</span>
+              <span id="y3-1001" class="val neu">—</span>
             </p>
             <p class="line">
               <span class="label">近4年報酬率</span>
-              <span class="valblock">
-                <span class="sub-row cur">
-                  <span id="y4-cur-range-1001" class="sub-range">—</span>
-                  <span id="y4-cur-1001" class="sub-val neu">—</span>
-                </span>
-                <span class="sub-row cum">
-                  <span id="y4-cum-range-1001" class="sub-range">—</span>
-                  <span id="y4-cum-1001" class="sub-val neu">—</span>
-                </span>
-              </span>
+              <span id="y4-range-1001" class="range">—</span>
+              <span id="y4-1001" class="val neu">—</span>
             </p>
             <p class="line">
               <span class="label">近5年報酬率</span>
-              <span class="valblock">
-                <span class="sub-row cur">
-                  <span id="y5-cur-range-1001" class="sub-range">—</span>
-                  <span id="y5-cur-1001" class="sub-val neu">—</span>
-                </span>
-                <span class="sub-row cum">
-                  <span id="y5-cum-range-1001" class="sub-range">—</span>
-                  <span id="y5-cum-1001" class="sub-val neu">—</span>
-                </span>
-              </span>
+              <span id="y5-range-1001" class="range">—</span>
+              <span id="y5-1001" class="val neu">—</span>
             </p>
 
             <p class="period">期間：<span id="period-1001">—</span></p>
@@ -635,203 +379,82 @@
         <a class="card" href="etf-00909.html">
           <p class="card-title gray">台股-00909版本(研發中)</p>
           <div class="lines">
-            <!-- 結構和上面相同，id 改成 00909 -->
             <p class="line">
               <span class="label">近1週報酬率</span>
-              <span class="valblock">
-                <span class="sub-row cur">
-                  <span id="wk1-cur-range-00909" class="sub-range">—</span>
-                  <span id="wk1-cur-00909" class="sub-val neu">—</span>
-                </span>
-                <span class="sub-row cum">
-                  <span id="wk1-cum-range-00909" class="sub-range">—</span>
-                  <span id="wk1-cum-00909" class="sub-val neu">—</span>
-                </span>
-              </span>
+              <span id="wk1-range-00909" class="range">—</span>
+              <span id="wk1-00909" class="val neu">—</span>
             </p>
             <p class="line">
               <span class="label">近2週報酬率</span>
-              <span class="valblock">
-                <span class="sub-row cur">
-                  <span id="wk2-cur-range-00909" class="sub-range">—</span>
-                  <span id="wk2-cur-00909" class="sub-val neu">—</span>
-                </span>
-                <span class="sub-row cum">
-                  <span id="wk2-cum-range-00909" class="sub-range">—</span>
-                  <span id="wk2-cum-00909" class="sub-val neu">—</span>
-                </span>
-              </span>
+              <span id="wk2-range-00909" class="range">—</span>
+              <span id="wk2-00909" class="val neu">—</span>
             </p>
             <p class="line">
               <span class="label">近3週報酬率</span>
-              <span class="valblock">
-                <span class="sub-row cur">
-                  <span id="wk3-cur-range-00909" class="sub-range">—</span>
-                  <span id="wk3-cur-00909" class="sub-val neu">—</span>
-                </span>
-                <span class="sub-row cum">
-                  <span id="wk3-cum-range-00909" class="sub-range">—</span>
-                  <span id="wk3-cum-00909" class="sub-val neu">—</span>
-                </span>
-              </span>
+              <span id="wk3-range-00909" class="range">—</span>
+              <span id="wk3-00909" class="val neu">—</span>
             </p>
             <p class="line">
               <span class="label">近4週報酬率</span>
-              <span class="valblock">
-                <span class="sub-row cur">
-                  <span id="wk4-cur-range-00909" class="sub-range">—</span>
-                  <span id="wk4-cur-00909" class="sub-val neu">—</span>
-                </span>
-                <span class="sub-row cum">
-                  <span id="wk4-cum-range-00909" class="sub-range">—</span>
-                  <span id="wk4-cum-00909" class="sub-val neu">—</span>
-                </span>
-              </span>
+              <span id="wk4-range-00909" class="range">—</span>
+              <span id="wk4-00909" class="val neu">—</span>
             </p>
 
             <p class="line">
               <span class="label">近1月報酬率</span>
-              <span class="valblock">
-                <span class="sub-row cur">
-                  <span id="m1-cur-range-00909" class="sub-range">—</span>
-                  <span id="m1-cur-00909" class="sub-val neu">—</span>
-                </span>
-                <span class="sub-row cum">
-                  <span id="m1-cum-range-00909" class="sub-range">—</span>
-                  <span id="m1-cum-00909" class="sub-val neu">—</span>
-                </span>
-              </span>
+              <span id="m1-range-00909" class="range">—</span>
+              <span id="m1-00909" class="val neu">—</span>
             </p>
             <p class="line">
               <span class="label">近2月報酬率</span>
-              <span class="valblock">
-                <span class="sub-row cur">
-                  <span id="m2-cur-range-00909" class="sub-range">—</span>
-                  <span id="m2-cur-00909" class="sub-val neu">—</span>
-                </span>
-                <span class="sub-row cum">
-                  <span id="m2-cum-range-00909" class="sub-range">—</span>
-                  <span id="m2-cum-00909" class="sub-val neu">—</span>
-                </span>
-              </span>
+              <span id="m2-range-00909" class="range">—</span>
+              <span id="m2-00909" class="val neu">—</span>
             </p>
             <p class="line">
               <span class="label">近3月報酬率</span>
-              <span class="valblock">
-                <span class="sub-row cur">
-                  <span id="m3-cur-range-00909" class="sub-range">—</span>
-                  <span id="m3-cur-00909" class="sub-val neu">—</span>
-                </span>
-                <span class="sub-row cum">
-                  <span id="m3-cum-range-00909" class="sub-range">—</span>
-                  <span id="m3-cum-00909" class="sub-val neu">—</span>
-                </span>
-              </span>
+              <span id="m3-range-00909" class="range">—</span>
+              <span id="m3-00909" class="val neu">—</span>
             </p>
             <p class="line">
               <span class="label">近4月報酬率</span>
-              <span class="valblock">
-                <span class="sub-row cur">
-                  <span id="m4-cur-range-00909" class="sub-range">—</span>
-                  <span id="m4-cur-00909" class="sub-val neu">—</span>
-                </span>
-                <span class="sub-row cum">
-                  <span id="m4-cum-range-00909" class="sub-range">—</span>
-                  <span id="m4-cum-00909" class="sub-val neu">—</span>
-                </span>
-              </span>
+              <span id="m4-range-00909" class="range">—</span>
+              <span id="m4-00909" class="val neu">—</span>
             </p>
             <p class="line">
               <span class="label">近5月報酬率</span>
-              <span class="valblock">
-                <span class="sub-row cur">
-                  <span id="m5-cur-range-00909" class="sub-range">—</span>
-                  <span id="m5-cur-00909" class="sub-val neu">—</span>
-                </span>
-                <span class="sub-row cum">
-                  <span id="m5-cum-range-00909" class="sub-range">—</span>
-                  <span id="m5-cum-00909" class="sub-val neu">—</span>
-                </span>
-              </span>
+              <span id="m5-range-00909" class="range">—</span>
+              <span id="m5-00909" class="val neu">—</span>
             </p>
             <p class="line">
               <span class="label">近6月報酬率</span>
-              <span class="valblock">
-                <span class="sub-row cur">
-                  <span id="m6-cur-range-00909" class="sub-range">—</span>
-                  <span id="m6-cur-00909" class="sub-val neu">—</span>
-                </span>
-                <span class="sub-row cum">
-                  <span id="m6-cum-range-00909" class="sub-range">—</span>
-                  <span id="m6-cum-00909" class="sub-val neu">—</span>
-                </span>
-              </span>
+              <span id="m6-range-00909" class="range">—</span>
+              <span id="m6-00909" class="val neu">—</span>
             </p>
 
             <p class="line">
               <span class="label">近1年報酬率</span>
-              <span class="valblock">
-                <span class="sub-row cur">
-                  <span id="y1-cur-range-00909" class="sub-range">—</span>
-                  <span id="y1-cur-00909" class="sub-val neu">—</span>
-                </span>
-                <span class="sub-row cum">
-                  <span id="y1-cum-range-00909" class="sub-range">—</span>
-                  <span id="y1-cum-00909" class="sub-val neu">—</span>
-                </span>
-              </span>
+              <span id="y1-range-00909" class="range">—</span>
+              <span id="y1-00909" class="val neu">—</span>
             </p>
             <p class="line">
               <span class="label">近2年報酬率</span>
-              <span class="valblock">
-                <span class="sub-row cur">
-                  <span id="y2-cur-range-00909" class="sub-range">—</span>
-                  <span id="y2-cur-00909" class="sub-val neu">—</span>
-                </span>
-                <span class="sub-row cum">
-                  <span id="y2-cum-range-00909" class="sub-range">—</span>
-                  <span id="y2-cum-00909" class="sub-val neu">—</span>
-                </span>
-              </span>
+              <span id="y2-range-00909" class="range">—</span>
+              <span id="y2-00909" class="val neu">—</span>
             </p>
             <p class="line">
               <span class="label">近3年報酬率</span>
-              <span class="valblock">
-                <span class="sub-row cur">
-                  <span id="y3-cur-range-00909" class="sub-range">—</span>
-                  <span id="y3-cur-00909" class="sub-val neu">—</span>
-                </span>
-                <span class="sub-row cum">
-                  <span id="y3-cum-range-00909" class="sub-range">—</span>
-                  <span id="y3-cum-00909" class="sub-val neu">—</span>
-                </span>
-              </span>
+              <span id="y3-range-00909" class="range">—</span>
+              <span id="y3-00909" class="val neu">—</span>
             </p>
             <p class="line">
               <span class="label">近4年報酬率</span>
-              <span class="valblock">
-                <span class="sub-row cur">
-                  <span id="y4-cur-range-00909" class="sub-range">—</span>
-                  <span id="y4-cur-00909" class="sub-val neu">—</span>
-                </span>
-                <span class="sub-row cum">
-                  <span id="y4-cum-range-00909" class="sub-range">—</span>
-                  <span id="y4-cum-00909" class="sub-val neu">—</span>
-                </span>
-              </span>
+              <span id="y4-range-00909" class="range">—</span>
+              <span id="y4-00909" class="val neu">—</span>
             </p>
             <p class="line">
               <span class="label">近5年報酬率</span>
-              <span class="valblock">
-                <span class="sub-row cur">
-                  <span id="y5-cur-range-00909" class="sub-range">—</span>
-                  <span id="y5-cur-00909" class="sub-val neu">—</span>
-                </span>
-                <span class="sub-row cum">
-                  <span id="y5-cum-range-00909" class="sub-range">—</span>
-                  <span id="y5-cum-00909" class="sub-val neu">—</span>
-                </span>
-              </span>
+              <span id="y5-range-00909" class="range">—</span>
+              <span id="y5-00909" class="val neu">—</span>
             </p>
 
             <p class="period">期間：<span id="period-00909">—</span></p>
@@ -1171,53 +794,20 @@
           return p;
         }
 
-        // --- 週：每列一個「週段」 ＋ 從該週起算到最後一日的累積 ---
-        function weekSegments(days, vals, maxWeeks){
-          const res=[];
-          if(!days.length) return res;
+        // 區間：最近 N 週（以 7 天為單位，向前推 N*7 天）
+        function weekReturnWithRange(days, vals, weeks){
+          if(!days.length) return {ret:null, range:'---'};
+          const end=days[days.length-1];
+          const winDays=weeks*7;
+          const thr=new Date(d8(end).getTime()-(winDays-1)*86400000);
+          let i=0; while(i<days.length && d8(days[i])<thr) i++;
+          if(i>=days.length) return {ret:null, range:'---'};
+          const startDay=days[i];
           const pref=buildPrefix(vals);
-          const lastIdx=days.length-1;
-          const lastDate=d8(days[lastIdx]);
-
-          const dow=lastDate.getDay();
-          const offsetToMonday=(dow+6)%7;
-          const monday0=new Date(
-            lastDate.getFullYear(),
-            lastDate.getMonth(),
-            lastDate.getDate()-offsetToMonday
-          );
-
-          for(let k=0;k<maxWeeks;k++){
-            const startCand=new Date(monday0.getTime()-k*7*86400000);
-            const endCand=new Date(startCand.getTime()+6*86400000);
-
-            let i=0;
-            while(i<=lastIdx && d8(days[i])<startCand) i++;
-            if(i>lastIdx){ res.push(null); continue; }
-
-            let j=i;
-            while(j<=lastIdx && d8(days[j])<=endCand) j++;
-            j--;
-            if(j<i){ res.push(null); continue; }
-
-            const sumCur=pref[j+1]-pref[i];
-            const sumCum=pref[lastIdx+1]-pref[i];
-
-            const startStr=fmtD8(days[i]);
-            const endCurStr=fmtD8(days[j]);
-            const endLastStr=fmtD8(days[lastIdx]);
-
-            res.push({
-              curRange:`${startStr}~${endCurStr}`,
-              curRet:sumCur/1_000_000,
-              cumRange:`${startStr}~${endLastStr}`,
-              cumRet:sumCum/1_000_000
-            });
-          }
-          return res;
+          const sum=pref[vals.length]-pref[i];
+          return { ret:sum/1_000_000, range:`${fmtD8(startDay)}~${fmtD8(end)}` };
         }
 
-        // 月、年沿用「最近 N 天窗」邏輯
         function simpleReturnWithRange(days, vals, winDays){
           if(!days.length) return {ret:null, range:'---'};
           const end=days[days.length-1];
@@ -1256,14 +846,9 @@
           el.textContent=(v*100).toFixed(2)+'%';
           el.classList.add(v>0?'pos':(v<0?'neg':'neu'));
         }
-        function setRange(id,prefix,range){
+        function setText(id,text){
           const el=document.getElementById(id);
-          if(!el) return;
-          if(!range || range==='---'){
-            el.textContent = prefix ? `${prefix}—` : '—';
-          }else{
-            el.textContent = prefix ? `${prefix}${range}` : range;
-          }
+          if(el) el.textContent=text||'—';
         }
 
         const WEEK_KEYS = ['wk1','wk2','wk3','wk4'];
@@ -1273,17 +858,8 @@
 
         function resetAll(key){
           ALL_KEYS.forEach(k=>{
-            ['cur-range','cur','cum-range','cum'].forEach(tag=>{
-              const id = `${k}-${tag}-${key}`;
-              const el = document.getElementById(id);
-              if(!el) return;
-              if(tag.includes('range')){
-                el.textContent='—';
-              }else{
-                el.textContent='—';
-                el.classList.remove('pos','neg'); el.classList.add('neu');
-              }
-            });
+            setText(`${k}-range-${key}`,'—');
+            setVal(`${k}-${key}`, null);
           });
         }
 
@@ -1325,52 +901,43 @@
 
             const {days, vals}=dailySeriesFromMerged(latestText);
 
-            // 週：週段 + 自該週起算至今
-            const segW = weekSegments(days, vals, 4);
-            WEEK_KEYS.forEach((k,idx)=>{
-              const seg=segW[idx];
-              if(!seg){
-                setRange(`${k}-cur-range-${key}`,'當週 ',null);
-                setVal(`${k}-cur-${key}`,null);
-                setRange(`${k}-cum-range-${key}`,'累計 ',null);
-                setVal(`${k}-cum-${key}`,null);
-              }else{
-                setRange(`${k}-cur-range-${key}`,'當週 ',seg.curRange);
-                setVal(`${k}-cur-${key}`,seg.curRet);
-                setRange(`${k}-cum-range-${key}`,'累計 ',seg.cumRange);
-                setVal(`${k}-cum-${key}`,seg.cumRet);
-              }
+            // 週：最近 1〜4 週
+            const W1=weekReturnWithRange(days, vals, 1);
+            const W2=weekReturnWithRange(days, vals, 2);
+            const W3=weekReturnWithRange(days, vals, 3);
+            const W4=weekReturnWithRange(days, vals, 4);
+            const W={wk1:W1,wk2:W2,wk3:W3,wk4:W4};
+            WEEK_KEYS.forEach(k=>{
+              const r=W[k];
+              setText(`${k}-range-${key}`, r.range);
+              setVal(`${k}-${key}`, r.ret);
             });
 
-            // 月：最近 30/60/... 天窗，當月/累計視為同一區間
+            // 月：最近 1〜6 個月（30 天為一個月）
             const M1=simpleReturnWithRange(days, vals, 30);
             const M2=simpleReturnWithRange(days, vals, 60);
             const M3=simpleReturnWithRange(days, vals, 90);
             const M4=simpleReturnWithRange(days, vals, 120);
             const M5=simpleReturnWithRange(days, vals, 150);
             const M6=simpleReturnWithRange(days, vals, 180);
-            const M = {m1:M1,m2:M2,m3:M3,m4:M4,m5:M5,m6:M6};
+            const M={m1:M1,m2:M2,m3:M3,m4:M4,m5:M5,m6:M6};
             MONTH_KEYS.forEach(k=>{
               const r=M[k];
-              setRange(`${k}-cur-range-${key}`,'當月 ',r.range);
-              setVal(`${k}-cur-${key}`,r.ret);
-              setRange(`${k}-cum-range-${key}`,'累計 ',r.range);
-              setVal(`${k}-cum-${key}`,r.ret);
+              setText(`${k}-range-${key}`, r.range);
+              setVal(`${k}-${key}`, r.ret);
             });
 
-            // 年：最近 1/2/3/4/5 年窗
+            // 年：最近 1〜5 年
             const Y1=simpleReturnYearWindowWithRange(days, vals, 365);
             const Y2=simpleReturnYearWindowWithRange(days, vals, 730);
             const Y3=simpleReturnYearWindowWithRange(days, vals, 1095);
             const Y4=simpleReturnYearWindowWithRange(days, vals, 1460);
             const Y5=simpleReturnYearWindowWithRange(days, vals, 1825);
-            const Y = {y1:Y1,y2:Y2,y3:Y3,y4:Y4,y5:Y5};
+            const Y={y1:Y1,y2:Y2,y3:Y3,y4:Y4,y5:Y5};
             YEAR_KEYS.forEach(k=>{
               const r=Y[k];
-              setRange(`${k}-cur-range-${key}`,'當年 ',r.range);
-              setVal(`${k}-cur-${key}`,r.ret);
-              setRange(`${k}-cum-range-${key}`,'累計 ',r.range);
-              setVal(`${k}-cum-${key}`,r.ret);
+              setText(`${k}-range-${key}`, r.range);
+              setVal(`${k}-${key}`, r.ret);
             });
 
             setPeriod(`${start8||'—'} - ${end8||'—'}`);
