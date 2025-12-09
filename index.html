@@ -162,19 +162,6 @@
     .error{ color:#c62828; font-size:12px; margin-top:6px; display:none }
     .hidden{ display:none }
 
-    .restrict{
-      position:sticky;
-      top:-20px;
-      margin:-20px -20px 12px -20px;
-      padding:6px 10px;
-      background:#111;
-      color:#fff;
-      text-align:center;
-      font-size:12px;
-      letter-spacing:.5px;
-      z-index:9999;
-    }
-
     html,body{
       -webkit-user-select:none;
       -moz-user-select:none;
@@ -225,19 +212,28 @@
         <a class="card" href="0807.html">
           <p class="card-title red">台指近-0807版本</p>
           <div class="lines">
-            <!-- 4 週 -->
-            <p class="line"><span class="label">近1週報酬率</span><span id="wk1-range-0807" class="range">—</span><span id="wk1-0807" class="val neu">—</span></p>
-            <p class="line"><span class="label">近2週報酬率</span><span id="wk2-range-0807" class="range">—</span><span id="wk2-0807" class="val neu">—</span></p>
-            <p class="line"><span class="label">近3週報酬率</span><span id="wk3-range-0807" class="range">—</span><span id="wk3-0807" class="val neu">—</span></p>
-            <p class="line"><span class="label">近4週報酬率</span><span id="wk4-range-0807" class="range">—</span><span id="wk4-0807" class="val neu">—</span></p>
-            <!-- 6 月 -->
+            <!-- 週：當週 + 累計 -->
+            <p class="line"><span class="label">近1週當週報酬率</span><span id="wk1c-range-0807" class="range">—</span><span id="wk1c-0807" class="val neu">—</span></p>
+            <p class="line"><span class="label">近1週累計報酬率</span><span id="wk1-range-0807" class="range">—</span><span id="wk1-0807" class="val neu">—</span></p>
+
+            <p class="line"><span class="label">近2週當週報酬率</span><span id="wk2c-range-0807" class="range">—</span><span id="wk2c-0807" class="val neu">—</span></p>
+            <p class="line"><span class="label">近2週累計報酬率</span><span id="wk2-range-0807" class="range">—</span><span id="wk2-0807" class="val neu">—</span></p>
+
+            <p class="line"><span class="label">近3週當週報酬率</span><span id="wk3c-range-0807" class="range">—</span><span id="wk3c-0807" class="val neu">—</span></p>
+            <p class="line"><span class="label">近3週累計報酬率</span><span id="wk3-range-0807" class="range">—</span><span id="wk3-0807" class="val neu">—</span></p>
+
+            <p class="line"><span class="label">近4週當週報酬率</span><span id="wk4c-range-0807" class="range">—</span><span id="wk4c-0807" class="val neu">—</span></p>
+            <p class="line"><span class="label">近4週累計報酬率</span><span id="wk4-range-0807" class="range">—</span><span id="wk4-0807" class="val neu">—</span></p>
+
+            <!-- 月 -->
             <p class="line"><span class="label">近1月報酬率</span><span id="m1-range-0807"  class="range">—</span><span id="m1-0807"  class="val neu">—</span></p>
             <p class="line"><span class="label">近2月報酬率</span><span id="m2-range-0807"  class="range">—</span><span id="m2-0807"  class="val neu">—</span></p>
             <p class="line"><span class="label">近3月報酬率</span><span id="m3-range-0807"  class="range">—</span><span id="m3-0807"  class="val neu">—</span></p>
             <p class="line"><span class="label">近4月報酬率</span><span id="m4-range-0807"  class="range">—</span><span id="m4-0807"  class="val neu">—</span></p>
             <p class="line"><span class="label">近5月報酬率</span><span id="m5-range-0807"  class="range">—</span><span id="m5-0807"  class="val neu">—</span></p>
             <p class="line"><span class="label">近6月報酬率</span><span id="m6-range-0807"  class="range">—</span><span id="m6-0807"  class="val neu">—</span></p>
-            <!-- 5 年 -->
+
+            <!-- 年 -->
             <p class="line"><span class="label">近1年報酬率</span><span id="y1-range-0807"  class="range">—</span><span id="y1-0807"  class="val neu">—</span></p>
             <p class="line"><span class="label">近2年報酬率</span><span id="y2-range-0807"  class="range">—</span><span id="y2-0807"  class="val neu">—</span></p>
             <p class="line"><span class="label">近3年報酬率</span><span id="y3-range-0807"  class="range">—</span><span id="y3-0807"  class="val neu">—</span></p>
@@ -251,11 +247,20 @@
         <a class="card" href="1001.html">
           <p class="card-title red">台指近-1001版本</p>
           <div class="lines">
-            <p class="line"><span class="label">近1週報酬率</span><span id="wk1-range-1001" class="range">—</span><span id="wk1-1001" class="val neu">—</span></p>
-            <p class="line"><span class="label">近2週報酬率</span><span id="wk2-range-1001" class="range">—</span><span id="wk2-1001" class="val neu">—</span></p>
-            <p class="line"><span class="label">近3週報酬率</span><span id="wk3-range-1001" class="range">—</span><span id="wk3-1001" class="val neu">—</span></p>
-            <p class="line"><span class="label">近4週報酬率</span><span id="wk4-range-1001" class="range">—</span><span id="wk4-1001" class="val neu">—</span></p>
+            <!-- 週：當週 + 累計 -->
+            <p class="line"><span class="label">近1週當週報酬率</span><span id="wk1c-range-1001" class="range">—</span><span id="wk1c-1001" class="val neu">—</span></p>
+            <p class="line"><span class="label">近1週累計報酬率</span><span id="wk1-range-1001" class="range">—</span><span id="wk1-1001" class="val neu">—</span></p>
 
+            <p class="line"><span class="label">近2週當週報酬率</span><span id="wk2c-range-1001" class="range">—</span><span id="wk2c-1001" class="val neu">—</span></p>
+            <p class="line"><span class="label">近2週累計報酬率</span><span id="wk2-range-1001" class="range">—</span><span id="wk2-1001" class="val neu">—</span></p>
+
+            <p class="line"><span class="label">近3週當週報酬率</span><span id="wk3c-range-1001" class="range">—</span><span id="wk3c-1001" class="val neu">—</span></p>
+            <p class="line"><span class="label">近3週累計報酬率</span><span id="wk3-range-1001" class="range">—</span><span id="wk3-1001" class="val neu">—</span></p>
+
+            <p class="line"><span class="label">近4週當週報酬率</span><span id="wk4c-range-1001" class="range">—</span><span id="wk4c-1001" class="val neu">—</span></p>
+            <p class="line"><span class="label">近4週累計報酬率</span><span id="wk4-range-1001" class="range">—</span><span id="wk4-1001" class="val neu">—</span></p>
+
+            <!-- 月 -->
             <p class="line"><span class="label">近1月報酬率</span><span id="m1-range-1001"  class="range">—</span><span id="m1-1001"  class="val neu">—</span></p>
             <p class="line"><span class="label">近2月報酬率</span><span id="m2-range-1001"  class="range">—</span><span id="m2-1001"  class="val neu">—</span></p>
             <p class="line"><span class="label">近3月報酬率</span><span id="m3-range-1001"  class="range">—</span><span id="m3-1001"  class="val neu">—</span></p>
@@ -263,6 +268,7 @@
             <p class="line"><span class="label">近5月報酬率</span><span id="m5-range-1001"  class="range">—</span><span id="m5-1001"  class="val neu">—</span></p>
             <p class="line"><span class="label">近6月報酬率</span><span id="m6-range-1001"  class="range">—</span><span id="m6-1001"  class="val neu">—</span></p>
 
+            <!-- 年 -->
             <p class="line"><span class="label">近1年報酬率</span><span id="y1-range-1001"  class="range">—</span><span id="y1-1001"  class="val neu">—</span></p>
             <p class="line"><span class="label">近2年報酬率</span><span id="y2-range-1001"  class="range">—</span><span id="y2-1001"  class="val neu">—</span></p>
             <p class="line"><span class="label">近3年報酬率</span><span id="y3-range-1001"  class="range">—</span><span id="y3-1001"  class="val neu">—</span></p>
@@ -280,11 +286,20 @@
         <a class="card" href="etf-00909.html">
           <p class="card-title gray">台股-00909版本(研發中)</p>
           <div class="lines">
-            <p class="line"><span class="label">近1週報酬率</span><span id="wk1-range-00909" class="range">—</span><span id="wk1-00909" class="val neu">—</span></p>
-            <p class="line"><span class="label">近2週報酬率</span><span id="wk2-range-00909" class="range">—</span><span id="wk2-00909" class="val neu">—</span></p>
-            <p class="line"><span class="label">近3週報酬率</span><span id="wk3-range-00909" class="range">—</span><span id="wk3-00909" class="val neu">—</span></p>
-            <p class="line"><span class="label">近4週報酬率</span><span id="wk4-range-00909" class="range">—</span><span id="wk4-00909" class="val neu">—</span></p>
+            <!-- 週：當週 + 累計 -->
+            <p class="line"><span class="label">近1週當週報酬率</span><span id="wk1c-range-00909" class="range">—</span><span id="wk1c-00909" class="val neu">—</span></p>
+            <p class="line"><span class="label">近1週累計報酬率</span><span id="wk1-range-00909" class="range">—</span><span id="wk1-00909" class="val neu">—</span></p>
 
+            <p class="line"><span class="label">近2週當週報酬率</span><span id="wk2c-range-00909" class="range">—</span><span id="wk2c-00909" class="val neu">—</span></p>
+            <p class="line"><span class="label">近2週累計報酬率</span><span id="wk2-range-00909" class="range">—</span><span id="wk2-00909" class="val neu">—</span></p>
+
+            <p class="line"><span class="label">近3週當週報酬率</span><span id="wk3c-range-00909" class="range">—</span><span id="wk3c-00909" class="val neu">—</span></p>
+            <p class="line"><span class="label">近3週累計報酬率</span><span id="wk3-range-00909" class="range">—</span><span id="wk3-00909" class="val neu">—</span></p>
+
+            <p class="line"><span class="label">近4週當週報酬率</span><span id="wk4c-range-00909" class="range">—</span><span id="wk4c-00909" class="val neu">—</span></p>
+            <p class="line"><span class="label">近4週累計報酬率</span><span id="wk4-range-00909" class="range">—</span><span id="wk4-00909" class="val neu">—</span></p>
+
+            <!-- 月 -->
             <p class="line"><span class="label">近1月報酬率</span><span id="m1-range-00909"  class="range">—</span><span id="m1-00909"  class="val neu">—</span></p>
             <p class="line"><span class="label">近2月報酬率</span><span id="m2-range-00909"  class="range">—</span><span id="m2-00909"  class="val neu">—</span></p>
             <p class="line"><span class="label">近3月報酬率</span><span id="m3-range-00909"  class="range">—</span><span id="m3-00909"  class="val neu">—</span></p>
@@ -292,6 +307,7 @@
             <p class="line"><span class="label">近5月報酬率</span><span id="m5-range-00909"  class="range">—</span><span id="m5-00909"  class="val neu">—</span></p>
             <p class="line"><span class="label">近6月報酬率</span><span id="m6-range-00909"  class="range">—</span><span id="m6-00909"  class="val neu">—</span></p>
 
+            <!-- 年 -->
             <p class="line"><span class="label">近1年報酬率</span><span id="y1-range-00909"  class="range">—</span><span id="y1-00909"  class="val neu">—</span></p>
             <p class="line"><span class="label">近2年報酬率</span><span id="y2-range-00909"  class="range">—</span><span id="y2-00909"  class="val neu">—</span></p>
             <p class="line"><span class="label">近3年報酬率</span><span id="y3-range-00909"  class="range">—</span><span id="y3-00909"  class="val neu">—</span></p>
@@ -308,8 +324,6 @@
         <p class="subcat">盤整型</p>
         <!-- 目前預留，未來放盤整策略 -->
       </div>
-
-      <!-- 研發中卡片已刪除 -->
     </div>
 
     <hr>
@@ -721,6 +735,7 @@
         };
 
         const METRICS = ['wk1','wk2','wk3','wk4','m1','m2','m3','m4','m5','m6','y1','y2','y3','y4','y5'];
+        const WEEK_BASE = ['wk1','wk2','wk3','wk4'];
 
         async function resolveLatest(key){
           const mf = await readManifest(key);
@@ -737,16 +752,14 @@
           }
           const byRegex = await latestFileByRegex(WANT[key]);
           if(byRegex) return byRegex;
-          if(key==='1031'){
-            const byProbe = await latestFileContentFallback();
-            if(byProbe) return byProbe;
-          }
           return null;
         }
 
         async function fillCard(key){
           const set=(suf,v)=>setVal(`${suf}-${key}`,v);
           const setR=(suf,r)=>setText(`${suf}-range-${key}`,r);
+          const setC=(suf,v)=>setVal(`${suf}c-${key}`,v);
+          const setCR=(suf,r)=>setText(`${suf}c-range-${key}`,r);
           const setPeriod=text=>{
             const el=document.getElementById(`period-${key}`);
             if(el) el.textContent=text;
@@ -756,6 +769,7 @@
             const latest=await resolveLatest(key);
             if(!latest){
               METRICS.forEach(x=>{ set(x,null); setR(x,'---'); });
+              WEEK_BASE.forEach(x=>{ setC(x,null); setCR(x,'---'); });
               setPeriod('—');
               return;
             }
@@ -768,11 +782,14 @@
 
             const {days, vals}=dailySeriesFromMerged(latestText);
 
-            // 週：1–4 週，以週一為起點
+            // 週：1–4 週，以週一為起點（累計）
             const W1=weekReturnWithRange(days, vals, 1);
             const W2=weekReturnWithRange(days, vals, 2);
             const W3=weekReturnWithRange(days, vals, 3);
             const W4=weekReturnWithRange(days, vals, 4);
+
+            // 當週：本週週一~最新一筆，所有週視窗共用
+            const Wcur=W1;
 
             // 月：1–6 月（30 天為一個月）
             const M1=simpleReturnWithRange(days, vals, 30);
@@ -789,27 +806,37 @@
             const Y4=simpleReturnYearWindowWithRange(days, vals, 1460);
             const Y5=simpleReturnYearWindowWithRange(days, vals, 1825);
 
+            // 週累計
             set('wk1',W1.ret); setR('wk1',W1.range);
             set('wk2',W2.ret); setR('wk2',W2.range);
             set('wk3',W3.ret); setR('wk3',W3.range);
             set('wk4',W4.ret); setR('wk4',W4.range);
 
-            set('m1',M1.ret);  setR('m1',M1.range);
-            set('m2',M2.ret);  setR('m2',M2.range);
-            set('m3',M3.ret);  setR('m3',M3.range);
-            set('m4',M4.ret);  setR('m4',M4.range);
-            set('m5',M5.ret);  setR('m5',M5.range);
-            set('m6',M6.ret);  setR('m6',M6.range);
+            // 週當週（全部同一個當週）
+            WEEK_BASE.forEach(x=>{
+              setC(x,Wcur.ret);
+              setCR(x,Wcur.range);
+            });
 
-            set('y1',Y1.ret);  setR('y1',Y1.range);
-            set('y2',Y2.ret);  setR('y2',Y2.range);
-            set('y3',Y3.ret);  setR('y3',Y3.range);
-            set('y4',Y4.ret);  setR('y4',Y4.range);
-            set('y5',Y5.ret);  setR('y5',Y5.range);
+            // 月
+            set('m1',M1.ret); setR('m1',M1.range);
+            set('m2',M2.ret); setR('m2',M2.range);
+            set('m3',M3.ret); setR('m3',M3.range);
+            set('m4',M4.ret); setR('m4',M4.range);
+            set('m5',M5.ret); setR('m5',M5.range);
+            set('m6',M6.ret); setR('m6',M6.range);
+
+            // 年
+            set('y1',Y1.ret); setR('y1',Y1.range);
+            set('y2',Y2.ret); setR('y2',Y2.range);
+            set('y3',Y3.ret); setR('y3',Y3.range);
+            set('y4',Y4.ret); setR('y4',Y4.range);
+            set('y5',Y5.ret); setR('y5',Y5.range);
 
             setPeriod(`${start8||'—'} - ${end8||'—'}`);
           }catch(e){
             METRICS.forEach(x=>{ set(x,null); setR(x,'---'); });
+            WEEK_BASE.forEach(x=>{ setC(x,null); setCR(x,'---'); });
             setPeriod('—');
           }
         }
@@ -817,8 +844,7 @@
         await Promise.all([
           fillCard("0807"),
           fillCard("1001"),
-          fillCard("00909"),
-          fillCard("1031")  // 雖然沒有 1031 卡片，但保留計算不影響
+          fillCard("00909")
         ]);
       })();
     }
