@@ -1,12 +1,13 @@
-// 0807-1.js — 最終穩定版（以交易日序列切片；近1週/近2週週一錨定；圖表日對齊；明細累計歸0；KPI紅黃綠）
-//
-// 你要的行為：
-// 1) 近1週：以「最後交易日」為錨，區間=本週週一~最後交易日（例：2025/12/08~2025/12/12）
-// 2) 主圖與下方「日損益圖」同一套交易日切片，確保每日對齊
-// 3) 主圖多頭/空頭/總損益（含滑價/理論）切區間後都歸0；期間最高/最低點不歸0
-// 4) 交易明細僅顯示區間內每筆交易；累積理論/累積實際從區間起點歸0累加
-// 5) KPI Strong/Adequate/Improve 以紅/黃/綠顯示（補 class）
-// 6) 其他區間（近1年/6月/3月/2月/1月/近2週/近1週）都可用，必定有反應
+// 0807-1.js — 最終版（依你最新規格）
+// 規格：
+// 1) 全區間：維持 single-trades.js 原樣（含 KPI 計算與顯示）
+// 2) 其他區間：不重算 KPI、不碰 KPI；只切「主圖 + 下方日損益圖 + 交易明細」
+// 3) 區間以「全區間最後交易日」為錨：
+//    - 近1週：該週週一 ~ 最後交易日（例：全區間到 2025/12/10 → 近1週=2025/12/08~2025/12/10）
+//    - 近2週：上週週一 ~ 最後交易日
+//    - 近1月/2月/3月/6月/1年：以天數回推 ~ 最後交易日
+// 4) 主圖與下方圖（你稱週圖但實際是日損益圖）用「同一套日期區間」切片，確保對齊
+// 5) 交易明細：只顯示區間內每筆交易（不改欄位、不改累計、不改 KPI）
 
 (function () {
   'use strict';
@@ -20,7 +21,7 @@
   const rangeRow     = $('#rangeRow');
   const tradesBody   = $('#tradesBody');
   const equityCanvas = $('#equityChart');
-  const dailyCanvas  = $('#weeklyPnlChart'); // 你的頁面此圖實際為「每日損益圖」
+  const dailyCanvas  = $('#weeklyPnlChart'); // 此圖在你頁面是日損益圖
 
   const slipInput = $('#slipInput');
   const runBtn    = $('#runBtn');
@@ -34,7 +35,7 @@
   }
 
   // -----------------------------
-  // slip=2：開頁即算
+  // slip=2：開頁即算（沿用你 0807-1 的需求）
   // -----------------------------
   function forceSlip2() {
     if (!slipInput) return;
@@ -52,7 +53,7 @@
   document.addEventListener('DOMContentLoaded', () => forceSlip2());
 
   // -----------------------------
-  // Supabase + merge（對齊你 0807.js 的做法）
+  // Supabase + merge（對齊 0807.js）
   // -----------------------------
   const SUPABASE_URL  = "https://byhbmmnacezzgkwfkozs.supabase.co";
   const SUPABASE_ANON = "sb_publishable_xVe8fGbqQ0XGwi4DsmjPMg_Y2RBOD3t";
@@ -224,7 +225,7 @@
   }
 
   // -----------------------------
-  // Utils: ymd/date/number
+  // Date parsing for labels/rows
   // -----------------------------
   function pad2(n){ return String(n).padStart(2,'0'); }
   function ymdToDate(ymd){
@@ -236,13 +237,12 @@
   function dateToYmd(d){ return `${d.getFullYear()}${pad2(d.getMonth()+1)}${pad2(d.getDate())}`; }
   function mondayOfWeek(d){
     const x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-    const day = x.getDay(); // 0 Sun..6 Sat
+    const day = x.getDay();
     const delta = (day === 0) ? -6 : (1 - day);
     x.setDate(x.getDate() + delta);
     return x;
   }
 
-  // 支援：YYYY/MM/DD、YYYY-MM-DD、YYYYMMDD、YYYYMMDDhhmmss、YYYY/M
   function parseYmdFromText(text){
     const s = String(text || '').trim();
 
@@ -255,6 +255,7 @@
     m = s.match(/\b(20\d{2})[\/\-](\d{1,2})[\/\-](\d{1,2})\b/);
     if (m) return `${m[1]}${pad2(m[2])}${pad2(m[3])}`;
 
+    // YYYY/M → 月初
     m = s.match(/\b(20\d{2})[\/\-](\d{1,2})\b/);
     if (m) return `${m[1]}${pad2(m[2])}01`;
 
@@ -271,144 +272,24 @@
     return parseYmdFromText(tr.textContent);
   }
 
-  function parseNum(text){
-    const s = String(text || '').trim();
-    if (!s || s === '—' || s === '-') return NaN;
-    const v = Number(s.replace(/,/g,''));
-    return Number.isFinite(v) ? v : NaN;
-  }
-
-  function formatNum(n){
-    if (!Number.isFinite(n)) return '—';
-    const sign = n < 0 ? '-' : '';
-    const x = Math.abs(Math.round(n));
-    return sign + x.toLocaleString('en-US');
-  }
-
   // -----------------------------
-  // KPI 顏色（紅/黃/綠）
-  // -----------------------------
-  function ensureKpiRatingColors(){
-    const map = { Strong:'rating-strong', Adequate:'rating-adequate', Improve:'rating-improve' };
-    const tds = Array.from(document.querySelectorAll('td'));
-    for (const td of tds) {
-      const t = (td.textContent || '').trim();
-      const cls = map[t];
-      if (!cls) continue;
-      td.classList.remove('rating-strong','rating-adequate','rating-improve');
-      td.classList.add(cls);
-    }
-  }
-
-  // -----------------------------
-  // Chart ops
+  // Chart helpers
   // -----------------------------
   function getChart(canvas){
     if (!canvas || !window.Chart) return null;
     try { return window.Chart.getChart(canvas) || null; } catch { return null; }
   }
 
-  function shouldRebaseLabel(label){
-    const s = String(label || '');
-    if (/最高|最低/.test(s)) return false;
-    return /(損益|多頭|空頭|總)/.test(s);
-  }
-
-  function rebaseArray(arr){
-    if (!Array.isArray(arr) || arr.length === 0) return arr;
-    const first = arr[0];
-
-    if (typeof first === 'number') {
-      const base = first;
-      if (!Number.isFinite(base)) return arr;
-      return arr.map(v => Number.isFinite(v) ? (v - base) : v);
-    }
-
-    if (first && typeof first === 'object') {
-      const baseY = Number(first.y);
-      if (!Number.isFinite(baseY)) return arr;
-      return arr.map(p => {
-        if (!p || typeof p !== 'object') return p;
-        const y = Number(p.y);
-        if (!Number.isFinite(y)) return p;
-        return { ...p, y: y - baseY };
-      });
-    }
-    return arr;
-  }
-
   // -----------------------------
-  // Trade table: filter + reset cum
-  // -----------------------------
-  function rebuildTradeTableCums(startYmd, endYmd){
-    const table = tradesBody?.closest('table');
-    if (!table) return;
-
-    const head = table.querySelector('thead');
-    const ths = Array.from(head?.querySelectorAll('th') || []).map(th => (th.textContent || '').trim());
-
-    const idxDateTime = ths.findIndex(t => t.includes('日期時間'));
-    const idxTheo     = ths.findIndex(t => t.includes('理論淨損益'));
-    const idxCumTheo  = ths.findIndex(t => t.includes('累積理論淨損益'));
-    const idxReal     = ths.findIndex(t => t.includes('實際淨損益'));
-    const idxCumReal  = ths.findIndex(t => t.includes('累積實際淨損益'));
-
-    if (idxTheo < 0 || idxCumTheo < 0 || idxReal < 0 || idxCumReal < 0) {
-      // 欄位找不到就只做過濾，不重算
-      const rows0 = Array.from(tradesBody.querySelectorAll('tr'));
-      const kept0 = rows0.filter(tr => {
-        const tds = Array.from(tr.querySelectorAll('td'));
-        const text = (idxDateTime >= 0 && tds[idxDateTime]) ? tds[idxDateTime].textContent : tr.textContent;
-        const ymd = parseYmdFromText(text);
-        if (!ymd) return true;
-        return (!startYmd) ? true : (ymd >= startYmd && ymd <= endYmd);
-      });
-      tradesBody.innerHTML = kept0.map(tr => tr.outerHTML).join('');
-      return;
-    }
-
-    // 先過濾區間內 row（保留所有交易）
-    const rows = Array.from(tradesBody.querySelectorAll('tr'));
-    const kept = rows.filter(tr => {
-      const tds = Array.from(tr.querySelectorAll('td'));
-      const text = (idxDateTime >= 0 && tds[idxDateTime]) ? tds[idxDateTime].textContent : tr.textContent;
-      const ymd = parseYmdFromText(text);
-      if (!ymd) return true;
-      return (!startYmd) ? true : (ymd >= startYmd && ymd <= endYmd);
-    });
-
-    tradesBody.innerHTML = kept.map(tr => tr.outerHTML).join('');
-
-    // 再重算累積（區間起點歸0）
-    const newRows = Array.from(tradesBody.querySelectorAll('tr'));
-    let cumTheo = 0;
-    let cumReal = 0;
-
-    for (const tr of newRows) {
-      const tds = Array.from(tr.querySelectorAll('td'));
-      const theo = parseNum(tds[idxTheo]?.textContent);
-      const real = parseNum(tds[idxReal]?.textContent);
-
-      if (Number.isFinite(theo)) cumTheo += theo;
-      if (Number.isFinite(real)) cumReal += real;
-
-      if (tds[idxCumTheo]) tds[idxCumTheo].textContent = formatNum(cumTheo);
-      if (tds[idxCumReal]) tds[idxCumReal].textContent = formatNum(cumReal);
-    }
-
-    tradesBody.innerHTML = newRows.map(tr => tr.outerHTML).join('');
-  }
-
-  // -----------------------------
-  // Snapshot originals
+  // Snapshot originals (for non-ALL restore)
   // -----------------------------
   const SNAP = {
     ready: false,
-    eq: { labels:null, dataArrays:null },
-    daily: { labels:null, dataArrays:null },
-    tradesHTML: null,
+    endYmd: null,
     tradeYmdList: null,
-    endYmd: null
+    tradesHTML: null,
+    eq: { labels:null, datasetsData:null },
+    dy: { labels:null, datasetsData:null }
   };
 
   function snapshotOnce(){
@@ -420,15 +301,7 @@
     if (!dy || !dy.data?.labels?.length || !dy.data?.datasets?.length) return false;
     if (!tradesBody) return false;
 
-    SNAP.eq.labels = eq.data.labels.slice();
-    SNAP.eq.dataArrays = eq.data.datasets.map(ds => Array.isArray(ds.data) ? ds.data.slice() : []);
-
-    SNAP.daily.labels = dy.data.labels.slice();
-    SNAP.daily.dataArrays = dy.data.datasets.map(ds => Array.isArray(ds.data) ? ds.data.slice() : []);
-
-    SNAP.tradesHTML = tradesBody.innerHTML;
-
-    // 以交易明細產生交易日清單與 endYmd（取最大日期，避免最後一列不是最後交易日）
+    // trade days from table (truth source)
     const trs = Array.from(tradesBody.querySelectorAll('tr'));
     const yset = new Set();
     for (const tr of trs) {
@@ -439,13 +312,22 @@
     if (!ymdList.length) return false;
 
     SNAP.tradeYmdList = ymdList;
-    SNAP.endYmd = ymdList[ymdList.length - 1]; // 取最大交易日
+    SNAP.endYmd = ymdList[ymdList.length - 1]; // max day
+    SNAP.tradesHTML = tradesBody.innerHTML;
+
+    // chart originals (store data arrays only; don't replace dataset objects later)
+    SNAP.eq.labels = eq.data.labels.slice();
+    SNAP.eq.datasetsData = eq.data.datasets.map(ds => Array.isArray(ds.data) ? ds.data.slice() : []);
+
+    SNAP.dy.labels = dy.data.labels.slice();
+    SNAP.dy.datasetsData = dy.data.datasets.map(ds => Array.isArray(ds.data) ? ds.data.slice() : []);
+
     SNAP.ready = true;
     return true;
   }
 
   // -----------------------------
-  // Range start rule
+  // Range start rule (end = last trading day)
   // -----------------------------
   function rangeStartYmd(endYmd, code){
     if (code === 'ALL') return '';
@@ -453,14 +335,12 @@
     if (!endDate) return '';
 
     if (code === '1W') return dateToYmd(mondayOfWeek(endDate));
-
     if (code === '2W') {
       const m = mondayOfWeek(endDate);
       m.setDate(m.getDate() - 7);
       return dateToYmd(m);
     }
 
-    // 月/年：日數回推（你若要月初錨定可再加）
     const daysMap = { '1M':30, '2M':60, '3M':91, '6M':182, '1Y':365 };
     const n = daysMap[code] || 0;
     if (!n) return '';
@@ -476,113 +356,106 @@
   }
 
   // -----------------------------
-  // Apply range (核心)
+  // Apply range:
+  // - ALL: restore everything; KPI stays as computed by single-trades.js
+  // - Others: only slice charts + daily pnl + trades. KPI untouched.
   // -----------------------------
   function applyRange(code){
     if (!snapshotOnce()) {
       setStatus('區間切換：資料尚未就緒，正在重試…');
-      setTimeout(() => applyRange(code), 180);
+      setTimeout(() => applyRange(code), 200);
       return;
     }
 
-    const endYmd = SNAP.endYmd;
-    const startYmd = rangeStartYmd(endYmd, code);
-
-    // restore originals
     const eq = getChart(equityCanvas);
     const dy = getChart(dailyCanvas);
     if (!eq || !dy) return;
 
+    // restore originals first
     eq.data.labels = SNAP.eq.labels.slice();
-    eq.data.datasets.forEach((ds, k) => ds.data = (SNAP.eq.dataArrays[k] || []).slice());
+    eq.data.datasets.forEach((ds, k) => ds.data = (SNAP.eq.datasetsData[k] || []).slice());
     eq.update('none');
 
-    dy.data.labels = SNAP.daily.labels.slice();
-    dy.data.datasets.forEach((ds, k) => ds.data = (SNAP.daily.dataArrays[k] || []).slice());
+    dy.data.labels = SNAP.dy.labels.slice();
+    dy.data.datasets.forEach((ds, k) => ds.data = (SNAP.dy.datasetsData[k] || []).slice());
     dy.update('none');
 
     tradesBody.innerHTML = SNAP.tradesHTML;
 
-    // ALL：只補 KPI 顏色
-    if (!startYmd) {
-      ensureKpiRatingColors();
-      setActiveRangeBtn(code);
-      setStatus(`已套用區間：全段（~ ${endYmd}）`);
+    const endYmd = SNAP.endYmd;
+    const startYmd = rangeStartYmd(endYmd, code);
+
+    if (code === 'ALL' || !startYmd) {
+      setActiveRangeBtn('ALL');
+      setStatus(`全區間：~ ${endYmd}（KPI 只在全區間計算）`);
       return;
     }
 
-    // 建立 ymdRange（以交易日清單為準，確保近1週=週一~週五）
+    // 交易日序列（真實日期）→ 近1週/近2週正確落在最後交易週
     const ymdRange = SNAP.tradeYmdList.filter(y => y >= startYmd && y <= endYmd);
-    if (!ymdRange.length) {
-      ensureKpiRatingColors();
-      setActiveRangeBtn(code);
-      setStatus(`區間內無交易日：${startYmd} ~ ${endYmd}`, true);
-      return;
-    }
 
-    // 以 ymdRange 對齊切片：主圖與日損益圖都用同一套 ymdRange
-    const eqLabelY = SNAP.eq.labels.map(l => parseYmdFromText(l));
-    const dyLabelY = SNAP.daily.labels.map(l => parseYmdFromText(l));
+    // --- 交易明細：只顯示區間內每筆交易（不改累計、不改 KPI）
+    const trs = Array.from(tradesBody.querySelectorAll('tr'));
+    const kept = trs.filter(tr => {
+      const ymd = parseYmdFromRow(tr);
+      if (!ymd) return true; // 日期抓不到就保留，避免誤刪
+      return (ymd >= startYmd && ymd <= endYmd);
+    });
+    tradesBody.innerHTML = kept.map(tr => tr.outerHTML).join('');
+
+    // --- 主圖/日損益圖：用同一套 ymdRange 找 index → 保證對齊
+    const eqYmds = SNAP.eq.labels.map(l => parseYmdFromText(l));
+    const dyYmds = SNAP.dy.labels.map(l => parseYmdFromText(l));
 
     const eqIdx = [];
     const dyIdx = [];
-
-    for (const ymd of ymdRange) {
-      const i1 = eqLabelY.indexOf(ymd);
+    for (const y of ymdRange) {
+      const i1 = eqYmds.indexOf(y);
+      const i2 = dyYmds.indexOf(y);
       if (i1 >= 0) eqIdx.push(i1);
-
-      const i2 = dyLabelY.indexOf(ymd);
       if (i2 >= 0) dyIdx.push(i2);
     }
 
-    // 若 chart labels 不完整（找不到日），至少保留尾端 N 日（仍保持兩圖同長度）
-    const fallbackN = Math.min(ymdRange.length, 12);
+    // fallback：若圖表 labels 不含日，只取尾端 N（仍會「有反應」）
+    const fbN = Math.min(12, SNAP.eq.labels.length);
     const eqUse = (eqIdx.length >= 2) ? eqIdx : (() => {
-      const n = Math.min(SNAP.eq.labels.length, fallbackN);
-      const start = Math.max(0, SNAP.eq.labels.length - n);
-      return Array.from({length:n}, (_,k)=>start+k);
+      const start = Math.max(0, SNAP.eq.labels.length - fbN);
+      return Array.from({length: fbN}, (_,k)=>start+k);
     })();
-
+    const fbN2 = Math.min(12, SNAP.dy.labels.length);
     const dyUse = (dyIdx.length >= 2) ? dyIdx : (() => {
-      const n = Math.min(SNAP.daily.labels.length, fallbackN);
-      const start = Math.max(0, SNAP.daily.labels.length - n);
-      return Array.from({length:n}, (_,k)=>start+k);
+      const start = Math.max(0, SNAP.dy.labels.length - fbN2);
+      return Array.from({length: fbN2}, (_,k)=>start+k);
     })();
 
-    // apply eq slice + rebase（多/空/總都歸0）
     eq.data.labels = eqUse.map(i => SNAP.eq.labels[i]);
     eq.data.datasets.forEach((ds, k) => {
-      const orig = SNAP.eq.dataArrays[k] || [];
-      let sliced = eqUse.map(i => orig[i]);
-      if (shouldRebaseLabel(ds.label)) sliced = rebaseArray(sliced);
-      ds.data = sliced;
+      const orig = SNAP.eq.datasetsData[k] || [];
+      ds.data = eqUse.map(i => orig[i]);
     });
     eq.update('none');
 
-    // apply daily pnl slice（不歸0，保持真實每日損益；但日對齊）
-    dy.data.labels = dyUse.map(i => SNAP.daily.labels[i]);
+    dy.data.labels = dyUse.map(i => SNAP.dy.labels[i]);
     dy.data.datasets.forEach((ds, k) => {
-      const orig = SNAP.daily.dataArrays[k] || [];
+      const orig = SNAP.dy.datasetsData[k] || [];
       ds.data = dyUse.map(i => orig[i]);
     });
     dy.update('none');
 
-    // trades: filter + reset cum from 0 within range
-    rebuildTradeTableCums(startYmd, endYmd);
-
-    // KPI colors
-    ensureKpiRatingColors();
-
     setActiveRangeBtn(code);
-    setStatus(`已套用區間：${code}（${startYmd} ~ ${endYmd}）`);
+    setStatus(`區間：${code}（${startYmd} ~ ${endYmd}）｜非全區間：不重算 KPI`);
   }
 
+  // -----------------------------
+  // Bind buttons
+  // -----------------------------
   function hookRangeButtons(){
     if (!rangeRow) return;
     rangeRow.addEventListener('click', (e) => {
       const btn = e.target.closest('.range-btn');
       if (!btn) return;
-      applyRange(btn.dataset.range || 'ALL');
+      const code = btn.dataset.range || 'ALL';
+      applyRange(code);
     });
   }
 
@@ -593,7 +466,7 @@
       if (snapshotOnce()) {
         clearInterval(timer);
         hookRangeButtons();
-        ensureKpiRatingColors();
+        // 初始維持 ALL（KPI 只在全區間）
         applyRange('ALL');
       }
       if (tries > 320) clearInterval(timer);
@@ -601,7 +474,7 @@
   }
 
   // -----------------------------
-  // Boot
+  // Boot: merge + feed to single-trades.js (same as 0807.js)
   // -----------------------------
   async function boot(){
     try{
@@ -695,7 +568,7 @@
 
       setStatus('已載入（合併後）資料，開始分析…');
       await feedToSingleTrades(latest.name, finalText);
-      setStatus('分析完成（可調整本頁「本金／滑點」即時重算 KPI）。');
+      setStatus('分析完成（全區間含 KPI；其他區間僅顯示圖表/日損益/明細）。');
 
       // init after render
       waitAndInit();
