@@ -14,23 +14,12 @@
       -webkit-font-smoothing: antialiased;
     }
 
-    .wrap {
-      max-width: 1100px;
-      margin: 0 auto;
-    }
+    .wrap { max-width: 1100px; margin: 0 auto; }
 
-    h1 {
-      font-size: 16px;
-      margin: 0 0 6px 0;
-      text-align: left;
-    }
+    h1 { font-size: 16px; margin: 0 0 6px 0; text-align: left; }
 
-    .muted {
-      color: #666;
-      font-size: 13px;
-    }
+    .muted { color: #666; font-size: 13px; }
 
-    /* 共用卡片外觀 */
     .card {
       background: #fff;
       border: 1px solid #e5e7eb;
@@ -40,13 +29,7 @@
       margin-bottom: 8px;
     }
 
-    /* 差異檢查那一行 */
-    .row {
-      display: flex;
-      gap: 8px;
-      align-items: center;
-      flex-wrap: wrap;
-    }
+    .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 
     .chip {
       display: inline-block;
@@ -66,19 +49,11 @@
       font-size: 12px;
       white-space: nowrap;
     }
-    .btn.gray {
-      background: #6c757d;
-    }
-    .btn:disabled {
-      opacity: .5;
-      cursor: not-allowed;
-    }
+    .btn.gray { background: #6c757d; }
+    .btn:disabled { opacity: .5; cursor: not-allowed; }
 
-    #autostatus {
-      white-space: pre-wrap;
-    }
+    #autostatus { white-space: pre-wrap; }
 
-    /* 上方：分數卡 + 工具列 */
     .top-row {
       max-width: 1100px;
       margin: 0 auto 4px auto;
@@ -88,7 +63,6 @@
       align-items: stretch;
     }
 
-    /* 綜合分數卡片 */
     .kpi-score-card {
       flex: 0 0 150px;
       background: #fff;
@@ -101,28 +75,13 @@
       justify-content: center;
       font-size: 12px;
     }
-    .score-title {
-      font-size: 11px;
-      color: #777;
-      margin-bottom: 4px;
-    }
-    .score-value {
-      font-size: 20px;
-      font-weight: 700;
-      text-align: center;
-      margin-bottom: 4px;
-    }
+    .score-title { font-size: 11px; color: #777; margin-bottom: 4px; }
+    .score-value { font-size: 20px; font-weight: 700; text-align: center; margin-bottom: 4px; }
     .score-value.strong  { color: #e60000; }
     .score-value.adequate{ color: #c9a500; }
     .score-value.improve { color: #008000; }
-    .score-desc {
-      font-size: 11px;
-      color: #777;
-      text-align: center;
-      line-height: 1.3;
-    }
+    .score-desc { font-size: 11px; color: #777; text-align: center; line-height: 1.3; }
 
-    /* 工具列 */
     .toolbar {
       flex: 1 1 auto;
       margin: 0;
@@ -134,17 +93,12 @@
       font-size: 12px;
       overflow-x: auto;
     }
-    .toolbar label {
-      white-space: nowrap;
-    }
+    .toolbar label { white-space: nowrap; }
     .toolbar input[type="number"] {
       width: 80px;
       font-size: 12px;
       padding: 1px 2px;
       margin-left: 3px;
-    }
-    .toolbar input[type="file"] {
-      font-size: 12px;
     }
     .toolbar button {
       font-size: 12px;
@@ -153,15 +107,8 @@
       white-space: nowrap;
     }
 
-    /* TXT + 雲端檔 block：在 0807 頁面隱藏，但保留給 single-trades.js 使用 */
-    .file-block {
-      display: none;
-      flex-direction: column;
-      gap: 2px;
-    }
-    .file-block label {
-      white-space: nowrap;
-    }
+    /* 隱藏選檔，但保留給 single-trades.js 用 */
+    .file-block { display: none; flex-direction: column; gap: 2px; }
     .cloud-select {
       padding: 4px 8px;
       border: 1px solid #d1d5db;
@@ -171,7 +118,6 @@
       max-width: 380px;
     }
 
-    /* 參數列 */
     .param-line {
       max-width: 1100px;
       margin: 0 auto 4px auto;
@@ -182,55 +128,26 @@
       text-overflow: ellipsis;
     }
 
-    /* KPI 區塊共用 */
-    .kpi-wrapper {
-      margin: 4px auto;
-      max-width: 1100px;
-    }
+    .kpi-wrapper { margin: 4px auto; max-width: 1100px; }
     .kpi-table {
       border-collapse: collapse;
       background: #fff;
       font-size: 12px;
       width: 100%;
     }
-    .kpi-table th,
-    .kpi-table td {
+    .kpi-table th, .kpi-table td {
       padding: 4px 6px;
       border-bottom: 1px solid #eee;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
     }
-    .kpi-table th {
-      background: #fafafa;
-    }
-    .kpi-table td.num {
-      text-align: right;
-      font-variant-numeric: tabular-nums;
-    }
-    .kpi-table td.center,
-    .kpi-table th.center {
-      text-align: center;
-    }
-    .kpi-name { font-weight: 600; }
-    .kpi-desc { color: #777; font-size: 11px; }
+    .kpi-table th { background: #fafafa; }
+    .kpi-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+    .kpi-table td.center, .kpi-table th.center { text-align: center; }
 
-    .kpi-section {
-      background: #f0f0f0;
-      font-weight: 700;
-    }
-
-    .kpi-bad-card .kpi-table {
-      background: #fff5f5;
-      border: 1px solid #ffd0d0;
-    }
-    .kpi-bad-card thead th {
-      background: #ffe5e5;
-    }
-
-    .rating-strong  { color: #e60000; font-weight: 600; }
-    .rating-adequate{ color: #c9a500; font-weight: 600; }
-    .rating-improve { color: #008000; font-weight: 600; }
+    .kpi-bad-card .kpi-table { background: #fff5f5; border: 1px solid #ffd0d0; }
+    .kpi-bad-card thead th { background: #ffe5e5; }
 
     .chart-wrapper {
       max-width: 1100px;
@@ -239,39 +156,42 @@
       border: 1px solid #eee;
       border-radius: 4px;
       padding: 8px;
-      position: relative;
     }
-    .chart-main {
-      height: 420px;
-    }
-    .chart-weekly {
-      height: 260px;
-    }
+    .chart-main { height: 420px; }
+    .chart-weekly { height: 260px; }
 
-    /* 圖表左上區間選單 */
-    .range-box {
-      position: absolute;
-      top: 8px;
-      left: 8px;
-      z-index: 5;
+    /* 區間：一整排按鈕（在主圖上方一行） */
+    .range-row {
+      max-width: 1100px;
+      margin: 0 auto 4px auto;
       display: flex;
       align-items: center;
       gap: 6px;
-      background: rgba(255,255,255,.92);
+      flex-wrap: wrap;
+    }
+    .range-label {
+      font-size: 12px;
+      color: #444;
+      background: #fff;
       border: 1px solid #e5e7eb;
       border-radius: 999px;
-      padding: 4px 8px;
-      box-shadow: 0 2px 6px rgba(0,0,0,.05);
-      font-size: 12px;
+      padding: 3px 10px;
     }
-    .range-box label { white-space: nowrap; color:#444; }
-    .range-box select {
+    .range-btn {
       font-size: 12px;
+      color: #333;
+      background: #fff;
       border: 1px solid #d1d5db;
       border-radius: 999px;
-      padding: 2px 8px;
-      background: #fff;
-      outline: none;
+      padding: 3px 10px;
+      cursor: pointer;
+      user-select: none;
+    }
+    .range-btn:hover { background: #f3f4f6; }
+    .range-btn.active {
+      background: #0d6efd;
+      border-color: #0d6efd;
+      color: #fff;
     }
 
     table.trade-table {
@@ -289,8 +209,7 @@
       z-index: 1;
     }
 
-    table.trade-table th,
-    table.trade-table td {
+    table.trade-table th, table.trade-table td {
       padding: 3px 6px;
       border-bottom: 1px solid #eee;
       white-space: nowrap;
@@ -298,24 +217,14 @@
       text-overflow: ellipsis;
       line-height: 1.3;
     }
-
-    table.trade-table th {
-      text-align: center;
-      font-weight: 600;
-    }
-    table.trade-table td {
-      text-align: right;
-    }
-
-    table.trade-table tbody tr:nth-child(even) {
-      background: #fcfcfc;
-    }
+    table.trade-table th { text-align: center; font-weight: 600; }
+    table.trade-table td { text-align: right; }
+    table.trade-table tbody tr:nth-child(even) { background: #fcfcfc; }
 
     .num-pos { color: #e60000; }
     .num-neg { color: #0a7f00; }
   </style>
 
-  <!-- 依賴：Chart.js + Supabase + single-trades.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 </head>
@@ -358,11 +267,10 @@
 
         <label>
           滑點（每邊點數）：
-          <!-- 精進：預設 2 -->
+          <!-- 預設 2（但真正是否套用，交由 0807-1.js 做保險強制） -->
           <input type="number" id="slipInput" value="2" step="0.1">
         </label>
 
-        <!-- TXT 檔 + 雲端檔 block：隱藏但保留 -->
         <div class="file-block">
           <label>
             TXT 檔：
@@ -383,21 +291,21 @@
     <!-- TXT 第一行參數 -->
     <div class="param-line" id="paramLine"></div>
 
+    <!-- 區間按鈕列（在主圖上方一行） -->
+    <div class="range-row" id="rangeRow">
+      <span class="range-label">區間</span>
+      <button class="range-btn active" data-range="ALL">全</button>
+      <button class="range-btn" data-range="1Y">近1年</button>
+      <button class="range-btn" data-range="6M">近6月</button>
+      <button class="range-btn" data-range="3M">近3月</button>
+      <button class="range-btn" data-range="2M">近2月</button>
+      <button class="range-btn" data-range="1M">近1月</button>
+      <button class="range-btn" data-range="2W">近2週</button>
+      <button class="range-btn" data-range="1W">近1週</button>
+    </div>
+
     <!-- 主資產曲線 -->
     <div class="chart-wrapper chart-main">
-      <div class="range-box">
-        <label>區間</label>
-        <select id="rangeSelect">
-          <option value="ALL">全</option>
-          <option value="1Y">近1年</option>
-          <option value="6M">近6月</option>
-          <option value="3M">近3月</option>
-          <option value="2M">近2月</option>
-          <option value="1M">近1月</option>
-          <option value="2W">近2週</option>
-          <option value="1W">近1週</option>
-        </select>
-      </div>
       <canvas id="equityChart"></canvas>
     </div>
 
@@ -466,9 +374,7 @@
     </div>
   </div>
 
-  <!-- 單檔分析主邏輯（機構級期貨單檔分析版本） -->
   <script src="single-trades.js"></script>
-  <!-- 0807-1 專屬：自動找最新 0807 + 基準，合併後直接餵給 single-trades.js，並提供「區間篩選」 -->
   <script src="0807-1.js"></script>
 </body>
 </html>
