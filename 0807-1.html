@@ -1,0 +1,474 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>三劍客量化科技 0807 單檔分析（精進版）</title>
+
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans TC",
+                   "Microsoft JhengHei", sans-serif;
+      background: #f5f5f5;
+      padding: 8px;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .wrap {
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      font-size: 16px;
+      margin: 0 0 6px 0;
+      text-align: left;
+    }
+
+    .muted {
+      color: #666;
+      font-size: 13px;
+    }
+
+    /* 共用卡片外觀 */
+    .card {
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 8px 10px;
+      box-shadow: 0 2px 6px rgba(0,0,0,.03);
+      margin-bottom: 8px;
+    }
+
+    /* 差異檢查那一行 */
+    .row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .chip {
+      display: inline-block;
+      background: #eef;
+      padding: 4px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+    }
+
+    .btn {
+      background: #0d6efd;
+      color: #fff;
+      border: 0;
+      border-radius: 999px;
+      padding: 4px 10px;
+      cursor: pointer;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+    .btn.gray {
+      background: #6c757d;
+    }
+    .btn:disabled {
+      opacity: .5;
+      cursor: not-allowed;
+    }
+
+    #autostatus {
+      white-space: pre-wrap;
+    }
+
+    /* 上方：分數卡 + 工具列 */
+    .top-row {
+      max-width: 1100px;
+      margin: 0 auto 4px auto;
+      display: flex;
+      flex-wrap: nowrap;
+      gap: 8px;
+      align-items: stretch;
+    }
+
+    /* 綜合分數卡片 */
+    .kpi-score-card {
+      flex: 0 0 150px;
+      background: #fff;
+      border: 1px solid #ffd0d0;
+      border-radius: 4px;
+      padding: 6px 10px;
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      font-size: 12px;
+    }
+    .score-title {
+      font-size: 11px;
+      color: #777;
+      margin-bottom: 4px;
+    }
+    .score-value {
+      font-size: 20px;
+      font-weight: 700;
+      text-align: center;
+      margin-bottom: 4px;
+    }
+    .score-value.strong  { color: #e60000; }
+    .score-value.adequate{ color: #c9a500; }
+    .score-value.improve { color: #008000; }
+    .score-desc {
+      font-size: 11px;
+      color: #777;
+      text-align: center;
+      line-height: 1.3;
+    }
+
+    /* 工具列 */
+    .toolbar {
+      flex: 1 1 auto;
+      margin: 0;
+      display: flex;
+      flex-wrap: nowrap;
+      gap: 8px;
+      align-items: center;
+      justify-content: flex-start;
+      font-size: 12px;
+      overflow-x: auto;
+    }
+    .toolbar label {
+      white-space: nowrap;
+    }
+    .toolbar input[type="number"] {
+      width: 80px;
+      font-size: 12px;
+      padding: 1px 2px;
+      margin-left: 3px;
+    }
+    .toolbar input[type="file"] {
+      font-size: 12px;
+    }
+    .toolbar button {
+      font-size: 12px;
+      padding: 2px 10px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    /* TXT + 雲端檔 block：在 0807 頁面隱藏，但保留給 single-trades.js 使用 */
+    .file-block {
+      display: none;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .file-block label {
+      white-space: nowrap;
+    }
+    .cloud-select {
+      padding: 4px 8px;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      font-size: 12px;
+      min-width: 260px;
+      max-width: 380px;
+    }
+
+    /* 參數列 */
+    .param-line {
+      max-width: 1100px;
+      margin: 0 auto 4px auto;
+      font-size: 11px;
+      color: #555;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* KPI 區塊共用 */
+    .kpi-wrapper {
+      margin: 4px auto;
+      max-width: 1100px;
+    }
+    .kpi-table {
+      border-collapse: collapse;
+      background: #fff;
+      font-size: 12px;
+      width: 100%;
+    }
+    .kpi-table th,
+    .kpi-table td {
+      padding: 4px 6px;
+      border-bottom: 1px solid #eee;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .kpi-table th {
+      background: #fafafa;
+    }
+    .kpi-table td.num {
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+    .kpi-table td.center,
+    .kpi-table th.center {
+      text-align: center;
+    }
+    .kpi-name { font-weight: 600; }
+    .kpi-desc { color: #777; font-size: 11px; }
+
+    .kpi-section {
+      background: #f0f0f0;
+      font-weight: 700;
+    }
+
+    .kpi-bad-card .kpi-table {
+      background: #fff5f5;
+      border: 1px solid #ffd0d0;
+    }
+    .kpi-bad-card thead th {
+      background: #ffe5e5;
+    }
+
+    .rating-strong  { color: #e60000; font-weight: 600; }
+    .rating-adequate{ color: #c9a500; font-weight: 600; }
+    .rating-improve { color: #008000; font-weight: 600; }
+
+    .chart-wrapper {
+      max-width: 1100px;
+      margin: 4px auto 8px auto;
+      background: #fff;
+      border: 1px solid #eee;
+      border-radius: 4px;
+      padding: 8px;
+      position: relative;
+    }
+    .chart-main {
+      height: 420px;
+    }
+    .chart-weekly {
+      height: 260px;
+    }
+
+    /* 圖表左上區間選單 */
+    .range-box {
+      position: absolute;
+      top: 8px;
+      left: 8px;
+      z-index: 5;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(255,255,255,.92);
+      border: 1px solid #e5e7eb;
+      border-radius: 999px;
+      padding: 4px 8px;
+      box-shadow: 0 2px 6px rgba(0,0,0,.05);
+      font-size: 12px;
+    }
+    .range-box label { white-space: nowrap; color:#444; }
+    .range-box select {
+      font-size: 12px;
+      border: 1px solid #d1d5db;
+      border-radius: 999px;
+      padding: 2px 8px;
+      background: #fff;
+      outline: none;
+    }
+
+    table.trade-table {
+      border-collapse: collapse;
+      background: #fff;
+      font-size: 12px;
+      margin: 4px auto 0 auto;
+      width: 100%;
+    }
+
+    thead.trade-head {
+      background: #fafafa;
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+
+    table.trade-table th,
+    table.trade-table td {
+      padding: 3px 6px;
+      border-bottom: 1px solid #eee;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      line-height: 1.3;
+    }
+
+    table.trade-table th {
+      text-align: center;
+      font-weight: 600;
+    }
+    table.trade-table td {
+      text-align: right;
+    }
+
+    table.trade-table tbody tr:nth-child(even) {
+      background: #fcfcfc;
+    }
+
+    .num-pos { color: #e60000; }
+    .num-neg { color: #0a7f00; }
+  </style>
+
+  <!-- 依賴：Chart.js + Supabase + single-trades.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+</head>
+
+<body>
+  <div class="wrap">
+
+    <h1>0807-1版本</h1>
+
+    <!-- 差異檢查 -->
+    <div class="card" id="diffCard">
+      <div class="row">
+        <strong>差異檢查</strong>
+        <span class="chip">最新：<span id="latestName">—</span></span>
+        <span class="chip">基準：<span id="baseName">—</span></span>
+        <span style="flex:1"></span>
+        <button id="btnSetBaseline" class="btn gray" disabled>設此為基準</button>
+      </div>
+      <div id="periodText" class="muted" style="margin-top:6px;"></div>
+    </div>
+
+    <!-- 自動流程狀態 -->
+    <div class="card">
+      <span id="autostatus" class="muted">初始化中…</span>
+    </div>
+
+    <!-- 上方：綜合分數卡 + 工具列 -->
+    <div class="top-row">
+      <div class="kpi-score-card" id="scoreCard">
+        <div class="score-title">綜合分數</div>
+        <div class="score-value">—</div>
+        <div class="score-desc">載入檔案後自動計算</div>
+      </div>
+
+      <div class="toolbar">
+        <label>
+          本金：
+          <input type="number" id="capitalInput" value="1000000" step="10000">
+        </label>
+
+        <label>
+          滑點（每邊點數）：
+          <!-- 精進：預設 2 -->
+          <input type="number" id="slipInput" value="2" step="0.1">
+        </label>
+
+        <!-- TXT 檔 + 雲端檔 block：隱藏但保留 -->
+        <div class="file-block">
+          <label>
+            TXT 檔：
+            <input type="file" id="fileInput" accept=".txt,.TF_1m">
+          </label>
+          <label>
+            雲端檔：
+            <select id="cloudSelect" class="cloud-select">
+              <option value="">（雲端未載入）</option>
+            </select>
+          </label>
+        </div>
+
+        <button id="runBtn">計算</button>
+      </div>
+    </div>
+
+    <!-- TXT 第一行參數 -->
+    <div class="param-line" id="paramLine"></div>
+
+    <!-- 主資產曲線 -->
+    <div class="chart-wrapper chart-main">
+      <div class="range-box">
+        <label>區間</label>
+        <select id="rangeSelect">
+          <option value="ALL">全</option>
+          <option value="1Y">近1年</option>
+          <option value="6M">近6月</option>
+          <option value="3M">近3月</option>
+          <option value="2M">近2月</option>
+          <option value="1M">近1月</option>
+          <option value="2W">近2週</option>
+          <option value="1W">近1週</option>
+        </select>
+      </div>
+      <canvas id="equityChart"></canvas>
+    </div>
+
+    <!-- 每週損益圖 -->
+    <div class="chart-wrapper chart-weekly">
+      <canvas id="weeklyPnlChart"></canvas>
+    </div>
+
+    <!-- 建議優化指標 -->
+    <div class="kpi-wrapper kpi-bad-card">
+      <table class="kpi-table">
+        <thead>
+          <tr>
+            <th>建議優化指標</th>
+            <th class="center">數值（含滑價）</th>
+            <th class="center">建議</th>
+            <th class="center">機構評語</th>
+            <th class="center">參考區間</th>
+          </tr>
+        </thead>
+        <tbody id="kpiBadBody">
+          <tr>
+            <td colspan="5" style="color:#777;">目前沒有需要特別優化的指標。</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- 全部 KPI 明細 -->
+    <div class="kpi-wrapper">
+      <table class="kpi-table">
+        <thead>
+          <tr>
+            <th>指標</th>
+            <th class="center">數值（理論）</th>
+            <th class="center">數值（含滑價）</th>
+            <th>說明</th>
+            <th class="center">機構評語</th>
+            <th class="center">參考區間</th>
+          </tr>
+        </thead>
+        <tbody id="kpiBody"></tbody>
+      </table>
+    </div>
+
+    <!-- 交易明細 -->
+    <div class="card">
+      <table class="trade-table">
+        <thead class="trade-head">
+          <tr>
+            <th>#</th>
+            <th>日期時間</th>
+            <th>成交點位</th>
+            <th>類別</th>
+            <th>點數</th>
+            <th>手續費</th>
+            <th>交易稅</th>
+            <th>理論淨損益</th>
+            <th>累積理論淨損益</th>
+            <th>實際淨損益</th>
+            <th>累積實際淨損益</th>
+          </tr>
+        </thead>
+        <tbody id="tradesBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- 單檔分析主邏輯（機構級期貨單檔分析版本） -->
+  <script src="single-trades.js"></script>
+  <!-- 0807-1 專屬：自動找最新 0807 + 基準，合併後直接餵給 single-trades.js，並提供「區間篩選」 -->
+  <script src="0807-1.js"></script>
+</body>
+</html>
