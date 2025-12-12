@@ -1,20 +1,17 @@
-// 0807-1.js — 最終版（區間＝以最後交易日為錨；近1週/近2週週一錨定）
-// 需求達成：
-// 1) 主圖 + 下方「日損益圖」皆以「日序列」切片，日對齊（不再比例切、不再猜）
-// 2) 主圖多頭/空頭/總損益（含滑價/理論）切區間後都「歸0」；期間最高/最低點不歸0
-// 3) KPI 的 Strong/Adequate/Improve 以紅/黃/綠顯示（補 class）
-// 4) 交易明細顯示區間內每筆交易，且「累積」從區間起點重新歸0累加
-// 5) 其他區間可用（近1年/6月/3月/2月/1月/近2週/近1週），近2週必有反應
+// 0807-1.js — 最終穩定版（以交易日序列切片；近1週/近2週週一錨定；圖表日對齊；明細累計歸0；KPI紅黃綠）
 //
-// 注意：不改 single-trades.js；只在其渲染完成後做「前端視覺切片 + 欄位重算」
+// 你要的行為：
+// 1) 近1週：以「最後交易日」為錨，區間=本週週一~最後交易日（例：2025/12/08~2025/12/12）
+// 2) 主圖與下方「日損益圖」同一套交易日切片，確保每日對齊
+// 3) 主圖多頭/空頭/總損益（含滑價/理論）切區間後都歸0；期間最高/最低點不歸0
+// 4) 交易明細僅顯示區間內每筆交易；累積理論/累積實際從區間起點歸0累加
+// 5) KPI Strong/Adequate/Improve 以紅/黃/綠顯示（補 class）
+// 6) 其他區間（近1年/6月/3月/2月/1月/近2週/近1週）都可用，必定有反應
 
 (function () {
   'use strict';
   const $ = (s) => document.querySelector(s);
 
-  // -----------------------------
-  // DOM
-  // -----------------------------
   const status   = $('#autostatus');
   const elLatest = $('#latestName');
   const elBase   = $('#baseName');
@@ -23,7 +20,7 @@
   const rangeRow     = $('#rangeRow');
   const tradesBody   = $('#tradesBody');
   const equityCanvas = $('#equityChart');
-  const weeklyCanvas = $('#weeklyPnlChart'); // 注意：這張在你頁面其實是「每日」損益圖
+  const dailyCanvas  = $('#weeklyPnlChart'); // 你的頁面此圖實際為「每日損益圖」
 
   const slipInput = $('#slipInput');
   const runBtn    = $('#runBtn');
@@ -37,7 +34,7 @@
   }
 
   // -----------------------------
-  // slip=2 保險（開頁即算）
+  // slip=2：開頁即算
   // -----------------------------
   function forceSlip2() {
     if (!slipInput) return;
@@ -55,7 +52,7 @@
   document.addEventListener('DOMContentLoaded', () => forceSlip2());
 
   // -----------------------------
-  // Supabase + merge（沿用 0807.js 的正確思路）
+  // Supabase + merge（對齊你 0807.js 的做法）
   // -----------------------------
   const SUPABASE_URL  = "https://byhbmmnacezzgkwfkozs.supabase.co";
   const SUPABASE_ANON = "sb_publishable_xVe8fGbqQ0XGwi4DsmjPMg_Y2RBOD3t";
@@ -102,6 +99,24 @@
     const m = String(name).match(/\b(20\d{6})\b/g);
     if (!m || !m.length) return 0;
     return Math.max(...m.map(s => +s || 0));
+  }
+
+  async function readManifest() {
+    try {
+      const { data, error } = await sb.storage.from(BUCKET).download(MANIFEST_PATH);
+      if (error || !data) return null;
+      return JSON.parse(await data.text());
+    } catch { return null; }
+  }
+
+  async function writeManifest(obj) {
+    const blob = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' });
+    const { error } = await sb.storage.from(BUCKET).upload(
+      MANIFEST_PATH,
+      blob,
+      { upsert: true, cacheControl: '0', contentType: 'application/json' }
+    );
+    if (error) throw new Error(error.message);
   }
 
   function normalizeText(raw) {
@@ -190,31 +205,12 @@
     return out.join('\n');
   }
 
-  async function readManifest() {
-    try {
-      const { data, error } = await sb.storage.from(BUCKET).download(MANIFEST_PATH);
-      if (error || !data) return null;
-      return JSON.parse(await data.text());
-    } catch { return null; }
-  }
-
-  async function writeManifest(obj) {
-    const blob = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' });
-    const { error } = await sb.storage.from(BUCKET).upload(
-      MANIFEST_PATH,
-      blob,
-      { upsert: true, cacheControl: '0', contentType: 'application/json' }
-    );
-    if (error) throw new Error(error.message);
-  }
-
   async function feedToSingleTrades(filename, mergedText) {
     const fileInput = $('#fileInput');
     const fname = filename || '0807.txt';
     const file  = new File([mergedText], fname, { type: 'text/plain' });
 
     forceSlip2();
-
     if (window.__singleTrades_setFile) window.__singleTrades_setFile(file);
 
     if (fileInput) {
@@ -228,21 +224,16 @@
   }
 
   // -----------------------------
-  // 日期/數字工具
+  // Utils: ymd/date/number
   // -----------------------------
   function pad2(n){ return String(n).padStart(2,'0'); }
-
   function ymdToDate(ymd){
     if (!ymd || ymd.length !== 8) return null;
     const y=+ymd.slice(0,4), m=+ymd.slice(4,6), d=+ymd.slice(6,8);
-    if (!y || !m || !d) return null;
+    if (!y||!m||!d) return null;
     return new Date(y, m-1, d);
   }
-
-  function dateToYmd(d){
-    return `${d.getFullYear()}${pad2(d.getMonth()+1)}${pad2(d.getDate())}`;
-  }
-
+  function dateToYmd(d){ return `${d.getFullYear()}${pad2(d.getMonth()+1)}${pad2(d.getDate())}`; }
   function mondayOfWeek(d){
     const x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
     const day = x.getDay(); // 0 Sun..6 Sat
@@ -251,22 +242,19 @@
     return x;
   }
 
+  // 支援：YYYY/MM/DD、YYYY-MM-DD、YYYYMMDD、YYYYMMDDhhmmss、YYYY/M
   function parseYmdFromText(text){
     const s = String(text || '').trim();
 
-    // 14碼（YYYYMMDDhhmmss）
     let m = s.match(/\b(20\d{12})\b/);
     if (m) return m[1].slice(0,8);
 
-    // 8碼（YYYYMMDD）
     m = s.match(/\b(20\d{6})\b/);
     if (m) return m[1];
 
-    // YYYY/MM/DD or YYYY-MM-DD
     m = s.match(/\b(20\d{2})[\/\-](\d{1,2})[\/\-](\d{1,2})\b/);
     if (m) return `${m[1]}${pad2(m[2])}${pad2(m[3])}`;
 
-    // YYYY/MM or YYYY-MM（只到月：當作月初，仍可用於 slicing）
     m = s.match(/\b(20\d{2})[\/\-](\d{1,2})\b/);
     if (m) return `${m[1]}${pad2(m[2])}01`;
 
@@ -310,22 +298,10 @@
       td.classList.remove('rating-strong','rating-adequate','rating-improve');
       td.classList.add(cls);
     }
-    // score card（保守補）
-    const scoreVal = document.querySelector('#scoreCard .score-value');
-    if (scoreVal) {
-      scoreVal.classList.remove('strong','adequate','improve');
-      // 嘗試從頁面中找 Strong/Adequate/Improve 次數最多者當色（最小侵入）
-      const strongN = document.querySelectorAll('td.rating-strong').length;
-      const adqN    = document.querySelectorAll('td.rating-adequate').length;
-      const impN    = document.querySelectorAll('td.rating-improve').length;
-      if (strongN >= adqN && strongN >= impN) scoreVal.classList.add('strong');
-      else if (adqN >= strongN && adqN >= impN) scoreVal.classList.add('adequate');
-      else scoreVal.classList.add('improve');
-    }
   }
 
   // -----------------------------
-  // Chart slicing（用「日序列」索引切，不用比例）
+  // Chart ops
   // -----------------------------
   function getChart(canvas){
     if (!canvas || !window.Chart) return null;
@@ -334,9 +310,7 @@
 
   function shouldRebaseLabel(label){
     const s = String(label || '');
-    // 期間最高/最低點不要歸0
     if (/最高|最低/.test(s)) return false;
-    // 總損益/多頭/空頭 皆要歸0
     return /(損益|多頭|空頭|總)/.test(s);
   }
 
@@ -364,7 +338,7 @@
   }
 
   // -----------------------------
-  // Trade table reset cum from 0 within range
+  // Trade table: filter + reset cum
   // -----------------------------
   function rebuildTradeTableCums(startYmd, endYmd){
     const table = tradesBody?.closest('table');
@@ -373,51 +347,48 @@
     const head = table.querySelector('thead');
     const ths = Array.from(head?.querySelectorAll('th') || []).map(th => (th.textContent || '').trim());
 
-    // 找欄位 index（以中文標題為準；若找不到就不做重算）
-    const idxTheo      = ths.findIndex(t => t.includes('理論淨損益'));
-    const idxCumTheo   = ths.findIndex(t => t.includes('累積理論淨損益'));
-    const idxReal      = ths.findIndex(t => t.includes('實際淨損益'));
-    const idxCumReal   = ths.findIndex(t => t.includes('累積實際淨損益'));
-    const idxDateTime  = ths.findIndex(t => t.includes('日期時間'));
+    const idxDateTime = ths.findIndex(t => t.includes('日期時間'));
+    const idxTheo     = ths.findIndex(t => t.includes('理論淨損益'));
+    const idxCumTheo  = ths.findIndex(t => t.includes('累積理論淨損益'));
+    const idxReal     = ths.findIndex(t => t.includes('實際淨損益'));
+    const idxCumReal  = ths.findIndex(t => t.includes('累積實際淨損益'));
 
-    if (idxTheo < 0 || idxCumTheo < 0 || idxReal < 0 || idxCumReal < 0) return;
-
-    const rows = Array.from(tradesBody.querySelectorAll('tr'));
-
-    // 先找區間內 row
-    const kept = [];
-    for (const tr of rows) {
-      const tds = Array.from(tr.querySelectorAll('td'));
-      if (!tds.length) continue;
-
-      // 優先用 日期時間欄位；找不到就用整列
-      const dtText = (idxDateTime >= 0 && tds[idxDateTime]) ? tds[idxDateTime].textContent : tr.textContent;
-      const ymd = parseYmdFromText(dtText);
-
-      // 若 ymd 抓不到，不濾掉（避免誤刪），但累計就不改
-      if (ymd && startYmd && endYmd) {
-        if (ymd < startYmd || ymd > endYmd) continue;
-      }
-      kept.push(tr);
+    if (idxTheo < 0 || idxCumTheo < 0 || idxReal < 0 || idxCumReal < 0) {
+      // 欄位找不到就只做過濾，不重算
+      const rows0 = Array.from(tradesBody.querySelectorAll('tr'));
+      const kept0 = rows0.filter(tr => {
+        const tds = Array.from(tr.querySelectorAll('td'));
+        const text = (idxDateTime >= 0 && tds[idxDateTime]) ? tds[idxDateTime].textContent : tr.textContent;
+        const ymd = parseYmdFromText(text);
+        if (!ymd) return true;
+        return (!startYmd) ? true : (ymd >= startYmd && ymd <= endYmd);
+      });
+      tradesBody.innerHTML = kept0.map(tr => tr.outerHTML).join('');
+      return;
     }
 
-    // 用 kept 重新填 tbody
+    // 先過濾區間內 row（保留所有交易）
+    const rows = Array.from(tradesBody.querySelectorAll('tr'));
+    const kept = rows.filter(tr => {
+      const tds = Array.from(tr.querySelectorAll('td'));
+      const text = (idxDateTime >= 0 && tds[idxDateTime]) ? tds[idxDateTime].textContent : tr.textContent;
+      const ymd = parseYmdFromText(text);
+      if (!ymd) return true;
+      return (!startYmd) ? true : (ymd >= startYmd && ymd <= endYmd);
+    });
+
     tradesBody.innerHTML = kept.map(tr => tr.outerHTML).join('');
 
-    // 重新取一次 rows
+    // 再重算累積（區間起點歸0）
     const newRows = Array.from(tradesBody.querySelectorAll('tr'));
-
     let cumTheo = 0;
     let cumReal = 0;
 
     for (const tr of newRows) {
       const tds = Array.from(tr.querySelectorAll('td'));
-      if (!tds.length) continue;
-
       const theo = parseNum(tds[idxTheo]?.textContent);
       const real = parseNum(tds[idxReal]?.textContent);
 
-      // 有些「新買」列可能是 —，跳過累加但仍把累積顯示為目前累計
       if (Number.isFinite(theo)) cumTheo += theo;
       if (Number.isFinite(real)) cumReal += real;
 
@@ -425,18 +396,17 @@
       if (tds[idxCumReal]) tds[idxCumReal].textContent = formatNum(cumReal);
     }
 
-    // 重新寫回（因為我們改了 td.textContent）
     tradesBody.innerHTML = newRows.map(tr => tr.outerHTML).join('');
   }
 
   // -----------------------------
-  // Snapshot originals（只做一次）
+  // Snapshot originals
   // -----------------------------
   const SNAP = {
     ready: false,
     eq: { labels:null, dataArrays:null },
-    wk: { labels:null, dataArrays:null },
-    tradesHTML: null, // 原始 tbody HTML
+    daily: { labels:null, dataArrays:null },
+    tradesHTML: null,
     tradeYmdList: null,
     endYmd: null
   };
@@ -445,43 +415,31 @@
     if (SNAP.ready) return true;
 
     const eq = getChart(equityCanvas);
-    const wk = getChart(weeklyCanvas);
+    const dy = getChart(dailyCanvas);
     if (!eq || !eq.data?.labels?.length || !eq.data?.datasets?.length) return false;
-    if (!wk || !wk.data?.labels?.length || !wk.data?.datasets?.length) return false;
+    if (!dy || !dy.data?.labels?.length || !dy.data?.datasets?.length) return false;
     if (!tradesBody) return false;
 
-    // Chart originals
     SNAP.eq.labels = eq.data.labels.slice();
     SNAP.eq.dataArrays = eq.data.datasets.map(ds => Array.isArray(ds.data) ? ds.data.slice() : []);
 
-    SNAP.wk.labels = wk.data.labels.slice();
-    SNAP.wk.dataArrays = wk.data.datasets.map(ds => Array.isArray(ds.data) ? ds.data.slice() : []);
+    SNAP.daily.labels = dy.data.labels.slice();
+    SNAP.daily.dataArrays = dy.data.datasets.map(ds => Array.isArray(ds.data) ? ds.data.slice() : []);
 
-    // Trade originals
     SNAP.tradesHTML = tradesBody.innerHTML;
 
-    // trade ymd list & endYmd from table rows
+    // 以交易明細產生交易日清單與 endYmd（取最大日期，避免最後一列不是最後交易日）
     const trs = Array.from(tradesBody.querySelectorAll('tr'));
     const yset = new Set();
-    let endYmd = '';
     for (const tr of trs) {
       const ymd = parseYmdFromRow(tr);
       if (ymd) yset.add(ymd);
-      endYmd = ymd || endYmd;
-    }
-    // 若上述 endYmd 不穩（最後幾列可能是空），再從後往前找
-    if (!endYmd) {
-      for (let i = trs.length - 1; i >= 0; i--) {
-        const ymd = parseYmdFromRow(trs[i]);
-        if (ymd) { endYmd = ymd; break; }
-      }
     }
     const ymdList = Array.from(yset).sort();
-
-    if (!endYmd || !ymdList.length) return false;
+    if (!ymdList.length) return false;
 
     SNAP.tradeYmdList = ymdList;
-    SNAP.endYmd = endYmd;
+    SNAP.endYmd = ymdList[ymdList.length - 1]; // 取最大交易日
     SNAP.ready = true;
     return true;
   }
@@ -495,12 +453,14 @@
     if (!endDate) return '';
 
     if (code === '1W') return dateToYmd(mondayOfWeek(endDate));
+
     if (code === '2W') {
       const m = mondayOfWeek(endDate);
       m.setDate(m.getDate() - 7);
       return dateToYmd(m);
     }
 
+    // 月/年：日數回推（你若要月初錨定可再加）
     const daysMap = { '1M':30, '2M':60, '3M':91, '6M':182, '1Y':365 };
     const n = daysMap[code] || 0;
     if (!n) return '';
@@ -516,7 +476,7 @@
   }
 
   // -----------------------------
-  // Apply range (the real work)
+  // Apply range (核心)
   // -----------------------------
   function applyRange(code){
     if (!snapshotOnce()) {
@@ -528,89 +488,89 @@
     const endYmd = SNAP.endYmd;
     const startYmd = rangeStartYmd(endYmd, code);
 
-    // 1) restore originals first
+    // restore originals
     const eq = getChart(equityCanvas);
-    const wk = getChart(weeklyCanvas);
-    if (!eq || !wk) return;
+    const dy = getChart(dailyCanvas);
+    if (!eq || !dy) return;
 
-    // restore chart full
     eq.data.labels = SNAP.eq.labels.slice();
     eq.data.datasets.forEach((ds, k) => ds.data = (SNAP.eq.dataArrays[k] || []).slice());
     eq.update('none');
 
-    wk.data.labels = SNAP.wk.labels.slice();
-    wk.data.datasets.forEach((ds, k) => ds.data = (SNAP.wk.dataArrays[k] || []).slice());
-    wk.update('none');
+    dy.data.labels = SNAP.daily.labels.slice();
+    dy.data.datasets.forEach((ds, k) => ds.data = (SNAP.daily.dataArrays[k] || []).slice());
+    dy.update('none');
 
-    // restore trades full
     tradesBody.innerHTML = SNAP.tradesHTML;
 
-    // 2) If ALL: only fix KPI colors and done
+    // ALL：只補 KPI 顏色
     if (!startYmd) {
-      // ALL 也要確保 KPI 顏色有
       ensureKpiRatingColors();
       setActiveRangeBtn(code);
       setStatus(`已套用區間：全段（~ ${endYmd}）`);
       return;
     }
 
-    // 3) Slice charts by actual daily ymd indices
-    const eqLabels = SNAP.eq.labels;
-    const wkLabels = SNAP.wk.labels;
-
-    // 建索引（labels -> ymd）
-    const eqYmds = eqLabels.map(l => parseYmdFromText(l));
-    const wkYmds = wkLabels.map(l => parseYmdFromText(l));
-
-    const eqKeep = [];
-    for (let i = 0; i < eqYmds.length; i++) {
-      const y = eqYmds[i];
-      if (!y) continue; // label 沒日期就跳過
-      if (y >= startYmd && y <= endYmd) eqKeep.push(i);
+    // 建立 ymdRange（以交易日清單為準，確保近1週=週一~週五）
+    const ymdRange = SNAP.tradeYmdList.filter(y => y >= startYmd && y <= endYmd);
+    if (!ymdRange.length) {
+      ensureKpiRatingColors();
+      setActiveRangeBtn(code);
+      setStatus(`區間內無交易日：${startYmd} ~ ${endYmd}`, true);
+      return;
     }
 
-    const wkKeep = [];
-    for (let i = 0; i < wkYmds.length; i++) {
-      const y = wkYmds[i];
-      if (!y) continue;
-      if (y >= startYmd && y <= endYmd) wkKeep.push(i);
+    // 以 ymdRange 對齊切片：主圖與日損益圖都用同一套 ymdRange
+    const eqLabelY = SNAP.eq.labels.map(l => parseYmdFromText(l));
+    const dyLabelY = SNAP.daily.labels.map(l => parseYmdFromText(l));
+
+    const eqIdx = [];
+    const dyIdx = [];
+
+    for (const ymd of ymdRange) {
+      const i1 = eqLabelY.indexOf(ymd);
+      if (i1 >= 0) eqIdx.push(i1);
+
+      const i2 = dyLabelY.indexOf(ymd);
+      if (i2 >= 0) dyIdx.push(i2);
     }
 
-    // 若 keep 太少（避免空白）：至少保留最後 12 / 8 筆
-    const eqIdx = (eqKeep.length >= 2) ? eqKeep : (() => {
-      const n = Math.min(eqLabels.length, 12);
-      const start = Math.max(0, eqLabels.length - n);
+    // 若 chart labels 不完整（找不到日），至少保留尾端 N 日（仍保持兩圖同長度）
+    const fallbackN = Math.min(ymdRange.length, 12);
+    const eqUse = (eqIdx.length >= 2) ? eqIdx : (() => {
+      const n = Math.min(SNAP.eq.labels.length, fallbackN);
+      const start = Math.max(0, SNAP.eq.labels.length - n);
       return Array.from({length:n}, (_,k)=>start+k);
     })();
 
-    const wkIdx = (wkKeep.length >= 2) ? wkKeep : (() => {
-      const n = Math.min(wkLabels.length, 8);
-      const start = Math.max(0, wkLabels.length - n);
+    const dyUse = (dyIdx.length >= 2) ? dyIdx : (() => {
+      const n = Math.min(SNAP.daily.labels.length, fallbackN);
+      const start = Math.max(0, SNAP.daily.labels.length - n);
       return Array.from({length:n}, (_,k)=>start+k);
     })();
 
-    // apply slice to eq + rebase all long/short/total
-    eq.data.labels = eqIdx.map(i => eqLabels[i]);
+    // apply eq slice + rebase（多/空/總都歸0）
+    eq.data.labels = eqUse.map(i => SNAP.eq.labels[i]);
     eq.data.datasets.forEach((ds, k) => {
       const orig = SNAP.eq.dataArrays[k] || [];
-      let sliced = eqIdx.map(i => orig[i]);
+      let sliced = eqUse.map(i => orig[i]);
       if (shouldRebaseLabel(ds.label)) sliced = rebaseArray(sliced);
       ds.data = sliced;
     });
     eq.update('none');
 
-    // apply slice to daily pnl chart (wk canvas) — do NOT rebase bars/values (keep true daily pnl)
-    wk.data.labels = wkIdx.map(i => wkLabels[i]);
-    wk.data.datasets.forEach((ds, k) => {
-      const orig = SNAP.wk.dataArrays[k] || [];
-      ds.data = wkIdx.map(i => orig[i]);
+    // apply daily pnl slice（不歸0，保持真實每日損益；但日對齊）
+    dy.data.labels = dyUse.map(i => SNAP.daily.labels[i]);
+    dy.data.datasets.forEach((ds, k) => {
+      const orig = SNAP.daily.dataArrays[k] || [];
+      ds.data = dyUse.map(i => orig[i]);
     });
-    wk.update('none');
+    dy.update('none');
 
-    // 4) Trade details: show only trades in range AND reset cum from 0
+    // trades: filter + reset cum from 0 within range
     rebuildTradeTableCums(startYmd, endYmd);
 
-    // 5) KPI colors
+    // KPI colors
     ensureKpiRatingColors();
 
     setActiveRangeBtn(code);
@@ -622,31 +582,26 @@
     rangeRow.addEventListener('click', (e) => {
       const btn = e.target.closest('.range-btn');
       if (!btn) return;
-      const code = btn.dataset.range || 'ALL';
-      applyRange(code);
+      applyRange(btn.dataset.range || 'ALL');
     });
   }
 
-  // -----------------------------
-  // Wait for render
-  // -----------------------------
   function waitAndInit(){
     let tries = 0;
     const timer = setInterval(() => {
       tries++;
-      const ok = snapshotOnce();
-      if (ok) {
+      if (snapshotOnce()) {
         clearInterval(timer);
         hookRangeButtons();
         ensureKpiRatingColors();
         applyRange('ALL');
       }
-      if (tries > 280) clearInterval(timer);
+      if (tries > 320) clearInterval(timer);
     }, 120);
   }
 
   // -----------------------------
-  // Boot: fetch + merge + feed (same as 0807.js)
+  // Boot
   // -----------------------------
   async function boot(){
     try{
@@ -688,7 +643,7 @@
       }
       if (elLatest) elLatest.textContent = latest.name;
 
-      // baseline from manifest or second newest
+      // baseline
       let base = null;
       if (!paramFile) {
         const manifest = await readManifest();
@@ -702,6 +657,7 @@
       }
       if (elBase) elBase.textContent = base ? base.name : '（尚無）';
 
+      // download latest
       setStatus('下載最新 0807 檔案並解碼中…');
       const latestUrl = latest.from === 'url' ? latest.fullPath : pubUrl(latest.fullPath);
       const rNew = await fetchSmart(latestUrl);
@@ -712,6 +668,7 @@
 
       let mergedText = rNew.canon;
 
+      // merge baseline
       if (base) {
         setStatus('下載基準檔並進行合併…');
         const baseUrl = base.from === 'url' ? base.fullPath : pubUrl(base.fullPath);
@@ -719,7 +676,7 @@
         mergedText = mergeByBaseline(rBase.canon, rNew.canon);
       }
 
-      // set baseline button
+      // baseline button
       if (btnBase) {
         btnBase.disabled = false;
         btnBase.onclick = async () => {
@@ -732,6 +689,7 @@
         };
       }
 
+      // feed
       const mergedWithInpos = addFakeInpos(mergedText);
       const finalText = '0807 MERGED\n' + mergedWithInpos;
 
@@ -739,7 +697,7 @@
       await feedToSingleTrades(latest.name, finalText);
       setStatus('分析完成（可調整本頁「本金／滑點」即時重算 KPI）。');
 
-      // init range after render
+      // init after render
       waitAndInit();
     } catch (err) {
       console.error(err);
