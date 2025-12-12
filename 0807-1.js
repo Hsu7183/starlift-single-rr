@@ -1,6 +1,7 @@
-// 0807-1.js — 延續 0807.js：基準合併 + 自動分析
-// 精進：新增「區間」篩選（主資產曲線 + 週損益圖 + 交易明細同步切換）
-// 注意：不改 single-trades.js；以 Chart.js 實例與 DOM table 做非侵入式篩選
+// 0807-1.js — 基準合併 + 自動分析
+// 精進：
+// 1) 開頁強制 slip=2 並確保「第一次計算就用 slip=2」
+// 2) 區間改成按鈕列（主圖 / 週圖 / 交易明細同步篩選）
 (function () {
   'use strict';
 
@@ -12,14 +13,17 @@
   const elPeriod = $('#periodText');
   const btnBase  = $('#btnSetBaseline');
 
-  const rangeSelect = $('#rangeSelect');
-  const tradesBody  = $('#tradesBody');
+  const rangeRow   = $('#rangeRow');
+  const tradesBody = $('#tradesBody');
   const equityCanvas = $('#equityChart');
   const weeklyCanvas = $('#weeklyPnlChart');
 
+  const slipInput = $('#slipInput');
+  const runBtn    = $('#runBtn');
+
   if (status) status.style.whiteSpace = 'pre-wrap';
 
-  // Supabase 設定（與其他頁一致）
+  // Supabase 設定
   const SUPABASE_URL  = "https://byhbmmnacezzgkwfkozs.supabase.co";
   const SUPABASE_ANON = "sb_publishable_xVe8fGbqQ0XGwi4DsmjPMg_Y2RBOD3t";
   const BUCKET        = "reports";
@@ -31,7 +35,7 @@
   const WANT          = /0807/i;
   const MANIFEST_PATH = "manifests/0807.json";
 
-  // canonical 3 欄行
+  // canonical 3 欄
   const CANON_RE   = /^(\d{14})\.0{6}\s+(\d+\.\d{6})\s+(新買|平賣|新賣|平買|強制平倉)\s*$/;
   const EXTRACT_RE = /.*?(\d{14})(?:\.0{1,6})?\s+(\d+(?:\.\d{1,6})?)\s*(新買|平賣|新賣|平買|強制平倉)\s*$/;
 
@@ -40,6 +44,33 @@
     status.textContent = msg;
     status.style.color = bad ? '#c62828' : '#666';
   }
+
+  // =========================
+  // 重要：確保首次計算就用 slip=2
+  // =========================
+  function forceSlip2() {
+    if (!slipInput) return;
+    slipInput.value = '2';
+    slipInput.dispatchEvent(new Event('input', { bubbles: true }));
+    slipInput.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+
+  // 「補點擊」：避免 click 太早（single-trades.js 尚未綁 handler）
+  function safeClickRun(times = 3) {
+    if (!runBtn) return;
+    const delays = [0, 80, 250, 600];
+    for (let i = 0; i < Math.min(times, delays.length); i++) {
+      setTimeout(() => {
+        forceSlip2();
+        runBtn.click();
+      }, delays[i]);
+    }
+  }
+
+  // 頁面一載入先強制一次（避免 single-trades.js 初始化時寫回 0）
+  document.addEventListener('DOMContentLoaded', () => {
+    forceSlip2();
+  });
 
   function pubUrl(path) {
     const { data } = sb.storage.from(BUCKET).getPublicUrl(path);
@@ -75,7 +106,6 @@
     return Math.max(...m.map(s => +s || 0));
   }
 
-  // ===== 文字正規化 & canonical 行抽取 =====
   function normalizeText(raw) {
     let s = raw
       .replace(/\ufeff/gi, '')
@@ -143,7 +173,6 @@
     return rows;
   }
 
-  // combined = base 全部 + (latest 裡 ts > baseMax 的行)
   function mergeByBaseline(baseText, latestText) {
     const A = parseCanon(baseText);
     const B = parseCanon(latestText);
@@ -151,10 +180,7 @@
     const baseMin = A.length ? A[0].ts.slice(0, 8) : (B.length ? B[0].ts.slice(0, 8) : '');
     const baseMax = A.length ? A[A.length - 1].ts : '';
 
-    const added = baseMax
-      ? B.filter(x => x.ts > baseMax).map(x => x.line)
-      : B.map(x => x.line);
-
+    const added = baseMax ? B.filter(x => x.ts > baseMax).map(x => x.line) : B.map(x => x.line);
     const mergedLines = [...A.map(x => x.line), ...added];
 
     const endDay = mergedLines.length
@@ -164,7 +190,6 @@
     return { combined: mergedLines.join('\n'), start8: baseMin, end8: endDay };
   }
 
-  // ===== 為每一筆「新買／新賣」插入假的 INPOS 行，給 single-trades.js 判方向用 =====
   function addFakeInpos(text) {
     const lines = (text || '')
       .split('\n')
@@ -190,13 +215,13 @@
     return out.join('\n');
   }
 
-  // ===== 把合併後內容餵給 single-trades.js =====
   async function feedToSingleTrades(filename, mergedText) {
     const fileInput = $('#fileInput');
-    const runBtn    = $('#runBtn');
-
     const fname = filename || '0807.txt';
     const file  = new File([mergedText], fname, { type: 'text/plain' });
+
+    // 關鍵：餵檔前再次確保 slip=2
+    forceSlip2();
 
     if (window.__singleTrades_setFile) {
       window.__singleTrades_setFile(file);
@@ -209,10 +234,10 @@
       fileInput.dispatchEvent(new Event('change', { bubbles: true }));
     }
 
-    if (runBtn) runBtn.click();
+    // 關鍵：不要只 click 一次，做延遲補點擊
+    safeClickRun(4);
   }
 
-  // ===== 讀寫 manifest（基準檔資訊） =====
   async function readManifest() {
     try {
       const { data, error } = await sb.storage.from(BUCKET).download(MANIFEST_PATH);
@@ -237,33 +262,20 @@
   // ======================================================================
   // 區間篩選（Chart.js + 交易明細）
   // ======================================================================
-
-  // 保存「全區間」快照（只保存一次，之後依快照切換）
-  const SNAP = {
-    ready: false,
-    eq: null,     // { labels:[], datasets:[[]...] }
-    wk: null,     // { labels:[], datasets:[[]...] }
-    trades: null, // { rows:[{ts, html}] }
-    lastDate: null
-  };
+  const SNAP = { ready: false, eq: null, wk: null, trades: null, lastDate: null };
 
   function ymdToDate(ymd) {
-    // yyyymmdd
     const y = Number(ymd.slice(0,4));
     const m = Number(ymd.slice(4,6));
     const d = Number(ymd.slice(6,8));
     if (!y || !m || !d) return null;
     return new Date(y, m - 1, d);
   }
-
   function ts14ToDate(ts14) {
-    // yyyymmddHHMMSS
     if (!ts14 || ts14.length < 8) return null;
     return ymdToDate(ts14.slice(0,8));
   }
-
   function parseAnyDate(x) {
-    // 可能是 Date、數字、'YYYY/MM/DD'、'YYYY-MM-DD'、'YYYYMMDD...'、'2024/1'、'2024-01'
     if (!x) return null;
     if (x instanceof Date) return x;
     if (typeof x === 'number') {
@@ -271,27 +283,17 @@
       return isNaN(d.getTime()) ? null : d;
     }
     const s = String(x).trim();
-
-    // 抓 yyyymmdd
     const m0 = s.match(/\b(20\d{6})\b/);
     if (m0) return ymdToDate(m0[1]);
-
-    // yyyy/mm/dd 或 yyyy-mm-dd
     const m1 = s.match(/\b(20\d{2})[\/\-](\d{1,2})[\/\-](\d{1,2})\b/);
     if (m1) return new Date(+m1[1], +m1[2]-1, +m1[3]);
-
-    // yyyy/mm 或 yyyy-mm
     const m2 = s.match(/\b(20\d{2})[\/\-](\d{1,2})\b/);
     if (m2) return new Date(+m2[1], +m2[2]-1, 1);
-
     return null;
   }
-
   function isoWeekLabelToDate(label) {
-    // 支援 '2024-W05' / '2024W05' / '2024-05'
     const s = String(label || '').trim();
     let y = 0, w = 0;
-
     let m = s.match(/\b(20\d{2})\s*[-\/]?\s*W(\d{1,2})\b/i);
     if (m) { y = +m[1]; w = +m[2]; }
     if (!y || !w) {
@@ -300,15 +302,13 @@
     }
     if (!y || !w) return null;
 
-    // ISO week -> 取該週週一
     const simple = new Date(y, 0, 1 + (w - 1) * 7);
-    const dow = simple.getDay(); // 0 Sun..6 Sat
+    const dow = simple.getDay();
     const ISOweekStart = new Date(simple);
     if (dow <= 4) ISOweekStart.setDate(simple.getDate() - (dow === 0 ? 6 : dow - 1));
     else ISOweekStart.setDate(simple.getDate() + (8 - dow));
     return ISOweekStart;
   }
-
   function cutoffFromRange(lastDate, code) {
     if (!lastDate || !(lastDate instanceof Date)) return null;
     const d = new Date(lastDate);
@@ -331,52 +331,32 @@
 
     const eq = equityCanvas ? Chart.getChart(equityCanvas) : null;
     const wk = weeklyCanvas ? Chart.getChart(weeklyCanvas) : null;
-    if (!eq || !eq.data || !eq.data.labels || !eq.data.datasets) return false;
+    if (!eq || !eq.data?.labels?.length || !eq.data?.datasets?.length) return false;
 
-    // 主圖 lastDate：從最後一個可解析 label 找
     let lastDate = null;
     for (let i = eq.data.labels.length - 1; i >= 0; i--) {
       const dt = parseAnyDate(eq.data.labels[i]);
       if (dt) { lastDate = dt; break; }
     }
-    if (!lastDate) {
-      // 退而求其次：用交易明細最後一筆
-      const rows = Array.from(tradesBody?.querySelectorAll('tr') || []);
-      for (let i = rows.length - 1; i >= 0; i--) {
-        const tds = rows[i].querySelectorAll('td');
-        if (!tds || tds.length < 2) continue;
-        const dt = parseAnyDate(tds[1].textContent);
-        if (dt) { lastDate = dt; break; }
-      }
-    }
     if (!lastDate) return false;
 
-    // snapshot 主圖
     SNAP.eq = {
       labels: eq.data.labels.slice(),
-      datasets: eq.data.datasets.map(ds => ({
-        data: Array.isArray(ds.data) ? ds.data.slice() : [],
-        // 其餘屬性保留引用即可（顏色/線型等）
-      }))
+      datasets: eq.data.datasets.map(ds => ({ data: Array.isArray(ds.data) ? ds.data.slice() : [] }))
     };
 
-    // snapshot 週圖（可選）
-    if (wk && wk.data && wk.data.labels && wk.data.datasets) {
+    if (wk && wk.data?.labels?.length && wk.data?.datasets?.length) {
       SNAP.wk = {
         labels: wk.data.labels.slice(),
-        datasets: wk.data.datasets.map(ds => ({
-          data: Array.isArray(ds.data) ? ds.data.slice() : [],
-        }))
+        datasets: wk.data.datasets.map(ds => ({ data: Array.isArray(ds.data) ? ds.data.slice() : [] }))
       };
     }
 
-    // snapshot 交易明細
     const tradeRows = Array.from(tradesBody?.querySelectorAll('tr') || []);
     SNAP.trades = {
       rows: tradeRows.map(tr => {
         const tds = tr.querySelectorAll('td');
         const dtText = (tds && tds[1]) ? tds[1].textContent.trim() : '';
-        // 優先抓 yyyymmddhhmmss
         const m = dtText.match(/\b(20\d{12})\b/);
         const ts14 = m ? m[1] : '';
         const d = ts14 ? ts14ToDate(ts14) : parseAnyDate(dtText);
@@ -394,6 +374,12 @@
     return true;
   }
 
+  function setActiveRangeBtn(code) {
+    if (!rangeRow) return;
+    const btns = Array.from(rangeRow.querySelectorAll('.range-btn'));
+    btns.forEach(b => b.classList.toggle('active', (b.dataset.range === code)));
+  }
+
   function applyFilter(rangeCode) {
     if (!snapshotOnce()) return;
 
@@ -403,9 +389,7 @@
 
     const cut = cutoffFromRange(SNAP.lastDate, rangeCode);
 
-    // -------------------
-    // 1) 主資產曲線篩選
-    // -------------------
+    // 1) 主圖
     const L = SNAP.eq.labels;
     const keepIdx = [];
     if (!cut) {
@@ -415,10 +399,7 @@
         const dt = parseAnyDate(L[i]);
         if (dt && dt >= cut) keepIdx.push(i);
       }
-      // 若 label 不可解析，避免整張空白：回退全顯示
-      if (keepIdx.length === 0) {
-        for (let i = 0; i < L.length; i++) keepIdx.push(i);
-      }
+      if (keepIdx.length === 0) for (let i = 0; i < L.length; i++) keepIdx.push(i);
     }
 
     eq.data.labels = keepIdx.map(i => L[i]);
@@ -428,9 +409,7 @@
     });
     eq.update('none');
 
-    // -------------------
-    // 2) 週損益圖篩選（盡力：依週 label 解析）
-    // -------------------
+    // 2) 週圖（盡力）
     if (wk && SNAP.wk) {
       const WL = SNAP.wk.labels;
       const wKeep = [];
@@ -441,9 +420,7 @@
           const dt = isoWeekLabelToDate(WL[i]) || parseAnyDate(WL[i]);
           if (dt && dt >= cut) wKeep.push(i);
         }
-        if (wKeep.length === 0) {
-          for (let i = 0; i < WL.length; i++) wKeep.push(i);
-        }
+        if (wKeep.length === 0) for (let i = 0; i < WL.length; i++) wKeep.push(i);
       }
 
       wk.data.labels = wKeep.map(i => WL[i]);
@@ -454,9 +431,7 @@
       wk.update('none');
     }
 
-    // -------------------
-    // 3) 交易明細篩選
-    // -------------------
+    // 3) 交易明細
     if (tradesBody && SNAP.trades) {
       const rows = SNAP.trades.rows;
       let html = '';
@@ -475,23 +450,27 @@
 
       tradesBody.innerHTML = html;
 
-      // 重新編號（第一欄 #）
+      // 重新編號
       const trs = Array.from(tradesBody.querySelectorAll('tr'));
       trs.forEach((tr, i) => {
         const td0 = tr.querySelector('td');
         if (td0) td0.textContent = String(i + 1);
       });
     }
+
+    setActiveRangeBtn(rangeCode);
   }
 
-  function hookRangeUI() {
-    if (!rangeSelect) return;
-    rangeSelect.addEventListener('change', () => {
-      applyFilter(rangeSelect.value || 'ALL');
+  function hookRangeButtons() {
+    if (!rangeRow) return;
+    rangeRow.addEventListener('click', (e) => {
+      const btn = e.target.closest('.range-btn');
+      if (!btn) return;
+      const code = btn.dataset.range || 'ALL';
+      applyFilter(code);
     });
   }
 
-  // 在 single-trades.js 畫完後，再建立快照（用輪詢避免依賴內部事件）
   function waitAndInitFilter() {
     let tries = 0;
     const timer = setInterval(() => {
@@ -499,21 +478,25 @@
       const ok = snapshotOnce();
       if (ok) {
         clearInterval(timer);
-        hookRangeUI();
-        // 預設「全」不動；若你想預設改成近1年，這行改成 rangeSelect.value='1Y'
-        applyFilter(rangeSelect?.value || 'ALL');
+        hookRangeButtons();
+        applyFilter('ALL');
       }
-      if (tries > 120) clearInterval(timer); // 最多等 12 秒
+      if (tries > 160) clearInterval(timer);
     }, 100);
   }
 
-  // ===== 主流程 =====
+  // ======================================================================
+  // 主流程
+  // ======================================================================
   async function boot() {
     try {
       if (!sb) {
         setStatus('Supabase SDK 未載入或初始化失敗。', true);
         return;
       }
+
+      // 再保險一次：開頁就把 slip 固定到 2
+      forceSlip2();
 
       const url       = new URL(location.href);
       const paramFile = url.searchParams.get('file');
@@ -523,11 +506,7 @@
 
       // 1) 決定最新檔
       if (paramFile) {
-        latest = {
-          name    : paramFile.split('/').pop() || '0807.txt',
-          fullPath: paramFile,
-          from    : 'url'
-        };
+        latest = { name: paramFile.split('/').pop() || '0807.txt', fullPath: paramFile, from: 'url' };
       } else {
         setStatus('從 Supabase（reports）讀取清單…');
         list = (await listCandidates()).filter(f => WANT.test(f.name) || WANT.test(f.fullPath));
@@ -535,8 +514,6 @@
           setStatus('找不到檔名含「0807」的 TXT（可用 ?file= 指定）。', true);
           return;
         }
-
-        // 排序：檔名日期 > updatedAt > size
         list.sort((a, b) => {
           const sa = lastDateScore(a.name);
           const sb2 = lastDateScore(b.name);
@@ -544,14 +521,10 @@
           if (a.updatedAt !== b.updatedAt) return b.updatedAt - a.updatedAt;
           return (b.size || 0) - (a.size || 0);
         });
-
         latest = list[0];
       }
 
-      if (!latest) {
-        setStatus('找不到可分析的 0807 檔案。', true);
-        return;
-      }
+      if (!latest) { setStatus('找不到可分析的 0807 檔案。', true); return; }
       if (elLatest) elLatest.textContent = latest.name;
 
       // 2) 決定基準檔
@@ -568,19 +541,14 @@
       }
       if (elBase) elBase.textContent = base ? base.name : '（尚無）';
 
-      // 3) 下載最新檔 & 基準檔，canonical 化與合併
+      // 3) 下載最新檔
       setStatus('下載最新 0807 檔案並解碼中…');
-
       const latestUrl = latest.from === 'url' ? latest.fullPath : pubUrl(latest.fullPath);
       const rNew = await fetchSmart(latestUrl);
-      if (rNew.ok === 0) {
-        setStatus(`最新檔沒有合法交易行（解碼=${rNew.enc}）。`, true);
-        return;
-      }
+      if (rNew.ok === 0) { setStatus(`最新檔沒有合法交易行（解碼=${rNew.enc}）。`, true); return; }
 
       let mergedText = rNew.canon;
-      let start8 = '';
-      let end8   = '';
+      let start8 = '', end8 = '';
 
       if (base) {
         setStatus('下載基準檔並進行合併…');
@@ -588,8 +556,8 @@
         const rBase   = await fetchSmart(baseUrl);
         const m = mergeByBaseline(rBase.canon, rNew.canon);
         mergedText = m.combined;
-        start8     = m.start8;
-        end8       = m.end8;
+        start8 = m.start8;
+        end8   = m.end8;
       } else {
         const rows = parseCanon(rNew.canon);
         start8 = rows.length ? rows[0].ts.slice(0, 8) : '';
@@ -598,16 +566,12 @@
 
       if (elPeriod) elPeriod.textContent = `期間：${start8 || '—'} 開始到 ${end8 || '—'} 結束`;
 
-      // 4) 設「最新檔」為基準按鈕
+      // 4) 設基準按鈕
       if (btnBase) {
         btnBase.disabled = false;
         btnBase.onclick = async () => {
           try {
-            const payload = {
-              baseline_path: latest.fullPath,
-              updated_at: new Date().toISOString()
-            };
-            await writeManifest(payload);
+            await writeManifest({ baseline_path: latest.fullPath, updated_at: new Date().toISOString() });
             btnBase.textContent = '已設為基準';
           } catch (e) {
             setStatus('寫入基準失敗：' + (e.message || e), true);
@@ -623,7 +587,7 @@
       await feedToSingleTrades(latest.name, finalText);
       setStatus('分析完成（可調整本頁「本金／滑點」即時重算 KPI）。');
 
-      // 6) 等 single-trades.js 畫完圖與表，再啟用篩選
+      // 6) 等圖表/表格完成後，啟用區間按鈕
       waitAndInitFilter();
     } catch (err) {
       console.error(err);
@@ -631,15 +595,10 @@
     }
   }
 
-  async function readManifest() {
-    try {
-      const { data, error } = await sb.storage.from(BUCKET).download(MANIFEST_PATH);
-      if (error || !data) return null;
-      const text = await data.text();
-      return JSON.parse(text);
-    } catch (e) {
-      return null;
-    }
+  async function listCandidates() {
+    const u      = new URL(location.href);
+    const prefix = u.searchParams.get('prefix') || '';
+    return listOnce(prefix);
   }
 
   document.addEventListener('DOMContentLoaded', boot);
