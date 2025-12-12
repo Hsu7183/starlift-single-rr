@@ -1,7 +1,11 @@
 // 0807-1.js — 基準合併 + 自動分析
 // 精進：
 // 1) 開頁強制 slip=2 並確保「第一次計算就用 slip=2」
-// 2) 區間改成按鈕列（主圖 / 週圖 / 交易明細同步篩選）
+// 2) 區間按鈕：
+//    - 近1週：以最後交易日為錨，回推到「本週週一」~最後交易日
+//    - 近2週：以最後交易日為錨，回推到「上週週一」~最後交易日
+//    - 其餘：以最後交易日為錨，按日數回推（1M/2M/…）
+// 3) 圖表：切區間後「從0開始」（各dataset減掉區間起點值）
 (function () {
   'use strict';
 
@@ -262,7 +266,14 @@
   // ======================================================================
   // 區間篩選（Chart.js + 交易明細）
   // ======================================================================
-  const SNAP = { ready: false, eq: null, wk: null, trades: null, lastDate: null };
+  const SNAP = {
+    ready: false,
+    eq: null,     // { labels[], datasets[{data[]}] }
+    wk: null,     // { labels[], datasets[{data[]}] }
+    trades: null, // { rows[{ymd, html}] }
+    endYMD: null, // 最後交易日 YYYYMMDD
+    endDate: null // 最後交易日 Date
+  };
 
   function ymdToDate(ymd) {
     const y = Number(ymd.slice(0,4));
@@ -271,10 +282,7 @@
     if (!y || !m || !d) return null;
     return new Date(y, m - 1, d);
   }
-  function ts14ToDate(ts14) {
-    if (!ts14 || ts14.length < 8) return null;
-    return ymdToDate(ts14.slice(0,8));
-  }
+
   function parseAnyDate(x) {
     if (!x) return null;
     if (x instanceof Date) return x;
@@ -284,13 +292,13 @@
     }
     const s = String(x).trim();
 
-    // 先抓 YYYYMMDD（最穩）
-    const m0 = s.match(/\b(20\d{6})\b/);
-    if (m0) return ymdToDate(m0[1]);
-
     // YYYY/MM/DD or YYYY-MM-DD
     const m1 = s.match(/\b(20\d{2})[\/\-](\d{1,2})[\/\-](\d{1,2})\b/);
     if (m1) return new Date(+m1[1], +m1[2]-1, +m1[3]);
+
+    // YYYYMMDD（容錯）
+    const m0 = s.match(/\b(20\d{6})\b/);
+    if (m0) return ymdToDate(m0[1]);
 
     // YYYY/MM or YYYY-MM
     const m2 = s.match(/\b(20\d{2})[\/\-](\d{1,2})\b/);
@@ -318,45 +326,50 @@
     return ISOweekStart;
   }
 
-  function cutoffFromRange(lastDate, code) {
-    if (!lastDate || !(lastDate instanceof Date)) return null;
-    const d = new Date(lastDate);
-    const days = (n) => { const x = new Date(d); x.setDate(x.getDate() - n); return x; };
-    switch (code) {
-      case '1Y': return days(365);
-      case '6M': return days(182);
-      case '3M': return days(91);
-      case '2M': return days(60);
-      case '1M': return days(30);
-      case '2W': return days(14);
-      case '1W': return days(7);
-      case 'ALL':
-      default:   return null;
-    }
+  function pad2(n){ return String(n).padStart(2,'0'); }
+  function dateToYMD(d){
+    return `${d.getFullYear()}${pad2(d.getMonth()+1)}${pad2(d.getDate())}`;
   }
 
-  // ✅ 固定筆數回推（保證一定會切得到，避免「按了沒反應」）
-  // 這裡用交易日近似：1W=5日、2W=10日、1M=22日...
-  const RANGE_POINTS = {
-    '1W': 5,
-    '2W': 10,
-    '1M': 22,
-    '2M': 44,
-    '3M': 66,
-    '6M': 132,
-    '1Y': 260
-  };
-  const WEEK_POINTS = { // weekly chart fallback
-    '1W': 4,
-    '2W': 8,
-    '1M': 13,
-    '2M': 26,
-    '3M': 39,
-    '6M': 78,
-    '1Y': 104
-  };
+  // 週一錨定：取得 endDate 所在週的「週一」
+  function mondayOfWeek(d) {
+    const x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    const day = x.getDay(); // 0=Sun..6=Sat
+    const delta = (day === 0) ? -6 : (1 - day); // Sun -> -6, Mon -> 0, Tue -> -1...
+    x.setDate(x.getDate() + delta);
+    return x;
+  }
 
-  // ✅ 這裡是關鍵修正：不要因 labels 解析不到就 return false
+  // 依 rangeCode 取得 startDate（以最後交易日為錨）
+  function rangeStartDate(endDate, code) {
+    if (!endDate) return null;
+
+    if (code === 'ALL') return null;
+
+    if (code === '1W') {
+      return mondayOfWeek(endDate);
+    }
+    if (code === '2W') {
+      const m = mondayOfWeek(endDate);
+      m.setDate(m.getDate() - 7);
+      return m;
+    }
+
+    // 其餘用日數回推（仍以 endDate 為錨）
+    const daysMap = {
+      '1M': 30,
+      '2M': 60,
+      '3M': 91,
+      '6M': 182,
+      '1Y': 365
+    };
+    const n = daysMap[code] || 0;
+    if (!n) return null;
+    const s = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
+    s.setDate(s.getDate() - n);
+    return s;
+  }
+
   function snapshotOnce() {
     if (SNAP.ready) return true;
 
@@ -364,7 +377,6 @@
     const wk = weeklyCanvas ? Chart.getChart(weeklyCanvas) : null;
     if (!eq || !eq.data?.labels?.length || !eq.data?.datasets?.length) return false;
 
-    // 先 snapshot 圖表資料（不依賴日期解析）
     SNAP.eq = {
       labels: eq.data.labels.slice(),
       datasets: eq.data.datasets.map(ds => ({ data: Array.isArray(ds.data) ? ds.data.slice() : [] }))
@@ -377,46 +389,39 @@
       };
     }
 
-    // snapshot 交易明細（同時用最後一筆推 lastDate）
+    // 交易明細快照 + 取得最後交易日
     const tradeRows = Array.from(tradesBody?.querySelectorAll('tr') || []);
-    SNAP.trades = {
-      rows: tradeRows.map(tr => {
-        const tds = tr.querySelectorAll('td');
-        const dtText = (tds && tds[1]) ? tds[1].textContent.trim() : '';
-        const m = dtText.match(/\b(20\d{12})\b/);
-        const ts14 = m ? m[1] : '';
-        const d = ts14 ? ts14ToDate(ts14) : parseAnyDate(dtText);
-        const ymd = d ? (
-          String(d.getFullYear()).padStart(4,'0') +
-          String(d.getMonth()+1).padStart(2,'0') +
-          String(d.getDate()).padStart(2,'0')
-        ) : '';
-        return { ymd, html: tr.outerHTML };
-      })
-    };
+    const rows = tradeRows.map(tr => {
+      const tds = tr.querySelectorAll('td');
+      const dtText = (tds && tds[1]) ? tds[1].textContent.trim() : '';
+      const m = dtText.match(/\b(20\d{12})\b/);
+      const ts14 = m ? m[1] : '';
+      const ymd = ts14 ? ts14.slice(0,8) : '';
+      return { ymd, html: tr.outerHTML };
+    });
 
-    // 先嘗試從 labels 找 lastDate
-    let lastDate = null;
-    for (let i = SNAP.eq.labels.length - 1; i >= 0; i--) {
-      const dt = parseAnyDate(SNAP.eq.labels[i]);
-      if (dt) { lastDate = dt; break; }
+    SNAP.trades = { rows };
+
+    // endYMD：取 rows 中最大 ymd
+    let endYMD = null;
+    for (let i = rows.length - 1; i >= 0; i--) {
+      const ymd = rows[i].ymd;
+      if (ymd && ymd.length === 8) { endYMD = ymd; break; }
     }
 
-    // ✅ 若 labels 找不到，就用交易明細最後一筆（最穩）
-    if (!lastDate && SNAP.trades.rows.length) {
-      for (let i = SNAP.trades.rows.length - 1; i >= 0; i--) {
-        const ymd = SNAP.trades.rows[i].ymd;
-        if (ymd && ymd.length === 8) {
-          lastDate = ymdToDate(ymd);
-          break;
-        }
+    // 若交易明細沒有（極少數）就退回用 labels 最後可解析日期
+    let endDate = endYMD ? ymdToDate(endYMD) : null;
+    if (!endDate) {
+      for (let i = SNAP.eq.labels.length - 1; i >= 0; i--) {
+        const dt = parseAnyDate(SNAP.eq.labels[i]);
+        if (dt) { endDate = dt; endYMD = dateToYMD(dt); break; }
       }
     }
 
-    // 再不行就用今天（避免整個篩選失效）
-    if (!lastDate) lastDate = new Date();
+    if (!endDate) endDate = new Date();
 
-    SNAP.lastDate = lastDate;
+    SNAP.endYMD = endYMD || dateToYMD(endDate);
+    SNAP.endDate = endDate;
     SNAP.ready = true;
     return true;
   }
@@ -427,7 +432,20 @@
     btns.forEach(b => b.classList.toggle('active', (b.dataset.range === code)));
   }
 
-  // ✅ 這裡是關鍵修正：日期切不到時，改用固定筆數回推
+  // 圖表從0開始：各dataset減掉區間起點值
+  function rebaseDatasetsInPlace(datasets, baseIndex) {
+    if (!datasets || !datasets.length) return;
+    for (const ds of datasets) {
+      if (!ds || !Array.isArray(ds.data) || ds.data.length === 0) continue;
+      const base = Number(ds.data[0]); // 已切片後的第一筆
+      if (!Number.isFinite(base)) continue;
+      ds.data = ds.data.map(v => {
+        const x = Number(v);
+        return Number.isFinite(x) ? (x - base) : v;
+      });
+    }
+  }
+
   function applyFilter(rangeCode) {
     if (!snapshotOnce()) return;
 
@@ -435,62 +453,63 @@
     const wk = weeklyCanvas ? Chart.getChart(weeklyCanvas) : null;
     if (!eq) return;
 
-    const cut = cutoffFromRange(SNAP.lastDate, rangeCode);
+    const endDate = SNAP.endDate;
+    const startDate = rangeStartDate(endDate, rangeCode);
+    const startYMD = startDate ? dateToYMD(startDate) : null;
 
-    // 1) 主圖
+    // 1) 主圖：以 labels 的日期做篩選（從 startDate ~ endDate），並在區間起點做 rebase
     const L = SNAP.eq.labels;
     let keepIdx = [];
 
-    if (!cut) {
+    if (!startDate) {
       keepIdx = L.map((_, i) => i);
     } else {
       for (let i = 0; i < L.length; i++) {
         const dt = parseAnyDate(L[i]);
-        if (dt && dt >= cut) keepIdx.push(i);
+        if (dt && dt >= startDate && dt <= endDate) keepIdx.push(i);
       }
 
-      // 如果 labels 不可解析導致 keepIdx 空、或 keepIdx 幾乎等於全段 → 用固定筆數回推
-      const fallbackN = RANGE_POINTS[rangeCode] || 0;
-      if (keepIdx.length === 0 || keepIdx.length >= L.length - 1) {
-        if (fallbackN > 0) {
-          const start = Math.max(0, L.length - fallbackN);
-          keepIdx = [];
-          for (let i = start; i < L.length; i++) keepIdx.push(i);
-        } else {
-          keepIdx = L.map((_, i) => i);
-        }
+      // 若 labels 無法解析導致抓不到，至少退回用「最後 N 筆」避免空白
+      if (keepIdx.length === 0) {
+        // 近1週=最後5個交易日、近2週=最後10、其餘按月年
+        const fallbackN = ({
+          '1W': 5, '2W': 10, '1M': 22, '2M': 44, '3M': 66, '6M': 132, '1Y': 260
+        })[rangeCode] || 0;
+        const start = fallbackN ? Math.max(0, L.length - fallbackN) : 0;
+        for (let i = start; i < L.length; i++) keepIdx.push(i);
       }
     }
 
+    // 切片
     eq.data.labels = keepIdx.map(i => L[i]);
     eq.data.datasets.forEach((ds, k) => {
       const orig = SNAP.eq.datasets[k]?.data || [];
       ds.data = keepIdx.map(i => orig[i]);
     });
+
+    // ✅ 主圖從0開始
+    rebaseDatasetsInPlace(eq.data.datasets);
+
     eq.update('none');
 
-    // 2) 週圖（同樣：日期切不到就用固定筆數）
+    // 2) 週圖：同樣用日期切（若切不到就 fallback），週圖是否要從0：通常 weekly pnl bars 不用 rebase
     if (wk && SNAP.wk) {
       const WL = SNAP.wk.labels;
       let wKeep = [];
 
-      if (!cut) {
+      if (!startDate) {
         wKeep = WL.map((_, i) => i);
       } else {
         for (let i = 0; i < WL.length; i++) {
           const dt = isoWeekLabelToDate(WL[i]) || parseAnyDate(WL[i]);
-          if (dt && dt >= cut) wKeep.push(i);
+          if (dt && dt >= startDate && dt <= endDate) wKeep.push(i);
         }
-
-        const fallbackW = WEEK_POINTS[rangeCode] || 0;
-        if (wKeep.length === 0 || wKeep.length >= WL.length - 1) {
-          if (fallbackW > 0) {
-            const start = Math.max(0, WL.length - fallbackW);
-            wKeep = [];
-            for (let i = start; i < WL.length; i++) wKeep.push(i);
-          } else {
-            wKeep = WL.map((_, i) => i);
-          }
+        if (wKeep.length === 0) {
+          const wkN = ({
+            '1W': 4, '2W': 8, '1M': 13, '2M': 26, '3M': 39, '6M': 78, '1Y': 104
+          })[rangeCode] || 0;
+          const start = wkN ? Math.max(0, WL.length - wkN) : 0;
+          for (let i = start; i < WL.length; i++) wKeep.push(i);
         }
       }
 
@@ -499,27 +518,33 @@
         const orig = SNAP.wk.datasets[k]?.data || [];
         ds.data = wKeep.map(i => orig[i]);
       });
+
+      // 若你的週圖有「累積線」，才需要從0開始；這裡用「dataset 為 line」或 label 含「累積」去判斷
+      wk.data.datasets = wk.data.datasets.map((ds, idx) => {
+        const raw = ds;
+        if (!raw || !Array.isArray(raw.data) || raw.data.length === 0) return raw;
+        const isLine = (raw.type === 'line') || /累積|cumu|cum/i.test(String(raw.label || ''));
+        if (!isLine) return raw;
+
+        const base = Number(raw.data[0]);
+        if (!Number.isFinite(base)) return raw;
+        raw.data = raw.data.map(v => Number.isFinite(Number(v)) ? (Number(v) - base) : v);
+        return raw;
+      });
+
       wk.update('none');
     }
 
-    // 3) 交易明細（這段你原本就對）
+    // 3) 交易明細：以 ymd 直接篩（完全符合你說的：以最後交易日為錨，週一起算）
     if (tradesBody && SNAP.trades) {
       const rows = SNAP.trades.rows;
-      let html = '';
 
-      if (!cut) {
-        html = rows.map(r => r.html).join('');
+      if (!startYMD) {
+        tradesBody.innerHTML = rows.map(r => r.html).join('');
       } else {
-        const cutYMD =
-          String(cut.getFullYear()).padStart(4,'0') +
-          String(cut.getMonth()+1).padStart(2,'0') +
-          String(cut.getDate()).padStart(2,'0');
-
-        const kept = rows.filter(r => !r.ymd || r.ymd >= cutYMD);
-        html = kept.map(r => r.html).join('');
+        const kept = rows.filter(r => !r.ymd || r.ymd >= startYMD);
+        tradesBody.innerHTML = kept.map(r => r.html).join('');
       }
-
-      tradesBody.innerHTML = html;
 
       // 重新編號
       const trs = Array.from(tradesBody.querySelectorAll('tr'));
@@ -530,6 +555,13 @@
     }
 
     setActiveRangeBtn(rangeCode);
+
+    // 顯示期間文字（可選，讓你更直觀）
+    if (elPeriod) {
+      const s8 = startYMD || (SNAP.trades?.rows?.[0]?.ymd || '—');
+      const e8 = SNAP.endYMD || '—';
+      elPeriod.textContent = `期間：${s8} 開始到 ${e8} 結束`;
+    }
   }
 
   function hookRangeButtons() {
@@ -552,7 +584,7 @@
         hookRangeButtons();
         applyFilter('ALL');
       }
-      if (tries > 160) clearInterval(timer);
+      if (tries > 200) clearInterval(timer);
     }, 100);
   }
 
@@ -566,7 +598,6 @@
         return;
       }
 
-      // 再保險一次：開頁就把 slip 固定到 2
       forceSlip2();
 
       const url       = new URL(location.href);
@@ -619,7 +650,7 @@
       if (rNew.ok === 0) { setStatus(`最新檔沒有合法交易行（解碼=${rNew.enc}）。`, true); return; }
 
       let mergedText = rNew.canon;
-      let start8 = '', end8 = '';
+      let start8 = '', end8   = '';
 
       if (base) {
         setStatus('下載基準檔並進行合併…');
@@ -627,8 +658,8 @@
         const rBase   = await fetchSmart(baseUrl);
         const m = mergeByBaseline(rBase.canon, rNew.canon);
         mergedText = m.combined;
-        start8 = m.start8;
-        end8   = m.end8;
+        start8     = m.start8;
+        end8       = m.end8;
       } else {
         const rows = parseCanon(rNew.canon);
         start8 = rows.length ? rows[0].ts.slice(0, 8) : '';
@@ -665,14 +696,6 @@
       setStatus('初始化失敗：' + (err.message || err), true);
     }
   }
-
-  async function listCandidates2() {
-    const u      = new URL(location.href);
-    const prefix = u.searchParams.get('prefix') || '';
-    return listOnce(prefix);
-  }
-  // 兼容你原本結尾覆蓋（避免改動過大）
-  async function listCandidates() { return listCandidates2(); }
 
   document.addEventListener('DOMContentLoaded', boot);
 })();
