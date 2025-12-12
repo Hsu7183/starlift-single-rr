@@ -1,63 +1,49 @@
-// 0807-1.js — 完整版（按鈕先綁定；ALL 保持 single-trades.js KPI；區間只切圖/日損益/明細）
-//
-// 行為：
-// - 全區間（ALL）：完全不動 single-trades.js 的 KPI/圖/明細（保持原樣）
-// - 非全區間：以「最後交易日(全區間最大交易日)」為錨，計算 startYmd，然後
-//   1) 交易明細只顯示區間內每筆交易，並把累積欄位從區間起點歸0重算
-//   2) 主圖與下方（日損益圖）改成日級 labels（YYYY/MM/DD），並用區間日序列重畫
-//   3) 主圖的總/多/空（含滑價/理論）都從 0 開始；最高/最低 marker 不處理（清空避免錯畫）
-//
-// 關鍵修正：
-// - Range 按鈕在 DOMContentLoaded 就綁定，不再等待 snapshot 成功才綁，因此不會「沒反應」
-// - 點按後若資料未就緒，applyRange 會自動重試
-
 (function () {
   'use strict';
   const $ = (s) => document.querySelector(s);
 
-  // -----------------------------
-  // DOM
-  // -----------------------------
+  // ===== DOM =====
   const status   = $('#autostatus');
   const elLatest = $('#latestName');
   const elBase   = $('#baseName');
   const btnBase  = $('#btnSetBaseline');
 
   const rangeRow     = $('#rangeRow');
-  const tradesBody   = $('#tradesBody');
   const equityCanvas = $('#equityChart');
-  const dailyCanvas  = $('#weeklyPnlChart'); // 你頁面這張其實是日損益圖
+  const dailyCanvas  = $('#weeklyPnlChart'); // 你的頁面這張其實是「日損益圖」
 
   const slipInput = $('#slipInput');
   const runBtn    = $('#runBtn');
 
-  if (status) status.style.whiteSpace = 'pre-wrap';
-  const setStatus = (msg, bad=false) => {
+  const tradesBody = $('#tradesBody');
+  const tradesTable = tradesBody ? tradesBody.closest('table') : null;
+
+  // KPI wrapper：兩張 KPI 表都在 .kpi-wrapper 裡（你頁面有兩塊）
+  const kpiWrappers = Array.from(document.querySelectorAll('.kpi-wrapper'));
+
+  function setStatus(msg, bad = false) {
     if (!status) return;
     status.textContent = msg;
     status.style.color = bad ? '#c62828' : '#666';
-  };
-
-  // -----------------------------
-  // slip=2：開頁即算
-  // -----------------------------
-  function forceSlip2(){
-    if(!slipInput) return;
-    slipInput.value='2';
-    slipInput.dispatchEvent(new Event('input',{bubbles:true}));
-    slipInput.dispatchEvent(new Event('change',{bubbles:true}));
   }
-  function safeClickRun(times=4){
-    if(!runBtn) return;
-    const delays=[0,80,250,600];
-    for(let i=0;i<Math.min(times,delays.length);i++){
-      setTimeout(()=>{ forceSlip2(); runBtn.click(); }, delays[i]);
+  if (status) status.style.whiteSpace = 'pre-wrap';
+
+  // ===== slip=2 =====
+  function forceSlip2() {
+    if (!slipInput) return;
+    slipInput.value = '2';
+    slipInput.dispatchEvent(new Event('input', { bubbles: true }));
+    slipInput.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+  function safeClickRun(times = 4) {
+    if (!runBtn) return;
+    const delays = [0, 80, 250, 600];
+    for (let i = 0; i < Math.min(times, delays.length); i++) {
+      setTimeout(() => { forceSlip2(); runBtn.click(); }, delays[i]);
     }
   }
 
-  // -----------------------------
-  // Supabase + merge（對齊 0807.js）
-  // -----------------------------
+  // ===== Supabase + merge（保留你原本 0807 流程）=====
   const SUPABASE_URL  = "https://byhbmmnacezzgkwfkozs.supabase.co";
   const SUPABASE_ANON = "sb_publishable_xVe8fGbqQ0XGwi4DsmjPMg_Y2RBOD3t";
   const BUCKET        = "reports";
@@ -71,106 +57,132 @@
   const CANON_RE   = /^(\d{14})\.0{6}\s+(\d+\.\d{6})\s+(新買|平賣|新賣|平買|強制平倉)\s*$/;
   const EXTRACT_RE = /.*?(\d{14})(?:\.0{1,6})?\s+(\d+(?:\.\d{1,6})?)\s*(新買|平賣|新賣|平買|強制平倉)\s*$/;
 
-  const pubUrl = (path)=> sb.storage.from(BUCKET).getPublicUrl(path)?.data?.publicUrl || '#';
-
-  async function listOnce(prefix){
-    const p = (prefix && !prefix.endsWith('/')) ? (prefix + '/') : (prefix || '');
-    const { data, error } = await sb.storage.from(BUCKET).list(p,{limit:1000,sortBy:{column:'name',order:'asc'}});
-    if(error) throw new Error(error.message);
-    return (data||[])
-      .filter(it => !(it.id === null && !it.metadata))
-      .map(it => ({ name:it.name, fullPath:p+it.name, updatedAt: it.updated_at?Date.parse(it.updated_at):0, size: it.metadata?.size||0 }));
+  function pubUrl(path) {
+    const { data } = sb.storage.from(BUCKET).getPublicUrl(path);
+    return data?.publicUrl || '#';
   }
-  async function listCandidates(){
-    const u=new URL(location.href);
-    const prefix=u.searchParams.get('prefix')||'';
+
+  async function listOnce(prefix) {
+    const p = (prefix && !prefix.endsWith('/')) ? (prefix + '/') : (prefix || '');
+    const { data, error } = await sb.storage.from(BUCKET).list(p, {
+      limit : 1000,
+      sortBy: { column: 'name', order: 'asc' }
+    });
+    if (error) throw new Error(error.message);
+    return (data || [])
+      .filter(it => !(it.id === null && !it.metadata))
+      .map(it => ({
+        name    : it.name,
+        fullPath: p + it.name,
+        updatedAt: it.updated_at ? Date.parse(it.updated_at) : 0,
+        size    : it.metadata?.size || 0
+      }));
+  }
+
+  async function listCandidates() {
+    const u = new URL(location.href);
+    const prefix = u.searchParams.get('prefix') || '';
     return listOnce(prefix);
   }
-  function lastDateScore(name){
-    const m=String(name).match(/\b(20\d{6})\b/g);
-    if(!m||!m.length) return 0;
-    return Math.max(...m.map(s=>+s||0));
+
+  function lastDateScore(name) {
+    const m = String(name).match(/\b(20\d{6})\b/g);
+    if (!m || !m.length) return 0;
+    return Math.max(...m.map(s => +s || 0));
   }
 
-  async function readManifest(){
-    try{
-      const {data,error}=await sb.storage.from(BUCKET).download(MANIFEST_PATH);
-      if(error||!data) return null;
+  async function readManifest() {
+    try {
+      const { data, error } = await sb.storage.from(BUCKET).download(MANIFEST_PATH);
+      if (error || !data) return null;
       return JSON.parse(await data.text());
-    }catch{ return null; }
-  }
-  async function writeManifest(obj){
-    const blob=new Blob([JSON.stringify(obj,null,2)],{type:'application/json'});
-    const {error}=await sb.storage.from(BUCKET).upload(MANIFEST_PATH, blob, {upsert:true,cacheControl:'0',contentType:'application/json'});
-    if(error) throw new Error(error.message);
+    } catch { return null; }
   }
 
-  function normalizeText(raw){
-    let s = raw
-      .replace(/\ufeff/gi,'')
-      .replace(/\u200b|\u200c|\u200d/gi,'')
-      .replace(/[\x00-\x09\x0B-\x1F\x7F]/g,'');
-    s = s.replace(/\r\n?/g,'\n').replace(/\u3000/g,' ');
-    return s.split('\n').map(l=>l.replace(/\s+/g,' ').trim()).filter(Boolean).join('\n');
+  async function writeManifest(obj) {
+    const blob = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' });
+    const { error } = await sb.storage.from(BUCKET).upload(
+      MANIFEST_PATH,
+      blob,
+      { upsert: true, cacheControl: '0', contentType: 'application/json' }
+    );
+    if (error) throw new Error(error.message);
   }
-  function canonicalize(txt){
-    const out=[]; let ok=0;
-    for(const l of (txt||'').split('\n')){
-      const m=l.match(EXTRACT_RE);
-      if(m){
-        const ts=m[1];
-        const pxN=Number(m[2]);
-        const px6=Number.isFinite(pxN)?pxN.toFixed(6):m[2];
-        const act=m[3];
+
+  function normalizeText(raw) {
+    let s = raw
+      .replace(/\ufeff/gi, '')
+      .replace(/\u200b|\u200c|\u200d/gi, '')
+      .replace(/[\x00-\x09\x0B-\x1F\x7F]/g, '');
+    s = s.replace(/\r\n?/g, '\n').replace(/\u3000/g, ' ');
+    return s.split('\n').map(l => l.replace(/\s+/g, ' ').trim()).filter(Boolean).join('\n');
+  }
+
+  function canonicalize(txt) {
+    const out = [];
+    const lines = (txt || '').split('\n');
+    let ok = 0;
+    for (const l of lines) {
+      const m = l.match(EXTRACT_RE);
+      if (m) {
+        const ts  = m[1];
+        const pxN = Number(m[2]);
+        const px6 = Number.isFinite(pxN) ? pxN.toFixed(6) : m[2];
+        const act = m[3];
         out.push(`${ts}.000000 ${px6} ${act}`);
         ok++;
       }
     }
-    return {canon:out.join('\n'), ok};
-  }
-  async function fetchSmart(url){
-    const res=await fetch(url,{cache:'no-store'});
-    if(!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
-    const buf=await res.arrayBuffer();
-    for(const enc of ['utf-8','big5','utf-16le','utf-16be']){
-      try{
-        const td=new TextDecoder(enc,{fatal:false});
-        const norm=normalizeText(td.decode(buf));
-        const {canon,ok}=canonicalize(norm);
-        if(ok>0) return {enc,canon,ok};
-      }catch{}
-    }
-    const td=new TextDecoder('utf-8');
-    const norm=normalizeText(td.decode(buf));
-    const {canon,ok}=canonicalize(norm);
-    return {enc:'utf-8',canon,ok};
+    return { canon: out.join('\n'), ok };
   }
 
-  function parseCanon(text){
-    const rows=[];
-    for(const line of (text||'').split('\n')){
-      const m=line.match(CANON_RE);
-      if(m) rows.push({ts:m[1], line});
+  async function fetchSmart(url) {
+    const res = await fetch(url, { cache: 'no-store' });
+    if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
+    const buf = await res.arrayBuffer();
+
+    for (const enc of ['utf-8', 'big5', 'utf-16le', 'utf-16be']) {
+      try {
+        const td = new TextDecoder(enc, { fatal: false });
+        const norm = normalizeText(td.decode(buf));
+        const { canon, ok } = canonicalize(norm);
+        if (ok > 0) return { enc, canon, ok };
+      } catch {}
     }
-    rows.sort((a,b)=>a.ts.localeCompare(b.ts));
+
+    const td = new TextDecoder('utf-8');
+    const norm = normalizeText(td.decode(buf));
+    const { canon, ok } = canonicalize(norm);
+    return { enc: 'utf-8', canon, ok };
+  }
+
+  function parseCanon(text) {
+    const rows = [];
+    for (const line of (text || '').split('\n')) {
+      const m = line.match(CANON_RE);
+      if (m) rows.push({ ts: m[1], line });
+    }
+    rows.sort((a, b) => a.ts.localeCompare(b.ts));
     return rows;
   }
-  function mergeByBaseline(baseText, latestText){
-    const A=parseCanon(baseText);
-    const B=parseCanon(latestText);
-    const baseMax=A.length?A[A.length-1].ts:'';
-    const added=baseMax?B.filter(x=>x.ts>baseMax).map(x=>x.line):B.map(x=>x.line);
-    return [...A.map(x=>x.line), ...added].join('\n');
+
+  function mergeByBaseline(baseText, latestText) {
+    const A = parseCanon(baseText);
+    const B = parseCanon(latestText);
+    const baseMax = A.length ? A[A.length - 1].ts : '';
+    const added = baseMax ? B.filter(x => x.ts > baseMax).map(x => x.line) : B.map(x => x.line);
+    return [...A.map(x => x.line), ...added].join('\n');
   }
-  function addFakeInpos(text){
-    const out=[];
-    const lines=(text||'').split('\n').map(s=>s.trim()).filter(Boolean);
-    for(const line of lines){
-      const m=line.match(CANON_RE);
-      if(!m) continue;
-      const ts=m[1], act=m[3];
-      if(act==='新買' || act==='新賣'){
-        const dir=(act==='新買')?1:-1;
+
+  function addFakeInpos(text) {
+    const lines = (text || '').split('\n').map(s => s.trim()).filter(Boolean);
+    const out = [];
+    for (const line of lines) {
+      const m = line.match(CANON_RE);
+      if (!m) continue;
+      const ts = m[1], act = m[3];
+      if (act === '新買' || act === '新賣') {
+        const dir = (act === '新買') ? 1 : -1;
         out.push(line);
         out.push(`${ts}.000000 0 0 ${dir} 0 INPOS`);
       } else out.push(line);
@@ -178,24 +190,25 @@
     return out.join('\n');
   }
 
-  async function feedToSingleTrades(filename, mergedText){
-    const fileInput=$('#fileInput');
-    const fname=filename||'0807.txt';
-    const file=new File([mergedText], fname, {type:'text/plain'});
+  async function feedToSingleTrades(filename, mergedText) {
+    const fileInput = $('#fileInput');
+    const fname = filename || '0807.txt';
+    const file  = new File([mergedText], fname, { type: 'text/plain' });
+
     forceSlip2();
-    if(window.__singleTrades_setFile) window.__singleTrades_setFile(file);
-    if(fileInput){
-      const dt=new DataTransfer();
+    if (window.__singleTrades_setFile) window.__singleTrades_setFile(file);
+
+    if (fileInput) {
+      const dt = new DataTransfer();
       dt.items.add(file);
-      fileInput.files=dt.files;
-      fileInput.dispatchEvent(new Event('change',{bubbles:true}));
+      fileInput.files = dt.files;
+      fileInput.dispatchEvent(new Event('change', { bubbles: true }));
     }
+
     safeClickRun(4);
   }
 
-  // -----------------------------
-  // Date & number helpers
-  // -----------------------------
+  // ===== Date helpers =====
   const pad2 = (n)=>String(n).padStart(2,'0');
   const ymdToDate = (ymd)=>{
     if(!ymd||ymd.length!==8) return null;
@@ -222,37 +235,19 @@
     return '';
   }
 
-  function parseNum(text){
-    const s=String(text||'').trim();
-    if(!s||s==='—'||s==='-') return NaN;
-    const v=Number(s.replace(/,/g,''));
-    return Number.isFinite(v)?v:NaN;
-  }
-  const formatNum = (n)=>{
-    if(!Number.isFinite(n)) return '—';
-    const sign=n<0?'-':'';
-    const x=Math.abs(Math.round(n));
-    return sign + x.toLocaleString('en-US');
-  };
-
-  // -----------------------------
-  // Chart helpers
-  // -----------------------------
   function getChart(canvas){
     if(!canvas||!window.Chart) return null;
     try { return window.Chart.getChart(canvas) || null; } catch { return null; }
   }
 
-  // -----------------------------
-  // Snapshot (restore ALL)
-  // -----------------------------
+  // ===== snapshot for ALL restore =====
   const SNAP = {
     ready:false,
     endYmd:null,
-    tradesHTML:null,
-    eq:{labels:null,data:null},
-    dy:{labels:null,data:null},
-    // ALL KPI 不動，所以不必 snapshot KPI
+    // store original ALL charts/trades so we can restore exactly
+    eq:{ labels:null, data:null },
+    dy:{ labels:null, data:null },
+    tradesHTML:null
   };
 
   function snapshotOnce(){
@@ -269,7 +264,7 @@
     SNAP.dy.data = dy.data.datasets.map(ds=>Array.isArray(ds.data)?ds.data.slice():[]);
     SNAP.tradesHTML = tradesBody.innerHTML;
 
-    // endYmd = max ymd in trades table
+    // endYmd = max ymd from trades table (truth)
     const trs = Array.from(tradesBody.querySelectorAll('tr'));
     const yset = new Set();
     for(const tr of trs){
@@ -280,13 +275,11 @@
     if(!list.length) return false;
     SNAP.endYmd = list[list.length-1];
 
-    SNAP.ready = true;
+    SNAP.ready=true;
     return true;
   }
 
-  // -----------------------------
-  // Range start rule (anchor = endYmd)
-  // -----------------------------
+  // ===== range rule =====
   function rangeStartYmd(endYmd, code){
     if(code==='ALL') return '';
     const endDate=ymdToDate(endYmd);
@@ -307,25 +300,67 @@
     btns.forEach(b=>b.classList.toggle('active', (b.dataset.range===code)));
   }
 
-  // -----------------------------
-  // Build daily series from trades table (range)
-  // -----------------------------
-  function buildDailySeriesFromTrades(startYmd, endYmd){
-    const table = tradesBody?.closest('table');
-    if(!table) return null;
+  // ===== hide/show KPI wrappers =====
+  function showKpi(show){
+    for(const el of kpiWrappers){
+      el.style.display = show ? '' : 'none';
+    }
+  }
 
-    const ths = Array.from(table.querySelectorAll('thead th')).map(th=>(th.textContent||'').trim());
+  // ===== filter trade rows by show/hide (do NOT rewrite HTML structure) =====
+  function filterTradesRows(startYmd, endYmd){
+    if(!tradesBody) return;
+    const rows = Array.from(tradesBody.querySelectorAll('tr'));
+    for(const tr of rows){
+      const ymd = parseYmdFromText(tr.textContent);
+      if(!ymd){
+        tr.style.display = ''; // unknown keep
+      } else {
+        tr.style.display = (ymd>=startYmd && ymd<=endYmd) ? '' : 'none';
+      }
+    }
+  }
+
+  // ===== reset cum columns within visible rows =====
+  function resetCumWithinVisible(){
+    if(!tradesTable||!tradesBody) return;
+
+    const ths = Array.from(tradesTable.querySelectorAll('thead th')).map(th=>(th.textContent||'').trim());
+    const idxTheo     = ths.findIndex(t=>t.includes('理論淨損益'));
+    const idxCumTheo  = ths.findIndex(t=>t.includes('累積理論淨損益'));
+    const idxReal     = ths.findIndex(t=>t.includes('實際淨損益'));
+    const idxCumReal  = ths.findIndex(t=>t.includes('累積實際淨損益'));
+    if(idxTheo<0||idxCumTheo<0||idxReal<0||idxCumReal<0) return;
+
+    let cumTheo=0, cumReal=0;
+    const rows = Array.from(tradesBody.querySelectorAll('tr')).filter(tr => tr.style.display !== 'none');
+
+    for(const tr of rows){
+      const tds = Array.from(tr.querySelectorAll('td'));
+      const theo = (tds[idxTheo]) ? parseNum(tds[idxTheo].textContent) : NaN;
+      const real = (tds[idxReal]) ? parseNum(tds[idxReal].textContent) : NaN;
+
+      if(Number.isFinite(theo)) cumTheo += theo;
+      if(Number.isFinite(real)) cumReal += real;
+
+      if(tds[idxCumTheo]) tds[idxCumTheo].textContent = formatNum(cumTheo);
+      if(tds[idxCumReal]) tds[idxCumReal].textContent = formatNum(cumReal);
+    }
+  }
+
+  // ===== build daily series from visible trades =====
+  function buildDailySeriesFromVisible(startYmd, endYmd){
+    if(!tradesTable||!tradesBody) return null;
+
+    const ths = Array.from(tradesTable.querySelectorAll('thead th')).map(th=>(th.textContent||'').trim());
     const idxDateTime = ths.findIndex(t=>t.includes('日期時間'));
     const idxType     = ths.findIndex(t=>t.includes('類別'));
     const idxTheo     = ths.findIndex(t=>t.includes('理論淨損益'));
     const idxReal     = ths.findIndex(t=>t.includes('實際淨損益'));
-    const idxCumTheo  = ths.findIndex(t=>t.includes('累積理論淨損益'));
-    const idxCumReal  = ths.findIndex(t=>t.includes('累積實際淨損益'));
 
-    const rows = Array.from(tradesBody.querySelectorAll('tr'));
+    const rows = Array.from(tradesBody.querySelectorAll('tr')).filter(tr => tr.style.display !== 'none');
+
     const dayMap = new Map();
-
-    const keptRows = [];
 
     for(const tr of rows){
       const tds = Array.from(tr.querySelectorAll('td'));
@@ -335,8 +370,6 @@
       const ymd = parseYmdFromText(dtText);
       if(!ymd) continue;
       if(ymd < startYmd || ymd > endYmd) continue;
-
-      keptRows.push(tr);
 
       if(!dayMap.has(ymd)){
         dayMap.set(ymd,{ theo:0, real:0, longTheo:0, longReal:0, shortTheo:0, shortReal:0 });
@@ -362,22 +395,13 @@
     const days = Array.from(dayMap.keys()).sort();
     if(!days.length) return null;
 
-    // daily
-    const dailyTheo=[], dailyReal=[];
-    const dailyLongTheo=[], dailyLongReal=[], dailyShortTheo=[], dailyShortReal=[];
-    // cum from 0
     let cumTheo=0, cumReal=0, cumLongTheo=0, cumLongReal=0, cumShortTheo=0, cumShortReal=0;
     const cumTheoArr=[], cumRealArr=[], cumLongTheoArr=[], cumLongRealArr=[], cumShortTheoArr=[], cumShortRealArr=[];
+    const dailyReal=[];
 
     for(const d of days){
       const a = dayMap.get(d);
-      dailyTheo.push(a.theo);
       dailyReal.push(a.real);
-
-      dailyLongTheo.push(a.longTheo);
-      dailyLongReal.push(a.longReal);
-      dailyShortTheo.push(a.shortTheo);
-      dailyShortReal.push(a.shortReal);
 
       cumTheo += a.theo;
       cumReal += a.real;
@@ -396,18 +420,15 @@
 
     return {
       days,
-      keptRows,
-      idxCumTheo, idxCumReal, idxTheo, idxReal,
-      dailyTheo, dailyReal,
-      dailyLongTheo, dailyLongReal, dailyShortTheo, dailyShortReal,
+      labels: days.map(ymd => `${ymd.slice(0,4)}/${+ymd.slice(4,6)}/${+ymd.slice(6,8)}`),
       cumTheoArr, cumRealArr,
-      cumLongTheoArr, cumLongRealArr, cumShortTheoArr, cumShortRealArr
+      cumLongTheoArr, cumLongRealArr,
+      cumShortTheoArr, cumShortRealArr,
+      dailyReal
     };
   }
 
-  // -----------------------------
-  // Apply range
-  // -----------------------------
+  // ===== apply range =====
   function applyRange(code){
     if(!snapshotOnce()){
       setStatus(`收到點擊：${code}（資料未就緒，重試中…）`);
@@ -419,7 +440,7 @@
     const dy=getChart(dailyCanvas);
     if(!eq||!dy) return;
 
-    // restore ALL baseline first
+    // restore ALL visuals first
     eq.data.labels = SNAP.eq.labels.slice();
     eq.data.datasets.forEach((ds,k)=> ds.data = (SNAP.eq.data[k]||[]).slice());
     eq.update('none');
@@ -435,43 +456,29 @@
 
     if(code==='ALL' || !startYmd){
       setActiveRangeBtn('ALL');
-      setStatus(`全區間：~ ${endYmd}（僅全區間計算 KPI）`);
+      showKpi(true); // 全區間顯示 KPI
+      setStatus(`全區間：2023/01/02 ~ ${endYmd}（僅全區間計算 KPI）`);
       return;
     }
 
-    // Non-ALL: rebuild charts from daily series and filter trades; do NOT touch KPI tables
-    const series = buildDailySeriesFromTrades(startYmd, endYmd);
+    // 非全區間：隱藏 KPI（你要求區間不用 KPI）
+    showKpi(false);
+
+    // 交易明細：只顯示區間內每筆交易（用顯示/隱藏，不破壞表格）
+    filterTradesRows(startYmd, endYmd);
+    // 明細累積從區間起點歸0
+    resetCumWithinVisible();
+
+    // 用可見交易列建立日序列，重畫兩張圖（確保顯示 2025/12/8~2025/12/10）
+    const series = buildDailySeriesFromVisible(startYmd, endYmd);
     if(!series){
-      setStatus(`區間內無交易損益資料：${startYmd}~${endYmd}`, true);
+      setStatus(`區間內無可用交易損益資料：${startYmd}~${endYmd}`, true);
       setActiveRangeBtn(code);
       return;
     }
 
-    // 交易明細：只顯示區間內每筆交易（依你需求），且累積從0重算
-    tradesBody.innerHTML = series.keptRows.map(tr=>tr.outerHTML).join('');
-
-    // 重算累積（區間起點歸0）
-    if(series.idxCumTheo>=0 && series.idxCumReal>=0 && series.idxTheo>=0 && series.idxReal>=0){
-      let cumTheo=0, cumReal=0;
-      const rows = Array.from(tradesBody.querySelectorAll('tr'));
-      for(const tr of rows){
-        const tds = Array.from(tr.querySelectorAll('td'));
-        const theo = parseNum(tds[series.idxTheo]?.textContent);
-        const real = parseNum(tds[series.idxReal]?.textContent);
-        if(Number.isFinite(theo)) cumTheo += theo;
-        if(Number.isFinite(real)) cumReal += real;
-        if(tds[series.idxCumTheo]) tds[series.idxCumTheo].textContent = formatNum(cumTheo);
-        if(tds[series.idxCumReal]) tds[series.idxCumReal].textContent = formatNum(cumReal);
-      }
-      tradesBody.innerHTML = rows.map(tr=>tr.outerHTML).join('');
-    }
-
-    // 圖表 labels：日級 YYYY/MM/DD（你要 2025/12/8~2025/12/10 這種）
-    const dayLabels = series.days.map(ymd => `${ymd.slice(0,4)}/${+ymd.slice(4,6)}/${+ymd.slice(6,8)}`.replace(/\/(\d)\b/g,'/$1')); 
-    // 上面為了顯示不補0（如 2025/12/8），若你要 2025/12/08 可以改回補0
-
-    // 主圖：用日級累積序列（已從0起算）
-    eq.data.labels = dayLabels;
+    // 主圖：用日級 labels + 累積（從0起算）
+    eq.data.labels = series.labels;
 
     eq.data.datasets.forEach(ds=>{
       const lab = String(ds.label||'');
@@ -481,29 +488,25 @@
       else if(lab.includes('多頭') && lab.includes('理論')) ds.data = series.cumLongTheoArr.slice();
       else if(lab.includes('空頭') && lab.includes('含滑價')) ds.data = series.cumShortRealArr.slice();
       else if(lab.includes('空頭') && lab.includes('理論')) ds.data = series.cumShortTheoArr.slice();
-      else if(lab.includes('期間最高') || lab.includes('期間最低')) ds.data = []; // 避免錯畫
-      else ds.data = []; // 其他線不顯示，避免對不上
+      else ds.data = []; // 其他線清空避免錯畫
     });
-
     eq.update('none');
 
-    // 下方日損益圖：以「實際日損益」拆成正/負兩個 dataset（保留你原本圖例語意）
-    dy.data.labels = dayLabels;
+    // 下方日損益圖：正/負拆 dataset（保持你原圖例）
+    dy.data.labels = series.labels;
     dy.data.datasets.forEach(ds=>{
       const lab = String(ds.label||'');
       if(lab.includes('獲利')) ds.data = series.dailyReal.map(v => v > 0 ? v : 0);
       else if(lab.includes('虧損')) ds.data = series.dailyReal.map(v => v < 0 ? v : 0);
-      else ds.data = new Array(dayLabels.length).fill(0);
+      else ds.data = new Array(series.labels.length).fill(0);
     });
     dy.update('none');
 
     setActiveRangeBtn(code);
-    setStatus(`區間：${code}（${startYmd}~${endYmd}）｜區間僅顯示圖表/日損益/明細`);
+    setStatus(`區間：${code}（${startYmd}~${endYmd}）｜區間只顯示圖表/日損益/明細`);
   }
 
-  // -----------------------------
-  // Bind buttons immediately (fix "no response")
-  // -----------------------------
+  // ===== bind range buttons immediately =====
   function hookRangeButtons(){
     if(!rangeRow) return;
     if(rangeRow.__bound) return;
@@ -518,21 +521,20 @@
     }, true);
   }
 
+  // ===== init waiting for render =====
   function waitAndInit(){
     let tries=0;
     const timer=setInterval(()=>{
       tries++;
       if(snapshotOnce()){
         clearInterval(timer);
-        applyRange('ALL');
+        applyRange('ALL'); // 初始顯示全區間（含 KPI）
       }
-      if(tries>360) clearInterval(timer);
-    }, 140);
+      if(tries>400) clearInterval(timer);
+    }, 150);
   }
 
-  // -----------------------------
-  // Boot: merge + feed to single-trades.js
-  // -----------------------------
+  // ===== boot merge + feed =====
   async function boot(){
     try{
       if(!sb){
@@ -614,7 +616,7 @@
         };
       }
 
-      // feed single-trades.js (ALL computes KPI)
+      // feed single-trades.js
       const mergedWithInpos = addFakeInpos(mergedText);
       const finalText = '0807 MERGED\n' + mergedWithInpos;
 
@@ -629,7 +631,7 @@
     }
   }
 
-  // 先綁按鈕（最重要：避免「按了沒反應」）
+  // ===== start =====
   document.addEventListener('DOMContentLoaded', ()=>{
     forceSlip2();
     hookRangeButtons();
