@@ -1,15 +1,20 @@
-// 0807-1.js — 0807 精進版（區間切換 + 圖表歸零 + KPI 顏色補回 + 明細正確過濾）
-// 核心原則：
-// - 不碰 single-trades.js 的 KPI 計算，只做「前端視覺切片」
-// - 不替換 Chart datasets 物件，只改 ds.data（避免顏色/線型被洗掉）
-// - 交易明細不重編號、不改任何 td 內容（避免欄位錯位）
-// - 區間以最後交易日為錨：
-//   近1週：本週週一~最後交易日；近2週：上週週一~最後交易日；其餘用日數回推
+// 0807-1.js — 最終版（區間＝以最後交易日為錨；近1週/近2週週一錨定）
+// 需求達成：
+// 1) 主圖 + 下方「日損益圖」皆以「日序列」切片，日對齊（不再比例切、不再猜）
+// 2) 主圖多頭/空頭/總損益（含滑價/理論）切區間後都「歸0」；期間最高/最低點不歸0
+// 3) KPI 的 Strong/Adequate/Improve 以紅/黃/綠顯示（補 class）
+// 4) 交易明細顯示區間內每筆交易，且「累積」從區間起點重新歸0累加
+// 5) 其他區間可用（近1年/6月/3月/2月/1月/近2週/近1週），近2週必有反應
+//
+// 注意：不改 single-trades.js；只在其渲染完成後做「前端視覺切片 + 欄位重算」
 
 (function () {
   'use strict';
   const $ = (s) => document.querySelector(s);
 
+  // -----------------------------
+  // DOM
+  // -----------------------------
   const status   = $('#autostatus');
   const elLatest = $('#latestName');
   const elBase   = $('#baseName');
@@ -18,14 +23,40 @@
   const rangeRow     = $('#rangeRow');
   const tradesBody   = $('#tradesBody');
   const equityCanvas = $('#equityChart');
-  const weeklyCanvas = $('#weeklyPnlChart');
+  const weeklyCanvas = $('#weeklyPnlChart'); // 注意：這張在你頁面其實是「每日」損益圖
 
   const slipInput = $('#slipInput');
   const runBtn    = $('#runBtn');
 
   if (status) status.style.whiteSpace = 'pre-wrap';
 
-  // Supabase
+  function setStatus(msg, bad = false) {
+    if (!status) return;
+    status.textContent = msg;
+    status.style.color = bad ? '#c62828' : '#666';
+  }
+
+  // -----------------------------
+  // slip=2 保險（開頁即算）
+  // -----------------------------
+  function forceSlip2() {
+    if (!slipInput) return;
+    slipInput.value = '2';
+    slipInput.dispatchEvent(new Event('input', { bubbles: true }));
+    slipInput.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+  function safeClickRun(times = 4) {
+    if (!runBtn) return;
+    const delays = [0, 80, 250, 600];
+    for (let i = 0; i < Math.min(times, delays.length); i++) {
+      setTimeout(() => { forceSlip2(); runBtn.click(); }, delays[i]);
+    }
+  }
+  document.addEventListener('DOMContentLoaded', () => forceSlip2());
+
+  // -----------------------------
+  // Supabase + merge（沿用 0807.js 的正確思路）
+  // -----------------------------
   const SUPABASE_URL  = "https://byhbmmnacezzgkwfkozs.supabase.co";
   const SUPABASE_ANON = "sb_publishable_xVe8fGbqQ0XGwi4DsmjPMg_Y2RBOD3t";
   const BUCKET        = "reports";
@@ -36,39 +67,9 @@
     global: { fetch: (u, o = {}) => fetch(u, { ...o, cache: 'no-store' }) }
   });
 
-  // canonical 3 欄
   const CANON_RE   = /^(\d{14})\.0{6}\s+(\d+\.\d{6})\s+(新買|平賣|新賣|平買|強制平倉)\s*$/;
   const EXTRACT_RE = /.*?(\d{14})(?:\.0{1,6})?\s+(\d+(?:\.\d{1,6})?)\s*(新買|平賣|新賣|平買|強制平倉)\s*$/;
 
-  function setStatus(msg, bad = false) {
-    if (!status) return;
-    status.textContent = msg;
-    status.style.color = bad ? '#c62828' : '#666';
-  }
-
-  // =========================
-  // slip=2 保險（保持你 0807-1 的需求）
-  // =========================
-  function forceSlip2() {
-    if (!slipInput) return;
-    slipInput.value = '2';
-    slipInput.dispatchEvent(new Event('input', { bubbles: true }));
-    slipInput.dispatchEvent(new Event('change', { bubbles: true }));
-  }
-
-  function safeClickRun(times = 4) {
-    if (!runBtn) return;
-    const delays = [0, 80, 250, 600];
-    for (let i = 0; i < Math.min(times, delays.length); i++) {
-      setTimeout(() => { forceSlip2(); runBtn.click(); }, delays[i]);
-    }
-  }
-
-  document.addEventListener('DOMContentLoaded', () => forceSlip2());
-
-  // =========================
-  // Supabase helpers
-  // =========================
   function pubUrl(path) {
     const { data } = sb.storage.from(BUCKET).getPublicUrl(path);
     return data?.publicUrl || '#';
@@ -84,15 +85,15 @@
     return (data || [])
       .filter(it => !(it.id === null && !it.metadata))
       .map(it => ({
-        name    : it.name,
-        fullPath: p + it.name,
+        name     : it.name,
+        fullPath : p + it.name,
         updatedAt: it.updated_at ? Date.parse(it.updated_at) : 0,
-        size    : it.metadata?.size || 0
+        size     : it.metadata?.size || 0
       }));
   }
 
   async function listCandidates() {
-    const u      = new URL(location.href);
+    const u = new URL(location.href);
     const prefix = u.searchParams.get('prefix') || '';
     return listOnce(prefix);
   }
@@ -103,35 +104,11 @@
     return Math.max(...m.map(s => +s || 0));
   }
 
-  async function readManifest() {
-    try {
-      const { data, error } = await sb.storage.from(BUCKET).download(MANIFEST_PATH);
-      if (error || !data) return null;
-      return JSON.parse(await data.text());
-    } catch {
-      return null;
-    }
-  }
-
-  async function writeManifest(obj) {
-    const blob = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' });
-    const { error } = await sb.storage.from(BUCKET).upload(
-      MANIFEST_PATH,
-      blob,
-      { upsert: true, cacheControl: '0', contentType: 'application/json' }
-    );
-    if (error) throw new Error(error.message);
-  }
-
-  // =========================
-  // TXT decode
-  // =========================
   function normalizeText(raw) {
     let s = raw
       .replace(/\ufeff/gi, '')
       .replace(/\u200b|\u200c|\u200d/gi, '')
       .replace(/[\x00-\x09\x0B-\x1F\x7F]/g, '');
-
     s = s.replace(/\r\n?/g, '\n').replace(/\u3000/g, ' ');
     const lines = s.split('\n').map(l => l.replace(/\s+/g, ' ').trim()).filter(Boolean);
     return lines.join('\n');
@@ -194,7 +171,6 @@
     return [...A.map(x => x.line), ...added].join('\n');
   }
 
-  // 給 single-trades.js 判方向用
   function addFakeInpos(text) {
     const lines = (text || '').split('\n').map(s => s.trim()).filter(Boolean);
     const out = [];
@@ -212,6 +188,24 @@
       }
     }
     return out.join('\n');
+  }
+
+  async function readManifest() {
+    try {
+      const { data, error } = await sb.storage.from(BUCKET).download(MANIFEST_PATH);
+      if (error || !data) return null;
+      return JSON.parse(await data.text());
+    } catch { return null; }
+  }
+
+  async function writeManifest(obj) {
+    const blob = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' });
+    const { error } = await sb.storage.from(BUCKET).upload(
+      MANIFEST_PATH,
+      blob,
+      { upsert: true, cacheControl: '0', contentType: 'application/json' }
+    );
+    if (error) throw new Error(error.message);
   }
 
   async function feedToSingleTrades(filename, mergedText) {
@@ -233,149 +227,22 @@
     safeClickRun(4);
   }
 
-  // =========================
-  // Range slicing state
-  // =========================
-  const SNAP = {
-    ready: false,
-    eqLabels: null,
-    eqDataArrays: null,
-    wkLabels: null,
-    wkDataArrays: null,
-    tradeRows: null,     // {ymd, html}
-    tradeYmdList: null,  // unique sorted
-    endYmd: null
-  };
-
+  // -----------------------------
+  // 日期/數字工具
+  // -----------------------------
   function pad2(n){ return String(n).padStart(2,'0'); }
+
   function ymdToDate(ymd){
     if (!ymd || ymd.length !== 8) return null;
     const y=+ymd.slice(0,4), m=+ymd.slice(4,6), d=+ymd.slice(6,8);
-    if (!y||!m||!d) return null;
+    if (!y || !m || !d) return null;
     return new Date(y, m-1, d);
   }
+
   function dateToYmd(d){
     return `${d.getFullYear()}${pad2(d.getMonth()+1)}${pad2(d.getDate())}`;
   }
 
-  // 從任意文字抓 YYYYMMDD：支援
-  // - 20xxxxxxxxxxxx（14碼）
-  // - 20xxxxxx（8碼）
-  // - 2025/12/12、2025-12-12
-  function parseYmdFromText(text){
-    const s = String(text || '').trim();
-
-    let m = s.match(/\b(20\d{12})\b/);
-    if (m) return m[1].slice(0,8);
-
-    m = s.match(/\b(20\d{6})\b/);
-    if (m) return m[1];
-
-    m = s.match(/\b(20\d{2})[\/\-](\d{1,2})[\/\-](\d{1,2})\b/);
-    if (m) return `${m[1]}${pad2(m[2])}${pad2(m[3])}`;
-
-    return '';
-  }
-
-  // 從一整列 tr 抓日期（不要假設是哪一欄，避免欄位改版造成失效）
-  function parseYmdFromRow(tr){
-    if (!tr) return '';
-    const tds = Array.from(tr.querySelectorAll('td'));
-    for (const td of tds) {
-      const ymd = parseYmdFromText(td.textContent);
-      if (ymd) return ymd;
-    }
-    // 最後 fallback：整列文字
-    return parseYmdFromText(tr.textContent);
-  }
-
-  function getChart(canvas){
-    if (!canvas || !window.Chart) return null;
-    try { return window.Chart.getChart(canvas) || null; } catch { return null; }
-  }
-
-  // KPI 顏色補回（Strong=紅, Adequate=黃, Improve=綠）
-  function ensureKpiRatingColors(){
-    const map = {
-      'Strong': 'rating-strong',
-      'Adequate': 'rating-adequate',
-      'Improve': 'rating-improve'
-    };
-
-    // 只補「文字等於 Strong/Adequate/Improve」的 cell
-    const tds = Array.from(document.querySelectorAll('td'));
-    for (const td of tds) {
-      const t = (td.textContent || '').trim();
-      const cls = map[t];
-      if (!cls) continue;
-      td.classList.remove('rating-strong','rating-adequate','rating-improve');
-      td.classList.add(cls);
-    }
-
-    // 綜合分數卡（如果 single-trades.js 有更新它但沒帶 class，也補）
-    const scoreVal = document.querySelector('#scoreCard .score-value');
-    const scoreDesc = document.querySelector('#scoreCard .score-desc');
-    if (scoreVal && scoreDesc) {
-      // 若 scoreVal 已有 strong/adequate/improve 就不動
-      const has = scoreVal.classList.contains('strong') ||
-                  scoreVal.classList.contains('adequate') ||
-                  scoreVal.classList.contains('improve');
-      if (!has) {
-        // 以 scoreDesc 文字含 Strong/Adequate/Improve 判斷
-        const d = scoreDesc.textContent || '';
-        if (/Strong/i.test(d)) scoreVal.classList.add('strong');
-        else if (/Adequate/i.test(d)) scoreVal.classList.add('adequate');
-        else if (/Improve/i.test(d)) scoreVal.classList.add('improve');
-      }
-    }
-  }
-
-  function snapshotOnce(){
-    if (SNAP.ready) return true;
-
-    const eq = getChart(equityCanvas);
-    if (!eq || !eq.data?.labels?.length || !eq.data?.datasets?.length) return false;
-
-    SNAP.eqLabels = eq.data.labels.slice();
-    SNAP.eqDataArrays = eq.data.datasets.map(ds => Array.isArray(ds.data) ? ds.data.slice() : []);
-
-    const wk = getChart(weeklyCanvas);
-    if (wk && wk.data?.labels?.length && wk.data?.datasets?.length) {
-      SNAP.wkLabels = wk.data.labels.slice();
-      SNAP.wkDataArrays = wk.data.datasets.map(ds => Array.isArray(ds.data) ? ds.data.slice() : []);
-    } else {
-      SNAP.wkLabels = null;
-      SNAP.wkDataArrays = null;
-    }
-
-    // 交易明細快照
-    const trs = Array.from(tradesBody?.querySelectorAll('tr') || []);
-    if (!trs.length) return false;
-
-    const rows = trs.map(tr => ({
-      ymd: parseYmdFromRow(tr),
-      html: tr.outerHTML
-    }));
-
-    // endYmd
-    let endYmd = '';
-    for (let i = rows.length - 1; i >= 0; i--) {
-      if (rows[i].ymd) { endYmd = rows[i].ymd; break; }
-    }
-    if (!endYmd) return false;
-
-    const uniq = new Set();
-    for (const r of rows) if (r.ymd) uniq.add(r.ymd);
-    const ymdList = Array.from(uniq).sort();
-
-    SNAP.tradeRows = rows;
-    SNAP.tradeYmdList = ymdList;
-    SNAP.endYmd = endYmd;
-    SNAP.ready = true;
-    return true;
-  }
-
-  // 週一錨定
   function mondayOfWeek(d){
     const x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
     const day = x.getDay(); // 0 Sun..6 Sat
@@ -384,47 +251,93 @@
     return x;
   }
 
-  // 你指定的週區間規則 + 其他區間
-  function rangeStartYmd(endYmd, code){
-    if (code === 'ALL') return '';
-    const endDate = ymdToDate(endYmd);
-    if (!endDate) return '';
+  function parseYmdFromText(text){
+    const s = String(text || '').trim();
 
-    if (code === '1W') return dateToYmd(mondayOfWeek(endDate));
+    // 14碼（YYYYMMDDhhmmss）
+    let m = s.match(/\b(20\d{12})\b/);
+    if (m) return m[1].slice(0,8);
 
-    if (code === '2W') {
-      const m = mondayOfWeek(endDate);
-      m.setDate(m.getDate() - 7);
-      return dateToYmd(m);
+    // 8碼（YYYYMMDD）
+    m = s.match(/\b(20\d{6})\b/);
+    if (m) return m[1];
+
+    // YYYY/MM/DD or YYYY-MM-DD
+    m = s.match(/\b(20\d{2})[\/\-](\d{1,2})[\/\-](\d{1,2})\b/);
+    if (m) return `${m[1]}${pad2(m[2])}${pad2(m[3])}`;
+
+    // YYYY/MM or YYYY-MM（只到月：當作月初，仍可用於 slicing）
+    m = s.match(/\b(20\d{2})[\/\-](\d{1,2})\b/);
+    if (m) return `${m[1]}${pad2(m[2])}01`;
+
+    return '';
+  }
+
+  function parseYmdFromRow(tr){
+    if (!tr) return '';
+    const tds = Array.from(tr.querySelectorAll('td'));
+    for (const td of tds) {
+      const ymd = parseYmdFromText(td.textContent);
+      if (ymd) return ymd;
     }
-
-    const daysMap = { '1M':30, '2M':60, '3M':91, '6M':182, '1Y':365 };
-    const n = daysMap[code] || 0;
-    if (!n) return '';
-    const s = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
-    s.setDate(s.getDate() - n);
-    return dateToYmd(s);
+    return parseYmdFromText(tr.textContent);
   }
 
-  function countTradingDays(ymdList, startYmd, endYmd){
-    if (!startYmd) return ymdList.length;
-    let c = 0;
-    for (const y of ymdList) if (y >= startYmd && y <= endYmd) c++;
-    return c;
+  function parseNum(text){
+    const s = String(text || '').trim();
+    if (!s || s === '—' || s === '-') return NaN;
+    const v = Number(s.replace(/,/g,''));
+    return Number.isFinite(v) ? v : NaN;
   }
 
-  function setActiveRangeBtn(code){
-    if (!rangeRow) return;
-    const btns = Array.from(rangeRow.querySelectorAll('.range-btn'));
-    btns.forEach(b => b.classList.toggle('active', (b.dataset.range === code)));
+  function formatNum(n){
+    if (!Number.isFinite(n)) return '—';
+    const sign = n < 0 ? '-' : '';
+    const x = Math.abs(Math.round(n));
+    return sign + x.toLocaleString('en-US');
   }
 
-  // 圖表歸零規則：總/多頭/空頭 都要歸零；不動最高/最低 marker
+  // -----------------------------
+  // KPI 顏色（紅/黃/綠）
+  // -----------------------------
+  function ensureKpiRatingColors(){
+    const map = { Strong:'rating-strong', Adequate:'rating-adequate', Improve:'rating-improve' };
+    const tds = Array.from(document.querySelectorAll('td'));
+    for (const td of tds) {
+      const t = (td.textContent || '').trim();
+      const cls = map[t];
+      if (!cls) continue;
+      td.classList.remove('rating-strong','rating-adequate','rating-improve');
+      td.classList.add(cls);
+    }
+    // score card（保守補）
+    const scoreVal = document.querySelector('#scoreCard .score-value');
+    if (scoreVal) {
+      scoreVal.classList.remove('strong','adequate','improve');
+      // 嘗試從頁面中找 Strong/Adequate/Improve 次數最多者當色（最小侵入）
+      const strongN = document.querySelectorAll('td.rating-strong').length;
+      const adqN    = document.querySelectorAll('td.rating-adequate').length;
+      const impN    = document.querySelectorAll('td.rating-improve').length;
+      if (strongN >= adqN && strongN >= impN) scoreVal.classList.add('strong');
+      else if (adqN >= strongN && adqN >= impN) scoreVal.classList.add('adequate');
+      else scoreVal.classList.add('improve');
+    }
+  }
+
+  // -----------------------------
+  // Chart slicing（用「日序列」索引切，不用比例）
+  // -----------------------------
+  function getChart(canvas){
+    if (!canvas || !window.Chart) return null;
+    try { return window.Chart.getChart(canvas) || null; } catch { return null; }
+  }
+
   function shouldRebaseLabel(label){
     const s = String(label || '');
+    // 期間最高/最低點不要歸0
     if (/最高|最低/.test(s)) return false;
-    // 多頭/空頭/總損益（含滑價/理論）都要歸零
-    return /(損益|淨值|累積|多頭|空頭|總)/.test(s);
+    // 總損益/多頭/空頭 皆要歸0
+    return /(損益|多頭|空頭|總)/.test(s);
   }
 
   function rebaseArray(arr){
@@ -447,76 +360,261 @@
         return { ...p, y: y - baseY };
       });
     }
-
     return arr;
   }
 
-  function applyFilter(rangeCode){
-    // 尚未 ready 也要能按（自動重試）
+  // -----------------------------
+  // Trade table reset cum from 0 within range
+  // -----------------------------
+  function rebuildTradeTableCums(startYmd, endYmd){
+    const table = tradesBody?.closest('table');
+    if (!table) return;
+
+    const head = table.querySelector('thead');
+    const ths = Array.from(head?.querySelectorAll('th') || []).map(th => (th.textContent || '').trim());
+
+    // 找欄位 index（以中文標題為準；若找不到就不做重算）
+    const idxTheo      = ths.findIndex(t => t.includes('理論淨損益'));
+    const idxCumTheo   = ths.findIndex(t => t.includes('累積理論淨損益'));
+    const idxReal      = ths.findIndex(t => t.includes('實際淨損益'));
+    const idxCumReal   = ths.findIndex(t => t.includes('累積實際淨損益'));
+    const idxDateTime  = ths.findIndex(t => t.includes('日期時間'));
+
+    if (idxTheo < 0 || idxCumTheo < 0 || idxReal < 0 || idxCumReal < 0) return;
+
+    const rows = Array.from(tradesBody.querySelectorAll('tr'));
+
+    // 先找區間內 row
+    const kept = [];
+    for (const tr of rows) {
+      const tds = Array.from(tr.querySelectorAll('td'));
+      if (!tds.length) continue;
+
+      // 優先用 日期時間欄位；找不到就用整列
+      const dtText = (idxDateTime >= 0 && tds[idxDateTime]) ? tds[idxDateTime].textContent : tr.textContent;
+      const ymd = parseYmdFromText(dtText);
+
+      // 若 ymd 抓不到，不濾掉（避免誤刪），但累計就不改
+      if (ymd && startYmd && endYmd) {
+        if (ymd < startYmd || ymd > endYmd) continue;
+      }
+      kept.push(tr);
+    }
+
+    // 用 kept 重新填 tbody
+    tradesBody.innerHTML = kept.map(tr => tr.outerHTML).join('');
+
+    // 重新取一次 rows
+    const newRows = Array.from(tradesBody.querySelectorAll('tr'));
+
+    let cumTheo = 0;
+    let cumReal = 0;
+
+    for (const tr of newRows) {
+      const tds = Array.from(tr.querySelectorAll('td'));
+      if (!tds.length) continue;
+
+      const theo = parseNum(tds[idxTheo]?.textContent);
+      const real = parseNum(tds[idxReal]?.textContent);
+
+      // 有些「新買」列可能是 —，跳過累加但仍把累積顯示為目前累計
+      if (Number.isFinite(theo)) cumTheo += theo;
+      if (Number.isFinite(real)) cumReal += real;
+
+      if (tds[idxCumTheo]) tds[idxCumTheo].textContent = formatNum(cumTheo);
+      if (tds[idxCumReal]) tds[idxCumReal].textContent = formatNum(cumReal);
+    }
+
+    // 重新寫回（因為我們改了 td.textContent）
+    tradesBody.innerHTML = newRows.map(tr => tr.outerHTML).join('');
+  }
+
+  // -----------------------------
+  // Snapshot originals（只做一次）
+  // -----------------------------
+  const SNAP = {
+    ready: false,
+    eq: { labels:null, dataArrays:null },
+    wk: { labels:null, dataArrays:null },
+    tradesHTML: null, // 原始 tbody HTML
+    tradeYmdList: null,
+    endYmd: null
+  };
+
+  function snapshotOnce(){
+    if (SNAP.ready) return true;
+
+    const eq = getChart(equityCanvas);
+    const wk = getChart(weeklyCanvas);
+    if (!eq || !eq.data?.labels?.length || !eq.data?.datasets?.length) return false;
+    if (!wk || !wk.data?.labels?.length || !wk.data?.datasets?.length) return false;
+    if (!tradesBody) return false;
+
+    // Chart originals
+    SNAP.eq.labels = eq.data.labels.slice();
+    SNAP.eq.dataArrays = eq.data.datasets.map(ds => Array.isArray(ds.data) ? ds.data.slice() : []);
+
+    SNAP.wk.labels = wk.data.labels.slice();
+    SNAP.wk.dataArrays = wk.data.datasets.map(ds => Array.isArray(ds.data) ? ds.data.slice() : []);
+
+    // Trade originals
+    SNAP.tradesHTML = tradesBody.innerHTML;
+
+    // trade ymd list & endYmd from table rows
+    const trs = Array.from(tradesBody.querySelectorAll('tr'));
+    const yset = new Set();
+    let endYmd = '';
+    for (const tr of trs) {
+      const ymd = parseYmdFromRow(tr);
+      if (ymd) yset.add(ymd);
+      endYmd = ymd || endYmd;
+    }
+    // 若上述 endYmd 不穩（最後幾列可能是空），再從後往前找
+    if (!endYmd) {
+      for (let i = trs.length - 1; i >= 0; i--) {
+        const ymd = parseYmdFromRow(trs[i]);
+        if (ymd) { endYmd = ymd; break; }
+      }
+    }
+    const ymdList = Array.from(yset).sort();
+
+    if (!endYmd || !ymdList.length) return false;
+
+    SNAP.tradeYmdList = ymdList;
+    SNAP.endYmd = endYmd;
+    SNAP.ready = true;
+    return true;
+  }
+
+  // -----------------------------
+  // Range start rule
+  // -----------------------------
+  function rangeStartYmd(endYmd, code){
+    if (code === 'ALL') return '';
+    const endDate = ymdToDate(endYmd);
+    if (!endDate) return '';
+
+    if (code === '1W') return dateToYmd(mondayOfWeek(endDate));
+    if (code === '2W') {
+      const m = mondayOfWeek(endDate);
+      m.setDate(m.getDate() - 7);
+      return dateToYmd(m);
+    }
+
+    const daysMap = { '1M':30, '2M':60, '3M':91, '6M':182, '1Y':365 };
+    const n = daysMap[code] || 0;
+    if (!n) return '';
+    const s = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
+    s.setDate(s.getDate() - n);
+    return dateToYmd(s);
+  }
+
+  function setActiveRangeBtn(code){
+    if (!rangeRow) return;
+    const btns = Array.from(rangeRow.querySelectorAll('.range-btn'));
+    btns.forEach(b => b.classList.toggle('active', (b.dataset.range === code)));
+  }
+
+  // -----------------------------
+  // Apply range (the real work)
+  // -----------------------------
+  function applyRange(code){
     if (!snapshotOnce()) {
       setStatus('區間切換：資料尚未就緒，正在重試…');
-      setTimeout(() => applyFilter(rangeCode), 180);
+      setTimeout(() => applyRange(code), 180);
       return;
     }
 
     const endYmd = SNAP.endYmd;
-    const startYmd = rangeStartYmd(endYmd, rangeCode);
+    const startYmd = rangeStartYmd(endYmd, code);
 
-    // 1) 交易明細：顯示區間內每筆交易（不改任何欄位，不重編號）
-    const keptTrades = (!startYmd)
-      ? SNAP.tradeRows
-      : SNAP.tradeRows.filter(r => !r.ymd || (r.ymd >= startYmd && r.ymd <= endYmd));
-
-    if (tradesBody) {
-      tradesBody.innerHTML = keptTrades.map(r => r.html).join('');
-    }
-
-    // 2) 圖表：labels 非逐日 → 以交易日比例切，確保近2週也一定會動
-    const totalDays = SNAP.tradeYmdList.length || 1;
-    const keptDays  = countTradingDays(SNAP.tradeYmdList, startYmd, endYmd);
-    const ratio = Math.max(0.02, Math.min(1, keptDays / totalDays));
-
-    // 主圖
+    // 1) restore originals first
     const eq = getChart(equityCanvas);
-    if (eq) {
-      const totalPoints = SNAP.eqLabels.length;
-      const keepPoints = Math.max(12, Math.min(totalPoints, Math.ceil(totalPoints * ratio)));
-      const startIdx = Math.max(0, totalPoints - keepPoints);
-
-      eq.data.labels = SNAP.eqLabels.slice(startIdx);
-
-      // 只改 ds.data，不替換 dataset 物件（保留顏色/線型/圖例）
-      eq.data.datasets.forEach((ds, k) => {
-        const orig = SNAP.eqDataArrays[k] || [];
-        let sliced = orig.slice(startIdx);
-        if (shouldRebaseLabel(ds.label)) sliced = rebaseArray(sliced); // 歸0
-        ds.data = sliced;
-      });
-
-      eq.update('none');
-    }
-
-    // 週圖（不強制歸0，避免週損益柱狀失真；但也要能切）
     const wk = getChart(weeklyCanvas);
-    if (wk && SNAP.wkLabels && SNAP.wkDataArrays) {
-      const wkTotal = SNAP.wkLabels.length;
-      const wkKeep = Math.max(8, Math.min(wkTotal, Math.ceil(wkTotal * ratio)));
-      const wkStart = Math.max(0, wkTotal - wkKeep);
+    if (!eq || !wk) return;
 
-      wk.data.labels = SNAP.wkLabels.slice(wkStart);
-      wk.data.datasets.forEach((ds, k) => {
-        const orig = SNAP.wkDataArrays[k] || [];
-        ds.data = orig.slice(wkStart);
-      });
-      wk.update('none');
+    // restore chart full
+    eq.data.labels = SNAP.eq.labels.slice();
+    eq.data.datasets.forEach((ds, k) => ds.data = (SNAP.eq.dataArrays[k] || []).slice());
+    eq.update('none');
+
+    wk.data.labels = SNAP.wk.labels.slice();
+    wk.data.datasets.forEach((ds, k) => ds.data = (SNAP.wk.dataArrays[k] || []).slice());
+    wk.update('none');
+
+    // restore trades full
+    tradesBody.innerHTML = SNAP.tradesHTML;
+
+    // 2) If ALL: only fix KPI colors and done
+    if (!startYmd) {
+      // ALL 也要確保 KPI 顏色有
+      ensureKpiRatingColors();
+      setActiveRangeBtn(code);
+      setStatus(`已套用區間：全段（~ ${endYmd}）`);
+      return;
     }
 
-    setActiveRangeBtn(rangeCode);
+    // 3) Slice charts by actual daily ymd indices
+    const eqLabels = SNAP.eq.labels;
+    const wkLabels = SNAP.wk.labels;
 
-    // 3) KPI：補回紅/黃/綠（Strong/Adequate/Improve）
+    // 建索引（labels -> ymd）
+    const eqYmds = eqLabels.map(l => parseYmdFromText(l));
+    const wkYmds = wkLabels.map(l => parseYmdFromText(l));
+
+    const eqKeep = [];
+    for (let i = 0; i < eqYmds.length; i++) {
+      const y = eqYmds[i];
+      if (!y) continue; // label 沒日期就跳過
+      if (y >= startYmd && y <= endYmd) eqKeep.push(i);
+    }
+
+    const wkKeep = [];
+    for (let i = 0; i < wkYmds.length; i++) {
+      const y = wkYmds[i];
+      if (!y) continue;
+      if (y >= startYmd && y <= endYmd) wkKeep.push(i);
+    }
+
+    // 若 keep 太少（避免空白）：至少保留最後 12 / 8 筆
+    const eqIdx = (eqKeep.length >= 2) ? eqKeep : (() => {
+      const n = Math.min(eqLabels.length, 12);
+      const start = Math.max(0, eqLabels.length - n);
+      return Array.from({length:n}, (_,k)=>start+k);
+    })();
+
+    const wkIdx = (wkKeep.length >= 2) ? wkKeep : (() => {
+      const n = Math.min(wkLabels.length, 8);
+      const start = Math.max(0, wkLabels.length - n);
+      return Array.from({length:n}, (_,k)=>start+k);
+    })();
+
+    // apply slice to eq + rebase all long/short/total
+    eq.data.labels = eqIdx.map(i => eqLabels[i]);
+    eq.data.datasets.forEach((ds, k) => {
+      const orig = SNAP.eq.dataArrays[k] || [];
+      let sliced = eqIdx.map(i => orig[i]);
+      if (shouldRebaseLabel(ds.label)) sliced = rebaseArray(sliced);
+      ds.data = sliced;
+    });
+    eq.update('none');
+
+    // apply slice to daily pnl chart (wk canvas) — do NOT rebase bars/values (keep true daily pnl)
+    wk.data.labels = wkIdx.map(i => wkLabels[i]);
+    wk.data.datasets.forEach((ds, k) => {
+      const orig = SNAP.wk.dataArrays[k] || [];
+      ds.data = wkIdx.map(i => orig[i]);
+    });
+    wk.update('none');
+
+    // 4) Trade details: show only trades in range AND reset cum from 0
+    rebuildTradeTableCums(startYmd, endYmd);
+
+    // 5) KPI colors
     ensureKpiRatingColors();
 
-    setStatus(`已套用區間：${rangeCode}（${startYmd || '全段'} ~ ${endYmd}）`);
+    setActiveRangeBtn(code);
+    setStatus(`已套用區間：${code}（${startYmd} ~ ${endYmd}）`);
   }
 
   function hookRangeButtons(){
@@ -525,29 +623,33 @@
       const btn = e.target.closest('.range-btn');
       if (!btn) return;
       const code = btn.dataset.range || 'ALL';
-      applyFilter(code);
+      applyRange(code);
     });
   }
 
+  // -----------------------------
+  // Wait for render
+  // -----------------------------
   function waitAndInit(){
     let tries = 0;
     const timer = setInterval(() => {
       tries++;
-      if (snapshotOnce()) {
+      const ok = snapshotOnce();
+      if (ok) {
         clearInterval(timer);
         hookRangeButtons();
         ensureKpiRatingColors();
-        applyFilter('ALL');
+        applyRange('ALL');
       }
-      if (tries > 260) clearInterval(timer);
+      if (tries > 280) clearInterval(timer);
     }, 120);
   }
 
-  // =========================
-  // 主流程（沿用 0807.js 合併餵檔方式）
-  // =========================
-  async function boot() {
-    try {
+  // -----------------------------
+  // Boot: fetch + merge + feed (same as 0807.js)
+  // -----------------------------
+  async function boot(){
+    try{
       if (!sb) {
         setStatus('Supabase SDK 未載入或初始化失敗。', true);
         return;
@@ -555,13 +657,12 @@
 
       forceSlip2();
 
-      const url       = new URL(location.href);
+      const url = new URL(location.href);
       const paramFile = url.searchParams.get('file');
 
       let latest = null;
-      let list   = [];
+      let list = [];
 
-      // 1) 最新檔
       if (paramFile) {
         latest = { name: paramFile.split('/').pop() || '0807.txt', fullPath: paramFile, from: 'url' };
       } else {
@@ -581,10 +682,13 @@
         latest = list[0];
       }
 
-      if (!latest) { setStatus('找不到可分析的 0807 檔案。', true); return; }
+      if (!latest) {
+        setStatus('找不到可分析的 0807 檔案。', true);
+        return;
+      }
       if (elLatest) elLatest.textContent = latest.name;
 
-      // 2) 基準檔
+      // baseline from manifest or second newest
       let base = null;
       if (!paramFile) {
         const manifest = await readManifest();
@@ -598,15 +702,16 @@
       }
       if (elBase) elBase.textContent = base ? base.name : '（尚無）';
 
-      // 3) 下載最新
       setStatus('下載最新 0807 檔案並解碼中…');
       const latestUrl = latest.from === 'url' ? latest.fullPath : pubUrl(latest.fullPath);
       const rNew = await fetchSmart(latestUrl);
-      if (rNew.ok === 0) { setStatus(`最新檔沒有合法交易行（解碼=${rNew.enc}）。`, true); return; }
+      if (rNew.ok === 0) {
+        setStatus(`最新檔沒有合法交易行（解碼=${rNew.enc}）。`, true);
+        return;
+      }
 
       let mergedText = rNew.canon;
 
-      // 4) 合併基準
       if (base) {
         setStatus('下載基準檔並進行合併…');
         const baseUrl = base.from === 'url' ? base.fullPath : pubUrl(base.fullPath);
@@ -614,7 +719,7 @@
         mergedText = mergeByBaseline(rBase.canon, rNew.canon);
       }
 
-      // 5) 設基準按鈕
+      // set baseline button
       if (btnBase) {
         btnBase.disabled = false;
         btnBase.onclick = async () => {
@@ -627,7 +732,6 @@
         };
       }
 
-      // 6) 餵給 single-trades.js
       const mergedWithInpos = addFakeInpos(mergedText);
       const finalText = '0807 MERGED\n' + mergedWithInpos;
 
@@ -635,7 +739,7 @@
       await feedToSingleTrades(latest.name, finalText);
       setStatus('分析完成（可調整本頁「本金／滑點」即時重算 KPI）。');
 
-      // 7) 等 single-trades.js 完成渲染後再啟用區間
+      // init range after render
       waitAndInit();
     } catch (err) {
       console.error(err);
