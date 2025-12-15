@@ -110,7 +110,7 @@
       white-space: nowrap;
     }
 
-    /* 時區快選按鈕列（放在圖表卡片內） */
+    /* 時區按鈕 */
     .range-bar {
       display: flex;
       gap: 4px;
@@ -134,20 +134,7 @@
       color: #fff;
     }
 
-    .file-block {
-      display: none;
-      flex-direction: column;
-      gap: 2px;
-    }
-    .file-block label { white-space: nowrap; }
-    .cloud-select {
-      padding: 4px 8px;
-      border: 1px solid #d1d5db;
-      border-radius: 6px;
-      font-size: 12px;
-      min-width: 260px;
-      max-width: 380px;
-    }
+    .file-block { display: none; flex-direction: column; gap: 2px; }
 
     .param-line {
       max-width: 1100px;
@@ -160,14 +147,8 @@
     }
 
     .kpi-wrapper { margin: 4px auto; max-width: 1100px; }
-    .kpi-table {
-      border-collapse: collapse;
-      background: #fff;
-      font-size: 12px;
-      width: 100%;
-    }
-    .kpi-table th,
-    .kpi-table td {
+    .kpi-table { border-collapse: collapse; background: #fff; font-size: 12px; width: 100%; }
+    .kpi-table th, .kpi-table td {
       padding: 4px 6px;
       border-bottom: 1px solid #eee;
       white-space: nowrap;
@@ -175,15 +156,8 @@
       text-overflow: ellipsis;
     }
     .kpi-table th { background: #fafafa; }
-    .kpi-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
-    .kpi-table td.center,
-    .kpi-table th.center { text-align: center; }
     .kpi-bad-card .kpi-table { background: #fff5f5; border: 1px solid #ffd0d0; }
     .kpi-bad-card thead th { background: #ffe5e5; }
-
-    .rating-strong  { color: #e60000; font-weight: 600; }
-    .rating-adequate{ color: #c9a500; font-weight: 600; }
-    .rating-improve { color: #008000; font-weight: 600; }
 
     .chart-wrapper {
       max-width: 1100px;
@@ -192,31 +166,32 @@
       border: 1px solid #eee;
       border-radius: 4px;
       padding: 8px;
-      position: relative;
     }
     .chart-main { height: 420px; }
     .chart-weekly { height: 260px; }
 
-    /* 主圖卡片內：右上角放時區快選 */
-    .chart-topbar {
-      position: absolute;
-      top: 8px;
-      right: 8px;
-      z-index: 5;
+    /* ✅ 圖表卡片內的兩行 header */
+    .chart-head {
       display: flex;
+      flex-direction: column;
       gap: 6px;
-      align-items: center;
-      padding: 4px;
-      background: rgba(255,255,255,.88);
-      border: 1px solid #e5e7eb;
-      border-radius: 999px;
-      box-shadow: 0 1px 4px rgba(0,0,0,.04);
-      backdrop-filter: blur(2px);
+      margin-bottom: 6px;
     }
-    .chart-topbar .label {
+    .chart-legend {
       font-size: 12px;
       color: #666;
-      padding-left: 6px;
+      font-weight: 600;
+      line-height: 1.2;
+    }
+    .chart-range-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .chart-range-row .label {
+      font-size: 12px;
+      color: #666;
       white-space: nowrap;
     }
 
@@ -233,8 +208,7 @@
       top: 0;
       z-index: 1;
     }
-    table.trade-table th,
-    table.trade-table td {
+    table.trade-table th, table.trade-table td {
       padding: 3px 6px;
       border-bottom: 1px solid #eee;
       white-space: nowrap;
@@ -245,10 +219,7 @@
     table.trade-table th { text-align: center; font-weight: 600; }
     table.trade-table td { text-align: right; }
     table.trade-table tbody tr:nth-child(even) { background: #fcfcfc; }
-    .num-pos { color: #e60000; }
-    .num-neg { color: #0a7f00; }
 
-    /* 非「全」時區：隱藏 KPI 區與分數卡（由 JS 切換） */
     .hide-kpi { display: none !important; }
   </style>
 
@@ -294,7 +265,6 @@
           <input type="number" id="slipInput" value="2" step="0.1">
         </label>
 
-        <!-- TXT 檔 + 雲端檔 block：在 0807 頁面隱藏，但保留給 single-trades.js 使用 -->
         <div class="file-block">
           <label>
             TXT 檔：
@@ -316,26 +286,30 @@
 
     <!-- 主資產曲線 -->
     <div class="chart-wrapper chart-main">
-      <!-- 時區快選：放在主圖卡片內右上角 -->
-      <div class="chart-topbar" id="rangeBar" aria-label="時區快選">
-        <span class="label">時區</span>
-        <div class="range-bar">
-          <button class="range-btn active" data-range="all" type="button">全</button>
-          <button class="range-btn" data-range="w1" type="button">近1週</button>
-          <button class="range-btn" data-range="w2" type="button">近2週</button>
-          <button class="range-btn" data-range="m1" type="button">近1月</button>
-          <button class="range-btn" data-range="m2" type="button">近2月</button>
-          <button class="range-btn" data-range="m3" type="button">近3月</button>
-          <button class="range-btn" data-range="m6" type="button">近6月</button>
-          <button class="range-btn" data-range="y1" type="button">近1年</button>
+      <!-- ✅ 兩行：原來說明 + 時區 -->
+      <div class="chart-head">
+        <div class="chart-legend" id="equityLegendText">累積淨損益（每日）</div>
+        <div class="chart-range-row" id="rangeBar">
+          <span class="label">時區</span>
+          <div class="range-bar">
+            <button class="range-btn active" data-range="all" type="button">全</button>
+            <button class="range-btn" data-range="w1" type="button">近1週</button>
+            <button class="range-btn" data-range="w2" type="button">近2週</button>
+            <button class="range-btn" data-range="m1" type="button">近1月</button>
+            <button class="range-btn" data-range="m2" type="button">近2月</button>
+            <button class="range-btn" data-range="m3" type="button">近3月</button>
+            <button class="range-btn" data-range="m6" type="button">近6月</button>
+            <button class="range-btn" data-range="y1" type="button">近1年</button>
+          </div>
         </div>
       </div>
 
       <canvas id="equityChart"></canvas>
     </div>
 
-    <!-- 下方圖（仍顯示，但已被 JS 改成「每日損益」以對齊交易日） -->
+    <!-- 下方圖：每日損益（無交易=0） -->
     <div class="chart-wrapper chart-weekly">
+      <div class="chart-legend">每日淨損益（無交易=0）</div>
       <canvas id="weeklyPnlChart"></canvas>
     </div>
 
