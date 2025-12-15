@@ -1,5 +1,6 @@
 // 0807-1.js — 時區快選（週對齊週一）；只有 ALL 顯示 KPI；
 // 圖表改為「日頻交易日」：補齊無交易日=0，並讓上下圖日期完全對齊。
+// 修正：等待 single-trades.js 完成渲染 trades 表後，再重建日頻圖（避免全 0 水平線）
 (function () {
   'use strict';
 
@@ -317,14 +318,33 @@
     return head + '\n' + kept.join('\n');
   }
 
-  // ===== 2) 日頻補 0 圖表：從交易明細表重建兩張圖，確保「交易日」齊全 & 上下對齊 =====
+  // ===== 關鍵修正：等待 trades 表渲染完成 =====
+  function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+  async function waitForTradesReady(timeoutMs = 6000) {
+    const t0 = Date.now();
+    const tbody = $('#tradesBody');
+    if (!tbody) return false;
+
+    // 至少等到下一輪 render
+    await sleep(0);
+
+    while (Date.now() - t0 < timeoutMs) {
+      const n = tbody.querySelectorAll('tr').length;
+      // 有些版本可能先塞一行 placeholder，所以用 >=2 更保險；但你的資料通常很多筆
+      if (n >= 1) return true;
+      await sleep(50);
+    }
+    return false;
+  }
+
+  // ===== 2) 日頻補 0 圖表：從交易明細表重建兩張圖 =====
   function parseNumberLoose(s) {
     const x = Number(String(s).replace(/[, ]/g,''));
     return Number.isFinite(x) ? x : 0;
   }
 
   function extractYmdFromDateTimeCell(text) {
-    // 兼容：YYYY/MM/DD、YYYY-MM-DD、YYYYMMDD... 等
     const t = String(text || '');
     let m = t.match(/\b(20\d{2})[\/\-](\d{2})[\/\-](\d{2})\b/);
     if (m) return `${m[1]}${m[2]}${m[3]}`;
@@ -336,13 +356,11 @@
   function rebuildDailyCharts(startYmd, endYmd) {
     if (!window.Chart || !canvasEquity || !canvasDaily) return;
 
-    // 交易日軸（週一到週五），缺的天補 0
     const bizDays = genBizDays(startYmd, endYmd);
     if (!bizDays.length) return;
 
     const cap = parseNumberLoose($('#capitalInput')?.value || '1000000');
 
-    // 從交易明細表彙總每日實際淨損益（含滑價）
     const pnlByDay = new Map();
     const tbody = $('#tradesBody');
     if (tbody) {
@@ -372,13 +390,11 @@
 
     const labels = bizDays.map(fmtYmdSlash);
 
-    // Destroy any existing charts on these canvases (maybe created by single-trades.js)
     const c1 = window.Chart.getChart(canvasEquity);
     if (c1) c1.destroy();
     const c2 = window.Chart.getChart(canvasDaily);
     if (c2) c2.destroy();
 
-    // 上圖：日頻資產曲線（含滑價）
     new window.Chart(canvasEquity.getContext('2d'), {
       type: 'line',
       data: {
@@ -395,9 +411,7 @@
         responsive: true,
         maintainAspectRatio: false,
         interaction: { mode: 'index', intersect: false },
-        plugins: {
-          legend: { display: true }
-        },
+        plugins: { legend: { display: true } },
         scales: {
           x: { ticks: { maxRotation: 0, autoSkip: true } },
           y: { ticks: { callback: (v) => String(v) } }
@@ -405,7 +419,6 @@
       }
     });
 
-    // 下圖：每日淨損益（含滑價，補 0），與上圖同 labels → 完全對齊
     new window.Chart(canvasDaily.getContext('2d'), {
       type: 'bar',
       data: {
@@ -420,9 +433,7 @@
         responsive: true,
         maintainAspectRatio: false,
         interaction: { mode: 'index', intersect: false },
-        plugins: {
-          legend: { display: true }
-        },
+        plugins: { legend: { display: true } },
         scales: {
           x: { ticks: { maxRotation: 0, autoSkip: true } },
           y: { ticks: { callback: (v) => String(v) } }
@@ -455,9 +466,16 @@
     setStatus(`套用時區 ${rk}，重新計算中…`);
     await feedToSingleTrades(`0807_${rk}.txt`, filtered);
 
-    // single-trades.js 完成後，重建「日頻補0」兩張圖
-    rebuildDailyCharts(startYmd, endYmd);
+    // 等 single-trades.js 把 trades 表渲染完，再重建日頻補0圖
+    const ok = await waitForTradesReady(7000);
+    if (!ok) {
+      setStatus('警告：等待交易明細渲染逾時，日頻圖可能暫時顯示為 0（可再按一次「計算」或切換時區）。', true);
+      // 仍嘗試重建一次（至少有軸）
+      rebuildDailyCharts(startYmd, endYmd);
+      return;
+    }
 
+    rebuildDailyCharts(startYmd, endYmd);
     setStatus(`完成：目前顯示 ${fmtYmdSlash(startYmd)} ～ ${fmtYmdSlash(endYmd)}。`);
   }
 
@@ -485,7 +503,6 @@
       let latest = null;
       let list   = [];
 
-      // 最新檔
       if (paramFile) {
         latest = { name: paramFile.split('/').pop() || '0807.txt', fullPath: paramFile, from: 'url' };
       } else {
@@ -510,7 +527,6 @@
       if (!latest) { setStatus('找不到可分析的 0807 檔案。', true); return; }
       if (elLatest) elLatest.textContent = latest.name;
 
-      // 基準檔
       let base = null;
       if (!paramFile) {
         const manifest = await readManifest();
@@ -524,7 +540,6 @@
       }
       if (elBase) elBase.textContent = base ? base.name : '（尚無）';
 
-      // 下載最新 + 基準合併
       setStatus('下載最新 0807 檔案並解碼中…');
       const latestUrl = (latest.from === 'url') ? latest.fullPath : pubUrl(latest.fullPath);
       const rNew = await fetchSmart(latestUrl);
@@ -552,7 +567,6 @@
         end8   = rows.length ? rows[rows.length - 1].ts.slice(0, 8) : '';
       }
 
-      // 設基準按鈕
       if (btnBase) {
         btnBase.disabled = false;
         btnBase.onclick = async () => {
@@ -565,7 +579,6 @@
         };
       }
 
-      // 全量快取（錨=最後一筆資料日）
       const rowsMerged = parseCanon(mergedCanon);
       const trueStartYmd = rowsMerged.length ? rowsMerged[0].ts.slice(0,8) : (start8 || '');
       const trueEndYmd   = rowsMerged.length ? rowsMerged[rowsMerged.length-1].ts.slice(0,8) : (end8 || '');
@@ -577,7 +590,6 @@
 
       if (elPeriod) elPeriod.textContent = `期間（全資料）：${STATE.startYmd || '—'} 開始到 ${STATE.endYmd || '—'} 結束`;
 
-      // 預設 ALL（顯示 KPI）
       setKpiVisibility(true);
       if (rangeHint) {
         rangeHint.textContent =
@@ -587,10 +599,14 @@
       setStatus('已載入（合併後）資料，開始分析（全）…');
       await feedToSingleTrades(latest.name, '0807 MERGED\n' + STATE.fullWithInpos);
 
-      // 首次也重建日頻補0圖表（全區間）
+      const ok = await waitForTradesReady(7000);
       rebuildDailyCharts(STATE.startYmd, STATE.endYmd);
 
-      setStatus('分析完成。可用「時區快選」切換（非全區間將隱藏 KPI，只顯示圖表+交易明細）。');
+      if (!ok) {
+        setStatus('分析完成，但交易明細渲染較慢：日頻圖已生成日期軸，若仍為水平線可再按一次「計算」。', true);
+      } else {
+        setStatus('分析完成。可用「時區快選」切換（非全區間將隱藏 KPI，只顯示圖表+交易明細）。');
+      }
 
     } catch (err) {
       console.error(err);
