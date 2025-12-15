@@ -1,3 +1,6 @@
+// 0807-1.js — 不讀 manifest（避免 400）
+// 日頻圖表：直接用 canonical 交易行自行配對算損益（交易日補0、上下對齊）
+// 注意：此日頻圖為「簡化版損益」（點數×200 - 滑價），不依賴 single-trades.js 表格欄位
 (function () {
   'use strict';
 
@@ -30,9 +33,7 @@
     global: { fetch: (u, o = {}) => fetch(u, { ...o, cache: 'no-store' }) }
   });
 
-  const WANT          = /0807/i;
-  const MANIFEST_PATH = "manifests/0807.json";
-
+  const WANT = /0807/i;
   const CANON_RE   = /^(\d{14})\.0{6}\s+(\d+\.\d{6})\s+(新買|平賣|新賣|平買|強制平倉)\s*$/;
   const EXTRACT_RE = /.*?(\d{14})(?:\.0{1,6})?\s+(\d+(?:\.\d{1,6})?)\s*(新買|平賣|新賣|平買|強制平倉)\s*$/;
 
@@ -40,11 +41,6 @@
     if (!status) return;
     status.textContent = msg;
     status.style.color = bad ? '#c62828' : '#666';
-  }
-
-  function pubUrl(path) {
-    const { data } = sb.storage.from(BUCKET).getPublicUrl(path);
-    return data?.publicUrl || '#';
   }
 
   async function listOnce(prefix) {
@@ -74,6 +70,11 @@
     const m = String(name).match(/\b(20\d{6})\b/g);
     if (!m || !m.length) return 0;
     return Math.max(...m.map(s => +s || 0));
+  }
+
+  function pubUrl(path) {
+    const { data } = sb.storage.from(BUCKET).getPublicUrl(path);
+    return data?.publicUrl || '#';
   }
 
   function normalizeText(raw) {
@@ -129,7 +130,7 @@
     if (!text) return rows;
     for (const line of text.split('\n')) {
       const m = line.match(CANON_RE);
-      if (m) rows.push({ ts: m[1], line });
+      if (m) rows.push({ ts: m[1], px: Number(m[2]), act: m[3], line });
     }
     rows.sort((a, b) => a.ts.localeCompare(b.ts));
     return rows;
@@ -158,8 +159,10 @@
     for (const line of lines) {
       const m = line.match(CANON_RE);
       if (!m) continue;
+
       const ts  = m[1];
       const act = m[3];
+
       if (act === '新買' || act === '新賣') {
         const dir = (act === '新買') ? 1 : -1;
         out.push(line);
@@ -188,28 +191,6 @@
     }
 
     if (runBtn) runBtn.click();
-  }
-
-  // ===== 修正 1：manifest 改用 public url 讀取（避免 400）=====
-  async function readManifest() {
-    try {
-      const url = pubUrl(MANIFEST_PATH); // /object/public/...
-      if (!url || url === '#') return null;
-      const res = await fetch(url, { cache: 'no-store' });
-      if (!res.ok) return null; // 不存在就略過
-      return await res.json();
-    } catch (e) {
-      return null;
-    }
-  }
-
-  async function writeManifest(obj) {
-    // 寫入仍用 SDK upload（你按「設此為基準」才會用到）
-    const blob = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' });
-    const { error } = await sb.storage.from(BUCKET).upload(
-      MANIFEST_PATH, blob, { upsert: true, cacheControl: '0', contentType: 'application/json' }
-    );
-    if (error) throw new Error(error.message);
   }
 
   // ===== 日期工具（交易日：週一到週五）=====
@@ -252,13 +233,6 @@
     return out;
   }
 
-  const STATE = {
-    fullWithInpos: '',
-    startYmd: '',
-    endYmd: '',
-    lastDateObj: null
-  };
-
   function setKpiVisibility(isAll) {
     if (scoreCard)  scoreCard.style.display  = isAll ? '' : 'none';
     if (kpiBadWrap) kpiBadWrap.style.display = isAll ? '' : 'none';
@@ -271,12 +245,9 @@
     btns.forEach(b => b.classList.toggle('active', b.getAttribute('data-range') === rangeKey));
   }
 
-  function computeRange(rangeKey) {
-    const endYmd = STATE.endYmd;
-    const endDt  = STATE.lastDateObj;
-    const allStartYmd = STATE.startYmd;
-
+  function computeRange(rangeKey, allStartYmd, endYmd, endDt) {
     if (!endYmd || !endDt) return { startYmd: allStartYmd, endYmd };
+
     if (rangeKey === 'ALL') return { startYmd: allStartYmd, endYmd };
 
     if (rangeKey === 'W1' || rangeKey === 'W2') {
@@ -300,6 +271,97 @@
     return { startYmd: allStartYmd, endYmd };
   }
 
+  function filterCanonRowsByYmd(rows, startYmd, endYmd) {
+    return rows.filter(r => {
+      const ymd = r.ts.slice(0,8);
+      return ymd >= startYmd && ymd <= endYmd;
+    });
+  }
+
+  // ===== 核心：用 canonical 配對算日損益（點數×200 - 滑價）=====
+  function buildDailyPnlFromCanon(rows, startYmd, endYmd, slipPoints, pointValue) {
+    // 只用交易行：新買/新賣 -> 建倉；平賣/平買/強制平倉 -> 平倉
+    // 若資料不是嚴格一進一出，採「最近一筆建倉」配對「下一筆平倉」
+    const trades = [];
+    let openPos = null; // {dir, entryPx}
+
+    for (const r of rows) {
+      if (r.act === '新買') openPos = { dir: +1, entryPx: r.px };
+      else if (r.act === '新賣') openPos = { dir: -1, entryPx: r.px };
+      else if (r.act === '平賣' || r.act === '平買' || r.act === '強制平倉') {
+        if (!openPos) continue;
+        const exitPx = r.px;
+        const dir = openPos.dir;
+
+        // points pnl
+        const pts = (exitPx - openPos.entryPx) * dir;
+
+        // slip: 每邊 slipPoints，roundtrip = 2 邊
+        const slipPts = (Number(slipPoints) || 0) * 2;
+
+        const pnl = (pts - slipPts) * pointValue;
+
+        trades.push({ exitYmd: r.ts.slice(0,8), pnl });
+        openPos = null;
+      }
+    }
+
+    // 匯總到每天，並補齊交易日
+    const pnlByDay = new Map();
+    for (const t of trades) {
+      pnlByDay.set(t.exitYmd, (pnlByDay.get(t.exitYmd) || 0) + t.pnl);
+    }
+
+    const bizDays = genBizDays(startYmd, endYmd);
+    const dailyPnl = bizDays.map(d => pnlByDay.get(d) || 0);
+
+    return { bizDays, dailyPnl };
+  }
+
+  function rebuildDailyChartsFromCanon(rows, startYmd, endYmd) {
+    if (!window.Chart || !canvasEquity || !canvasDaily) return;
+
+    const cap = Number(String($('#capitalInput')?.value || '1000000').replace(/[,\s]/g,'')) || 1000000;
+    const slip = Number($('#slipInput')?.value || 0) || 0;
+
+    // 台指期：1 點 200（你若要改成參數化，再跟我說）
+    const pointValue = 200;
+
+    const { bizDays, dailyPnl } = buildDailyPnlFromCanon(rows, startYmd, endYmd, slip, pointValue);
+    if (!bizDays.length) return;
+
+    let cum = 0;
+    const equity = dailyPnl.map(p => (cum += p, cap + cum));
+    const labels = bizDays.map(fmtYmdSlash);
+
+    const c1 = window.Chart.getChart(canvasEquity);
+    if (c1) c1.destroy();
+    const c2 = window.Chart.getChart(canvasDaily);
+    if (c2) c2.destroy();
+
+    new window.Chart(canvasEquity.getContext('2d'), {
+      type: 'line',
+      data: { labels, datasets: [{ label:'資產曲線（含滑價，日頻）', data: equity, pointRadius:0, borderWidth:2, tension:0.15 }] },
+      options: {
+        responsive:true, maintainAspectRatio:false,
+        interaction:{mode:'index',intersect:false},
+        plugins:{legend:{display:true}},
+        scales:{ x:{ticks:{maxRotation:0,autoSkip:true}}, y:{ticks:{callback:(v)=>String(v)}} }
+      }
+    });
+
+    new window.Chart(canvasDaily.getContext('2d'), {
+      type: 'bar',
+      data: { labels, datasets: [{ label:'每日淨損益（含滑價，補 0）', data: dailyPnl, borderWidth:0 }] },
+      options: {
+        responsive:true, maintainAspectRatio:false,
+        interaction:{mode:'index',intersect:false},
+        plugins:{legend:{display:true}},
+        scales:{ x:{ticks:{maxRotation:0,autoSkip:true}}, y:{ticks:{callback:(v)=>String(v)}} }
+      }
+    });
+  }
+
   function filterTextByYmd(fullTextWithInpos, startYmd, endYmd) {
     const lines = (fullTextWithInpos || '').split('\n');
     if (!lines.length) return fullTextWithInpos;
@@ -317,143 +379,18 @@
     return head + '\n' + kept.join('\n');
   }
 
-  function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
-
-  async function waitForTradesReady(timeoutMs = 8000) {
-    const t0 = Date.now();
-    const tbody = $('#tradesBody');
-    if (!tbody) return false;
-    await sleep(0);
-
-    while (Date.now() - t0 < timeoutMs) {
-      const n = tbody.querySelectorAll('tr').length;
-      if (n >= 1) return true;
-      await sleep(50);
-    }
-    return false;
-  }
-
-  function parseNumberLoose(s) {
-    const t = String(s || '').replace(/[,\s]/g,'').replace(/[＋+]/g,'+').replace(/[－−]/g,'-');
-    const x = Number(t);
-    return Number.isFinite(x) ? x : 0;
-  }
-
-  function extractYmdFromDateTimeCell(text) {
-    const t = String(text || '');
-    let m = t.match(/\b(20\d{2})[\/\-](\d{2})[\/\-](\d{2})\b/);
-    if (m) return `${m[1]}${m[2]}${m[3]}`;
-    m = t.match(/\b(20\d{6})\b/);
-    if (m) return m[1];
-    return '';
-  }
-
-  // ===== 修正 2：用表頭文字定位欄位，不用固定 index =====
-  function getTradeTableColIndexByHeaderText(wantText) {
-    const ths = document.querySelectorAll('thead.trade-head th');
-    for (let i = 0; i < ths.length; i++) {
-      const txt = (ths[i].textContent || '').trim();
-      if (txt.includes(wantText)) return i;
-    }
-    return -1;
-  }
-
-  function rebuildDailyCharts(startYmd, endYmd) {
-    if (!window.Chart || !canvasEquity || !canvasDaily) return;
-
-    const bizDays = genBizDays(startYmd, endYmd);
-    if (!bizDays.length) return;
-
-    const cap = parseNumberLoose($('#capitalInput')?.value || '1000000');
-
-    const idxDT  = getTradeTableColIndexByHeaderText('日期時間');
-    const idxPNL = getTradeTableColIndexByHeaderText('實際淨損益');
-
-    const pnlByDay = new Map();
-    const tbody = $('#tradesBody');
-    const rows = tbody ? tbody.querySelectorAll('tr') : [];
-
-    // 若抓不到欄位 index，直接提示（避免默默畫水平線）
-    if (idxDT < 0 || idxPNL < 0) {
-      setStatus(`日頻圖表重建失敗：找不到交易表欄位（日期時間=${idxDT}, 實際淨損益=${idxPNL}）。`, true);
-      return;
-    }
-
-    rows.forEach(tr => {
-      const tds = tr.querySelectorAll('td');
-      if (tds.length <= Math.max(idxDT, idxPNL)) return;
-
-      const ymd = extractYmdFromDateTimeCell(tds[idxDT]?.textContent || '');
-      if (!ymd) return;
-
-      const pnl = parseNumberLoose(tds[idxPNL]?.textContent || '0');
-      pnlByDay.set(ymd, (pnlByDay.get(ymd) || 0) + pnl);
-    });
-
-    const dailyPnl = bizDays.map(d => pnlByDay.get(d) || 0);
-    const equity   = [];
-    let cum = 0;
-    for (const p of dailyPnl) { cum += p; equity.push(cap + cum); }
-
-    const labels = bizDays.map(fmtYmdSlash);
-
-    const c1 = window.Chart.getChart(canvasEquity);
-    if (c1) c1.destroy();
-    const c2 = window.Chart.getChart(canvasDaily);
-    if (c2) c2.destroy();
-
-    new window.Chart(canvasEquity.getContext('2d'), {
-      type: 'line',
-      data: { labels, datasets: [{ label:'資產曲線（含滑價，日頻）', data: equity, pointRadius:0, borderWidth:2, tension:0.15 }] },
-      options: { responsive:true, maintainAspectRatio:false, interaction:{mode:'index',intersect:false}, plugins:{legend:{display:true}},
-        scales:{ x:{ticks:{maxRotation:0,autoSkip:true}}, y:{ticks:{callback:(v)=>String(v)}} } }
-    });
-
-    new window.Chart(canvasDaily.getContext('2d'), {
-      type: 'bar',
-      data: { labels, datasets: [{ label:'每日淨損益（含滑價，補 0）', data: dailyPnl, borderWidth:0 }] },
-      options: { responsive:true, maintainAspectRatio:false, interaction:{mode:'index',intersect:false}, plugins:{legend:{display:true}},
-        scales:{ x:{ticks:{maxRotation:0,autoSkip:true}}, y:{ticks:{callback:(v)=>String(v)}} } }
-    });
-  }
-
-  async function applyRange(rangeKey) {
-    const rk = rangeKey || 'ALL';
-    const { startYmd, endYmd } = computeRange(rk);
-
-    setActiveRangeBtn(rk);
-    setKpiVisibility(rk === 'ALL');
-
-    if (rangeHint) rangeHint.textContent = `顯示區間：${fmtYmdSlash(startYmd)} ～ ${fmtYmdSlash(endYmd)}（錨：${fmtYmdSlash(STATE.endYmd)}）`;
-    if (elPeriod)  elPeriod.textContent = `期間（全資料）：${STATE.startYmd || '—'} 開始到 ${STATE.endYmd || '—'} 結束`;
-
-    const fullText = '0807 MERGED\n' + STATE.fullWithInpos;
-    const filtered = (rk === 'ALL') ? fullText : filterTextByYmd(fullText, startYmd, endYmd);
-
-    setStatus(`套用時區 ${rk}，重新計算中…`);
-    await feedToSingleTrades(`0807_${rk}.txt`, filtered);
-
-    const ok = await waitForTradesReady(8000);
-    if (!ok) {
-      setStatus('警告：等待交易明細渲染逾時，日頻圖可能暫時不準（可再按一次「計算」或再切換一次時區）。', true);
-    }
-    rebuildDailyCharts(startYmd, endYmd);
-    setStatus(`完成：目前顯示 ${fmtYmdSlash(startYmd)} ～ ${fmtYmdSlash(endYmd)}。`);
-  }
-
-  function bindRangeUI() {
+  function bindRangeUI(onApply) {
     if (!rangeBar) return;
     rangeBar.addEventListener('click', (e) => {
       const btn = e.target && e.target.closest('button[data-range]');
       if (!btn) return;
-      applyRange(btn.getAttribute('data-range') || 'ALL');
+      onApply(btn.getAttribute('data-range') || 'ALL');
     });
   }
 
   async function boot() {
     try {
       if (!sb) { setStatus('Supabase SDK 未載入或初始化失敗。', true); return; }
-      bindRangeUI();
 
       const url       = new URL(location.href);
       const paramFile = url.searchParams.get('file');
@@ -461,6 +398,7 @@
       let latest = null;
       let list   = [];
 
+      // 最新檔
       if (paramFile) {
         latest = { name: paramFile.split('/').pop() || '0807.txt', fullPath: paramFile, from: 'url' };
       } else {
@@ -482,44 +420,54 @@
       if (!latest) { setStatus('找不到可分析的 0807 檔案。', true); return; }
       if (elLatest) elLatest.textContent = latest.name;
 
-      // baseline from manifest (如果沒有就用次新)
-      let base = null;
-      if (!paramFile) {
-        const manifest = await readManifest(); // 不再 400
-        if (manifest?.baseline_path) {
-          base = list.find(x => x.fullPath === manifest.baseline_path) ||
-                 { name: manifest.baseline_path.split('/').pop() || manifest.baseline_path, fullPath: manifest.baseline_path };
-        } else {
-          base = list[1] || null;
-        }
-      }
+      // 基準：直接用次新（不讀 manifest，避免 400）
+      const base = (!paramFile && list.length >= 2) ? list[1] : null;
       if (elBase) elBase.textContent = base ? base.name : '（尚無）';
 
+      // 下載最新
       setStatus('下載最新 0807 檔案並解碼中…');
       const latestUrl = (latest.from === 'url') ? latest.fullPath : pubUrl(latest.fullPath);
       const rNew = await fetchSmart(latestUrl);
       if (rNew.ok === 0) { setStatus(`最新檔沒有合法交易行（解碼=${rNew.enc}）。`, true); return; }
 
+      // 下載基準並合併
       let mergedCanon = rNew.canon;
-      let start8 = '', end8 = '';
+      let startYmd = '';
+      let endYmd   = '';
 
       if (base) {
         setStatus('下載基準檔並進行合併…');
-        const baseUrl = (base.from === 'url') ? base.fullPath : pubUrl(base.fullPath);
+        const baseUrl = pubUrl(base.fullPath);
         const rBase   = await fetchSmart(baseUrl);
         const m = mergeByBaseline(rBase.canon, rNew.canon);
-        mergedCanon = m.combined; start8 = m.start8; end8 = m.end8;
+        mergedCanon = m.combined;
+        startYmd = m.start8;
+        endYmd   = m.end8;
       } else {
         const rows = parseCanon(rNew.canon);
-        start8 = rows.length ? rows[0].ts.slice(0, 8) : '';
-        end8   = rows.length ? rows[rows.length - 1].ts.slice(0, 8) : '';
+        startYmd = rows.length ? rows[0].ts.slice(0,8) : '';
+        endYmd   = rows.length ? rows[rows.length-1].ts.slice(0,8) : '';
       }
 
+      const allRows = parseCanon(mergedCanon);
+      const trueStartYmd = allRows.length ? allRows[0].ts.slice(0,8) : startYmd;
+      const trueEndYmd   = allRows.length ? allRows[allRows.length-1].ts.slice(0,8) : endYmd;
+      const endDt        = trueEndYmd ? ymdToDate(trueEndYmd) : null;
+
+      if (elPeriod) elPeriod.textContent = `期間（全資料）：${trueStartYmd || '—'} 開始到 ${trueEndYmd || '—'} 結束`;
+
+      // 設此為基準（仍保留：寫入 manifest；若沒權限會顯示錯誤）
       if (btnBase) {
         btnBase.disabled = false;
         btnBase.onclick = async () => {
           try {
-            await writeManifest({ baseline_path: latest.fullPath, updated_at: new Date().toISOString() });
+            const payload = { baseline_path: latest.fullPath, updated_at: new Date().toISOString() };
+            const blob = new Blob([JSON.stringify(payload, null, 2)], { type:'application/json' });
+            const { error } = await sb.storage.from(BUCKET).upload(
+              "manifests/0807.json", blob,
+              { upsert:true, cacheControl:'0', contentType:'application/json' }
+            );
+            if (error) throw new Error(error.message);
             btnBase.textContent = '已設為基準';
           } catch (e) {
             setStatus('寫入基準失敗：' + (e.message || e), true);
@@ -527,27 +475,38 @@
         };
       }
 
-      const rowsMerged = parseCanon(mergedCanon);
-      const trueStartYmd = rowsMerged.length ? rowsMerged[0].ts.slice(0,8) : (start8 || '');
-      const trueEndYmd   = rowsMerged.length ? rowsMerged[rowsMerged.length-1].ts.slice(0,8) : (end8 || '');
-
-      STATE.fullWithInpos = addFakeInpos(mergedCanon);
-      STATE.startYmd = trueStartYmd;
-      STATE.endYmd   = trueEndYmd;
-      STATE.lastDateObj = trueEndYmd ? ymdToDate(trueEndYmd) : null;
-
-      if (elPeriod) elPeriod.textContent = `期間（全資料）：${STATE.startYmd || '—'} 開始到 ${STATE.endYmd || '—'} 結束`;
-      setKpiVisibility(true);
-
-      if (rangeHint) {
-        rangeHint.textContent = `顯示區間：${fmtYmdSlash(STATE.startYmd)} ～ ${fmtYmdSlash(STATE.endYmd)}（錨：${fmtYmdSlash(STATE.endYmd)}）`;
-      }
+      // 先餵給 single-trades.js（讓 KPI/交易明細照舊）
+      const mergedWithInpos = addFakeInpos(mergedCanon);
+      const fullText = '0807 MERGED\n' + mergedWithInpos;
 
       setStatus('已載入（合併後）資料，開始分析（全）…');
-      await feedToSingleTrades(latest.name, '0807 MERGED\n' + STATE.fullWithInpos);
+      await feedToSingleTrades(latest.name, fullText);
 
-      await waitForTradesReady(8000);
-      rebuildDailyCharts(STATE.startYmd, STATE.endYmd);
+      // 時區快選：切換時同時餵 single-trades.js + 重建日頻圖
+      async function applyRange(rangeKey) {
+        const rk = rangeKey || 'ALL';
+        const r = computeRange(rk, trueStartYmd, trueEndYmd, endDt);
+
+        setActiveRangeBtn(rk);
+        setKpiVisibility(rk === 'ALL');
+
+        if (rangeHint) rangeHint.textContent = `顯示區間：${fmtYmdSlash(r.startYmd)} ～ ${fmtYmdSlash(r.endYmd)}（錨：${fmtYmdSlash(trueEndYmd)}）`;
+
+        const filteredText = (rk === 'ALL') ? fullText : filterTextByYmd(fullText, r.startYmd, r.endYmd);
+        await feedToSingleTrades(`0807_${rk}.txt`, filteredText);
+
+        const rowsInRange = filterCanonRowsByYmd(allRows, r.startYmd, r.endYmd);
+        rebuildDailyChartsFromCanon(rowsInRange, r.startYmd, r.endYmd);
+
+        setStatus(`完成：目前顯示 ${fmtYmdSlash(r.startYmd)} ～ ${fmtYmdSlash(r.endYmd)}。`);
+      }
+
+      bindRangeUI(applyRange);
+
+      // 初次：ALL 的日頻圖也畫一次（用全資料）
+      setKpiVisibility(true);
+      if (rangeHint) rangeHint.textContent = `顯示區間：${fmtYmdSlash(trueStartYmd)} ～ ${fmtYmdSlash(trueEndYmd)}（錨：${fmtYmdSlash(trueEndYmd)}）`;
+      rebuildDailyChartsFromCanon(allRows, trueStartYmd, trueEndYmd);
 
       setStatus('分析完成。可用「時區快選」切換（非全區間將隱藏 KPI，只顯示圖表+交易明細）。');
     } catch (err) {
