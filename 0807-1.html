@@ -110,13 +110,28 @@
       white-space: nowrap;
     }
 
-    /* 時區快選 */
-    .toolbar select {
-      padding: 3px 8px;
+    /* 時區快選按鈕列 */
+    .range-bar {
+      display: flex;
+      gap: 4px;
+      align-items: center;
+      flex-wrap: nowrap;
+    }
+    .range-btn {
       border: 1px solid #d1d5db;
-      border-radius: 999px;
-      font-size: 12px;
       background: #fff;
+      border-radius: 999px;
+      padding: 3px 10px;
+      font-size: 12px;
+      cursor: pointer;
+      white-space: nowrap;
+      color: #333;
+    }
+    .range-btn:hover { background: #f3f4f6; }
+    .range-btn.active {
+      background: #0d6efd;
+      border-color: #0d6efd;
+      color: #fff;
     }
 
     .file-block {
@@ -255,20 +270,19 @@
           <input type="number" id="slipInput" value="2" step="0.1">
         </label>
 
-        <label>
-          時區：
-          <select id="rangeSelect">
-            <option value="all">全</option>
-            <option value="w1">近1週</option>
-            <option value="w2">近2週</option>
-            <option value="m1">近1月</option>
-            <option value="m2">近2月</option>
-            <option value="m3">近3月</option>
-            <option value="m6">近6月</option>
-            <option value="y1">近1年</option>
-          </select>
-        </label>
+        <!-- 時區快選：直接排列可點選 -->
+        <div class="range-bar" id="rangeBar" aria-label="時區快選">
+          <button class="range-btn active" data-range="all" type="button">全</button>
+          <button class="range-btn" data-range="w1" type="button">近1週</button>
+          <button class="range-btn" data-range="w2" type="button">近2週</button>
+          <button class="range-btn" data-range="m1" type="button">近1月</button>
+          <button class="range-btn" data-range="m2" type="button">近2月</button>
+          <button class="range-btn" data-range="m3" type="button">近3月</button>
+          <button class="range-btn" data-range="m6" type="button">近6月</button>
+          <button class="range-btn" data-range="y1" type="button">近1年</button>
+        </div>
 
+        <!-- TXT 檔 + 雲端檔 block：在 0807 頁面隱藏，但保留給 single-trades.js 使用 -->
         <div class="file-block">
           <label>
             TXT 檔：
