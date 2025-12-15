@@ -1,4 +1,4 @@
-// 0807-1.js — 時區快選(圖表內按鈕) + 只在「全」顯示 KPI + 日線補 0 + 上下圖交易日對齊
+// 0807-1.js — 圖表內時區兩行 + 只在「全」顯示 KPI + 日線補 0 + 修正民國日期 + 修正 Canvas in use
 (function () {
   'use strict';
 
@@ -205,6 +205,7 @@
     if (error) throw new Error(error.message);
   }
 
+  // ===== 日期/交易日 =====
   function ymd8ToDate(ymd8) {
     const y = +ymd8.slice(0, 4);
     const m = +ymd8.slice(4, 6);
@@ -266,7 +267,6 @@
 
   function getRangeByPreset(preset, end8) {
     if (preset === 'all') return { start8: _mergedStart8, end8: _mergedEnd8, showKpi: true };
-
     const map = { w1: 5, w2: 10, m1: 22, m2: 44, m3: 66, m6: 132, y1: 252 };
     const n = map[preset] || 10;
     const r = tradingDayRangeEndingAt(end8, n);
@@ -282,9 +282,27 @@
     return keep.map(x => x.line).join('\n');
   }
 
+  function toggleKpi(show) {
+    const on = !!show;
+    if (scoreCard)  scoreCard.classList.toggle('hide-kpi', !on);
+    if (kpiBadWrap) kpiBadWrap.classList.toggle('hide-kpi', !on);
+    if (kpiAllWrap) kpiAllWrap.classList.toggle('hide-kpi', !on);
+  }
+
+  // ✅ 先 destroy chart，避免 Canvas already in use
+  function destroyChartsNow() {
+    const cEq = $('#equityChart');
+    const cPn = $('#weeklyPnlChart');
+    try { const x = Chart.getChart(cEq); if (x) x.destroy(); } catch (e) {}
+    try { const y = Chart.getChart(cPn); if (y) y.destroy(); } catch (e) {}
+  }
+
   async function feedToSingleTrades(filename, mergedTextWithHeaderAndInpos) {
     const fileInput = $('#fileInput');
     const runBtn    = $('#runBtn');
+
+    // ✅ 關鍵：每次重算前先 destroy，避免 single-trades.js 重畫報錯
+    destroyChartsNow();
 
     const fname = filename || '0807.txt';
     const file  = new File([mergedTextWithHeaderAndInpos], fname, { type: 'text/plain' });
@@ -303,17 +321,39 @@
     if (runBtn) runBtn.click();
   }
 
-  function toggleKpi(show) {
-    const on = !!show;
-    if (scoreCard)  scoreCard.classList.toggle('hide-kpi', !on);
-    if (kpiBadWrap) kpiBadWrap.classList.toggle('hide-kpi', !on);
-    if (kpiAllWrap) kpiAllWrap.classList.toggle('hide-kpi', !on);
-  }
-
   function parseNumber(text) {
     const t = String(text || '').replace(/,/g, '').trim();
     const n = Number(t);
     return Number.isFinite(n) ? n : 0;
+  }
+
+  // ✅ 支援：西元 2025/12/10、民國 113/12/10
+  function parseTradeRowDate8(dtText) {
+    const s = String(dtText || '').trim();
+
+    // 西元
+    let m = s.match(/(20\d{2})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+    if (m) {
+      const y = m[1];
+      const mm = String(m[2]).padStart(2, '0');
+      const dd = String(m[3]).padStart(2, '0');
+      return `${y}${mm}${dd}`;
+    }
+
+    // 民國（2~3位年）
+    m = s.match(/\b(\d{2,3})[\/\-](\d{1,2})[\/\-](\d{1,2})\b/);
+    if (m) {
+      const rocY = Number(m[1]);
+      // 防誤判：若 rocY 太大（>=1911）就不當民國
+      if (rocY > 0 && rocY < 1911) {
+        const y = String(rocY + 1911);
+        const mm = String(m[2]).padStart(2, '0');
+        const dd = String(m[3]).padStart(2, '0');
+        return `${y}${mm}${dd}`;
+      }
+    }
+
+    return '';
   }
 
   function rebuildDailyCharts(start8, end8) {
@@ -331,13 +371,8 @@
       if (!tds || tds.length < 11) continue;
 
       const dtText = (tds[1]?.textContent || '').trim();
-      const m = dtText.match(/(20\d{2})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
-      if (!m) continue;
-      const y = m[1];
-      const mm = String(m[2]).padStart(2, '0');
-      const dd = String(m[3]).padStart(2, '0');
-      const d8 = `${y}${mm}${dd}`;
-      if (!dayPnl.has(d8)) continue;
+      const d8 = parseTradeRowDate8(dtText);
+      if (!d8 || !dayPnl.has(d8)) continue;
 
       const actual = parseNumber(tds[9]?.textContent);
       const theo   = parseNumber(tds[7]?.textContent);
@@ -352,11 +387,11 @@
     let cum = 0;
     const equity = daily.map(v => (cum += v));
 
+    // ✅ 我們自己重畫，所以先 destroy
+    destroyChartsNow();
+
     const cEq = $('#equityChart');
     const cPn = $('#weeklyPnlChart');
-
-    try { const oldEq = Chart.getChart(cEq); if (oldEq) oldEq.destroy(); } catch (e) {}
-    try { const oldPn = Chart.getChart(cPn); if (oldPn) oldPn.destroy(); } catch (e) {}
 
     if (cEq) {
       new Chart(cEq, {
@@ -374,7 +409,12 @@
           responsive: true,
           maintainAspectRatio: false,
           interaction: { mode: 'index', intersect: false },
-          scales: { x: { ticks: { maxRotation: 0, autoSkip: true } } }
+          plugins: {
+            legend: { display: false } // ✅ 禁用 legend（我們用上方文字）
+          },
+          scales: {
+            x: { ticks: { maxRotation: 0, autoSkip: true } }
+          }
         }
       });
     }
@@ -384,13 +424,21 @@
         type: 'bar',
         data: {
           labels,
-          datasets: [{ label: '每日淨損益（無交易=0）', data: daily }]
+          datasets: [{
+            label: '每日淨損益（無交易=0）',
+            data: daily
+          }]
         },
         options: {
           responsive: true,
           maintainAspectRatio: false,
           interaction: { mode: 'index', intersect: false },
-          scales: { x: { ticks: { maxRotation: 0, autoSkip: true } } }
+          plugins: {
+            legend: { display: false } // ✅ 禁用 legend（我們用上方文字）
+          },
+          scales: {
+            x: { ticks: { maxRotation: 0, autoSkip: true } }
+          }
         }
       });
     }
@@ -411,8 +459,6 @@
         applyRange(preset);
       });
     });
-
-    // 保險：預設全
     setActiveRangeButton('all');
   }
 
@@ -427,8 +473,7 @@
 
     if (elPeriod) {
       elPeriod.textContent =
-        `期間：${rocFmt(start8) || '—'}（${ymd8ToSlash(start8)}）～ ` +
-        `${rocFmt(end8) || '—'}（${ymd8ToSlash(end8)}）`;
+        `期間：${rocFmt(start8)}（${ymd8ToSlash(start8)}）～ ${rocFmt(end8)}（${ymd8ToSlash(end8)}）`;
     }
 
     const slicedCanon = filterCanonByYmdRange(_mergedCanon, start8, end8);
@@ -438,6 +483,7 @@
     setStatus(`套用時區：${preset}（${rocFmt(start8)}～${rocFmt(end8)}），重新分析…`);
     await feedToSingleTrades((elLatest?.textContent || '0807.txt'), finalText);
 
+    // 等 single-trades.js 先把表格填好，再用表格重建每日圖
     setTimeout(() => {
       try {
         rebuildDailyCharts(start8, end8);
@@ -549,7 +595,6 @@
         };
       }
 
-      // 綁定「圖表內」的時區按鈕
       bindRangeButtons();
 
       toggleKpi(true);
