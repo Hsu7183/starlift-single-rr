@@ -1,39 +1,60 @@
-// 0807-1.js — 圖表內時區兩行 + 只在「全」顯示 KPI + 日線補 0 + 修正民國日期 + 修正 Canvas in use
+// 0807.js — 0807-1
+// 1) 自動找最新 0807 + 基準合併，餵給 single-trades.js 做 KPI/表格
+// 2) 圖表改由本檔接手：以「每日」序列（補齊無交易日=0），上下圖交易日對齊
+// 3) 增加時區快選：近1週/2週/1~6月/1年/全；只有「全」顯示 KPI
 (function () {
   'use strict';
 
   const $ = (s) => document.querySelector(s);
+  const $$ = (s) => Array.from(document.querySelectorAll(s));
 
-  const status     = $('#autostatus');
-  const elLatest   = $('#latestName');
-  const elBase     = $('#baseName');
-  const elPeriod   = $('#periodText');
-  const btnBase    = $('#btnSetBaseline');
+  const status   = $('#autostatus');
+  const elLatest = $('#latestName');
+  const elBase   = $('#baseName');
+  const elPeriod = $('#periodText');
+  const btnBase  = $('#btnSetBaseline');
+  const elHint   = $('#rangeHint');
 
-  const scoreCard  = $('#scoreCard');
-  const kpiBadWrap = $('#kpiBadWrap');
-  const kpiAllWrap = $('#kpiAllWrap');
+  const wrapScore = $('#scoreCard');
+  const wrapBad   = $('#kpiBadWrap');
+  const wrapAll   = $('#kpiAllWrap');
+
+  const tradesBody = $('#tradesBody');
 
   if (status) status.style.whiteSpace = 'pre-wrap';
 
+  // Supabase 設定（與其他頁一致）
   const SUPABASE_URL  = "https://byhbmmnacezzgkwfkozs.supabase.co";
   const SUPABASE_ANON = "sb_publishable_xVe8fGbqQ0XGwi4DsmjPMg_Y2RBOD3t";
   const BUCKET        = "reports";
 
-  const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON, {
+  const sb = window.supabase?.createClient(SUPABASE_URL, SUPABASE_ANON, {
     global: { fetch: (u, o = {}) => fetch(u, { ...o, cache: 'no-store' }) }
   });
 
   const WANT          = /0807/i;
   const MANIFEST_PATH = "manifests/0807.json";
 
+  // canonical 3 欄行
   const CANON_RE   = /^(\d{14})\.0{6}\s+(\d+\.\d{6})\s+(新買|平賣|新賣|平買|強制平倉)\s*$/;
   const EXTRACT_RE = /.*?(\d{14})(?:\.0{1,6})?\s+(\d+(?:\.\d{1,6})?)\s*(新買|平賣|新賣|平買|強制平倉)\s*$/;
 
-  let _mergedCanon = '';
-  let _mergedStart8 = '';
-  let _mergedEnd8   = '';
-  let _lastTradeDate8 = '';
+  // ======== 全域快取（single-trades 產出的交易明細→我們拿來做每日圖 & 區間切換） ========
+  const CACHE = {
+    ready: false,
+    // from rendered table
+    trades: [],   // [{idx, tsStr, date8, dtText, price, side, pts, fee, tax, theo, act}]
+    // full-range bounds (from merged canon)
+    fullStart8: '',
+    fullEnd8: '',
+    // latestEnd date object (for anchor)
+    anchorEnd: null,
+    // chart instances
+    eqChart: null,
+    pnlChart: null,
+    // current range key
+    rangeKey: 'all'
+  };
 
   function setStatus(msg, bad = false) {
     if (!status) return;
@@ -56,10 +77,10 @@
     return (data || [])
       .filter(it => !(it.id === null && !it.metadata))
       .map(it => ({
-        name    : it.name,
-        fullPath: p + it.name,
+        name     : it.name,
+        fullPath : p + it.name,
         updatedAt: it.updated_at ? Date.parse(it.updated_at) : 0,
-        size    : it.metadata?.size || 0
+        size     : it.metadata?.size || 0
       }));
   }
 
@@ -75,6 +96,7 @@
     return Math.max(...m.map(s => +s || 0));
   }
 
+  // ===== 文字正規化 & canonical 行抽取 =====
   function normalizeText(raw) {
     let s = raw
       .replace(/\ufeff/gi, '')
@@ -142,6 +164,7 @@
     return rows;
   }
 
+  // combined = base 全部 + (latest 裡 ts > baseMax 的行)
   function mergeByBaseline(baseText, latestText) {
     const A = parseCanon(baseText);
     const B = parseCanon(latestText);
@@ -149,10 +172,7 @@
     const baseMin = A.length ? A[0].ts.slice(0, 8) : (B.length ? B[0].ts.slice(0, 8) : '');
     const baseMax = A.length ? A[A.length - 1].ts : '';
 
-    const added = baseMax
-      ? B.filter(x => x.ts > baseMax).map(x => x.line)
-      : B.map(x => x.line);
-
+    const added = baseMax ? B.filter(x => x.ts > baseMax).map(x => x.line) : B.map(x => x.line);
     const mergedLines = [...A.map(x => x.line), ...added];
 
     const endDay = mergedLines.length
@@ -162,8 +182,12 @@
     return { combined: mergedLines.join('\n'), start8: baseMin, end8: endDay };
   }
 
+  // 插入假的 INPOS 行（維持你原本邏輯）
   function addFakeInpos(text) {
-    const lines = (text || '').split('\n').map(s => s.trim()).filter(Boolean);
+    const lines = (text || '')
+      .split('\n')
+      .map(s => s.trim())
+      .filter(Boolean);
 
     const out = [];
     for (const line of lines) {
@@ -182,6 +206,27 @@
       }
     }
     return out.join('\n');
+  }
+
+  async function feedToSingleTrades(filename, mergedText) {
+    const fileInput = $('#fileInput');
+    const runBtn    = $('#runBtn');
+
+    const fname = filename || '0807.txt';
+    const file  = new File([mergedText], fname, { type: 'text/plain' });
+
+    if (window.__singleTrades_setFile) {
+      window.__singleTrades_setFile(file);
+    }
+
+    if (fileInput) {
+      const dt = new DataTransfer();
+      dt.items.add(file);
+      fileInput.files = dt.files;
+      fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    if (runBtn) runBtn.click();
   }
 
   async function readManifest() {
@@ -205,304 +250,372 @@
     if (error) throw new Error(error.message);
   }
 
-  // ===== 日期/交易日 =====
-  function ymd8ToDate(ymd8) {
-    const y = +ymd8.slice(0, 4);
-    const m = +ymd8.slice(4, 6);
-    const d = +ymd8.slice(6, 8);
-    return new Date(y, m - 1, d);
+  // =========================
+  // 區間計算（以最新日為錨）
+  // =========================
+  function ymdToDate(yyyymmdd) {
+    const y = +yyyymmdd.slice(0, 4);
+    const m = +yyyymmdd.slice(4, 6) - 1;
+    const d = +yyyymmdd.slice(6, 8);
+    return new Date(y, m, d);
   }
-  function dateToYmd8(dt) {
-    const y = dt.getFullYear();
-    const m = String(dt.getMonth() + 1).padStart(2, '0');
-    const d = String(dt.getDate()).padStart(2, '0');
-    return `${y}${m}${d}`;
+
+  function dateToYMD(d) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${y}${m}${dd}`;
   }
-  function isWeekend(dt) {
-    const w = dt.getDay();
-    return w === 0 || w === 6;
+
+  function fmtYMD(yyyymmdd) {
+    if (!yyyymmdd || yyyymmdd.length !== 8) return '—';
+    return `${yyyymmdd.slice(0,4)}/${yyyymmdd.slice(4,6)}/${yyyymmdd.slice(6,8)}`;
   }
-  function prevTradingDay(dt) {
-    const x = new Date(dt.getTime());
-    x.setDate(x.getDate() - 1);
-    while (isWeekend(x)) x.setDate(x.getDate() - 1);
+
+  function mondayOfWeek(d) {
+    const x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    const day = x.getDay(); // 0=Sun..6=Sat
+    const delta = (day === 0) ? -6 : (1 - day);
+    x.setDate(x.getDate() + delta);
     return x;
   }
-  function tradingDayRangeEndingAt(end8, count) {
-    let endD = ymd8ToDate(end8);
-    while (isWeekend(endD)) endD = prevTradingDay(endD);
 
-    let startD = new Date(endD.getTime());
-    let needed = Math.max(1, count);
-    let got = 1;
-    while (got < needed) {
-      startD = prevTradingDay(startD);
-      got++;
-    }
-    return { start8: dateToYmd8(startD), end8: dateToYmd8(endD) };
+  function addMonths(d, n) {
+    const x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    const targetMonth = x.getMonth() + n;
+    const y = x.getFullYear() + Math.floor(targetMonth / 12);
+    const m = ((targetMonth % 12) + 12) % 12;
+    // 盡量保持「同日」，若該月沒有該日，JS 會自動進位；我們要拉回月底
+    const day = x.getDate();
+    const t = new Date(y, m, 1);
+    const lastDay = new Date(y, m + 1, 0).getDate();
+    t.setDate(Math.min(day, lastDay));
+    return t;
   }
-  function enumerateTradingDays(start8, end8) {
-    const out = [];
-    let d = ymd8ToDate(start8);
-    const end = ymd8ToDate(end8);
+
+  function calcRange(rangeKey) {
+    const end = CACHE.anchorEnd;
+    if (!end) return { start8: CACHE.fullStart8, end8: CACHE.fullEnd8 };
+
+    let startDate = null;
+
+    if (rangeKey === 'all') {
+      return { start8: CACHE.fullStart8, end8: CACHE.fullEnd8 };
+    }
+
+    if (rangeKey === '1w') {
+      startDate = mondayOfWeek(end);
+    } else if (rangeKey === '2w') {
+      const prevWeek = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+      prevWeek.setDate(prevWeek.getDate() - 7);
+      startDate = mondayOfWeek(prevWeek);
+    } else if (rangeKey === '1m') {
+      startDate = addMonths(end, -1);
+    } else if (rangeKey === '2m') {
+      startDate = addMonths(end, -2);
+    } else if (rangeKey === '3m') {
+      startDate = addMonths(end, -3);
+    } else if (rangeKey === '6m') {
+      startDate = addMonths(end, -6);
+    } else if (rangeKey === '1y') {
+      startDate = addMonths(end, -12);
+    } else {
+      startDate = ymdToDate(CACHE.fullStart8);
+    }
+
+    const start8 = dateToYMD(startDate);
+    const end8   = dateToYMD(end);
+    return { start8, end8 };
+  }
+
+  function isWeekend(yyyymmdd) {
+    const d = ymdToDate(yyyymmdd);
+    const w = d.getDay();
+    return (w === 0 || w === 6);
+  }
+
+  function buildTradingDays(start8, end8) {
+    const days = [];
+    let d = ymdToDate(start8);
+    const end = ymdToDate(end8);
     while (d <= end) {
-      if (!isWeekend(d)) out.push(dateToYmd8(d));
-      d = new Date(d.getTime());
+      const ymd = dateToYMD(d);
+      if (!isWeekend(ymd)) days.push(ymd);
       d.setDate(d.getDate() + 1);
     }
-    return out;
-  }
-  function rocFmt(ymd8) {
-    if (!ymd8 || ymd8.length !== 8) return ymd8 || '';
-    const y = +ymd8.slice(0, 4);
-    const roc = y - 1911;
-    const m = +ymd8.slice(4, 6);
-    const d = +ymd8.slice(6, 8);
-    return `${roc}/${String(m)}/${String(d)}`;
-  }
-  function ymd8ToSlash(ymd8) {
-    if (!ymd8 || ymd8.length !== 8) return ymd8 || '';
-    return `${ymd8.slice(0,4)}/${ymd8.slice(4,6)}/${ymd8.slice(6,8)}`;
+    return days;
   }
 
-  function getRangeByPreset(preset, end8) {
-    if (preset === 'all') return { start8: _mergedStart8, end8: _mergedEnd8, showKpi: true };
-    const map = { w1: 5, w2: 10, m1: 22, m2: 44, m3: 66, m6: 132, y1: 252 };
-    const n = map[preset] || 10;
-    const r = tradingDayRangeEndingAt(end8, n);
-    return { start8: r.start8, end8: r.end8, showKpi: false };
+  // =========================
+  // 從交易明細表抓資料（single-trades 渲染後）
+  // =========================
+  function parseNumberLike(s) {
+    if (s == null) return 0;
+    const t = String(s).replace(/,/g, '').trim();
+    if (!t) return 0;
+    const v = Number(t);
+    return Number.isFinite(v) ? v : 0;
   }
 
-  function filterCanonByYmdRange(canonText, start8, end8) {
-    const rows = parseCanon(canonText);
-    const keep = rows.filter(r => {
-      const d8 = r.ts.slice(0, 8);
-      return d8 >= start8 && d8 <= end8;
-    });
-    return keep.map(x => x.line).join('\n');
-  }
+  function captureRenderedTrades() {
+    const rows = $$('#tradesBody tr');
+    if (!rows.length) return false;
 
-  function toggleKpi(show) {
-    const on = !!show;
-    if (scoreCard)  scoreCard.classList.toggle('hide-kpi', !on);
-    if (kpiBadWrap) kpiBadWrap.classList.toggle('hide-kpi', !on);
-    if (kpiAllWrap) kpiAllWrap.classList.toggle('hide-kpi', !on);
-  }
-
-  // ✅ 先 destroy chart，避免 Canvas already in use
-  function destroyChartsNow() {
-    const cEq = $('#equityChart');
-    const cPn = $('#weeklyPnlChart');
-    try { const x = Chart.getChart(cEq); if (x) x.destroy(); } catch (e) {}
-    try { const y = Chart.getChart(cPn); if (y) y.destroy(); } catch (e) {}
-  }
-
-  async function feedToSingleTrades(filename, mergedTextWithHeaderAndInpos) {
-    const fileInput = $('#fileInput');
-    const runBtn    = $('#runBtn');
-
-    // ✅ 關鍵：每次重算前先 destroy，避免 single-trades.js 重畫報錯
-    destroyChartsNow();
-
-    const fname = filename || '0807.txt';
-    const file  = new File([mergedTextWithHeaderAndInpos], fname, { type: 'text/plain' });
-
-    if (window.__singleTrades_setFile) {
-      window.__singleTrades_setFile(file);
-    }
-
-    if (fileInput) {
-      const dt = new DataTransfer();
-      dt.items.add(file);
-      fileInput.files = dt.files;
-      fileInput.dispatchEvent(new Event('change', { bubbles: true }));
-    }
-
-    if (runBtn) runBtn.click();
-  }
-
-  function parseNumber(text) {
-    const t = String(text || '').replace(/,/g, '').trim();
-    const n = Number(t);
-    return Number.isFinite(n) ? n : 0;
-  }
-
-  // ✅ 支援：西元 2025/12/10、民國 113/12/10
-  function parseTradeRowDate8(dtText) {
-    const s = String(dtText || '').trim();
-
-    // 西元
-    let m = s.match(/(20\d{2})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
-    if (m) {
-      const y = m[1];
-      const mm = String(m[2]).padStart(2, '0');
-      const dd = String(m[3]).padStart(2, '0');
-      return `${y}${mm}${dd}`;
-    }
-
-    // 民國（2~3位年）
-    m = s.match(/\b(\d{2,3})[\/\-](\d{1,2})[\/\-](\d{1,2})\b/);
-    if (m) {
-      const rocY = Number(m[1]);
-      // 防誤判：若 rocY 太大（>=1911）就不當民國
-      if (rocY > 0 && rocY < 1911) {
-        const y = String(rocY + 1911);
-        const mm = String(m[2]).padStart(2, '0');
-        const dd = String(m[3]).padStart(2, '0');
-        return `${y}${mm}${dd}`;
-      }
-    }
-
-    return '';
-  }
-
-  function rebuildDailyCharts(start8, end8) {
-    const tbody = $('#tradesBody');
-    if (!tbody) return;
-
-    const days = enumerateTradingDays(start8, end8);
-    if (!days.length) return;
-
-    const dayPnl = new Map(days.map(d => [d, 0]));
-
-    const rows = Array.from(tbody.querySelectorAll('tr'));
+    const parsed = [];
     for (const tr of rows) {
-      const tds = tr.querySelectorAll('td');
-      if (!tds || tds.length < 11) continue;
+      const tds = Array.from(tr.querySelectorAll('td')).map(td => td.textContent.trim());
+      // 期望欄位：# / 日期時間 / 成交點位 / 類別 / 點數 / 手續費 / 交易稅 / 理論淨損益 / 累積理論 / 實際淨損益 / 累積實際
+      if (tds.length < 11) continue;
 
-      const dtText = (tds[1]?.textContent || '').trim();
-      const d8 = parseTradeRowDate8(dtText);
-      if (!d8 || !dayPnl.has(d8)) continue;
+      const idx = parseNumberLike(tds[0]);
+      const dtText = tds[1];
+      // dtText 可能是 YYYY/MM/DD HH:MM:SS 或 YYYY-MM-DD ...；抓出 8 碼日期
+      const m = dtText.match(/(20\d{2})[\/\-](\d{2})[\/\-](\d{2})/);
+      const date8 = m ? `${m[1]}${m[2]}${m[3]}` : '';
 
-      const actual = parseNumber(tds[9]?.textContent);
-      const theo   = parseNumber(tds[7]?.textContent);
-      const useVal = (tds[9] && tds[9].textContent != null) ? actual : theo;
-
-      dayPnl.set(d8, (dayPnl.get(d8) || 0) + useVal);
+      parsed.push({
+        idx,
+        dtText,
+        date8,
+        price: parseNumberLike(tds[2]),
+        side : tds[3],
+        pts  : parseNumberLike(tds[4]),
+        fee  : parseNumberLike(tds[5]),
+        tax  : parseNumberLike(tds[6]),
+        theo : parseNumberLike(tds[7]),
+        act  : parseNumberLike(tds[9]),
+      });
     }
 
-    const labels = days.map(d8 => rocFmt(d8));
-    const daily  = days.map(d8 => dayPnl.get(d8) || 0);
+    // 依 idx 排序
+    parsed.sort((a,b) => a.idx - b.idx);
+
+    CACHE.trades = parsed;
+    CACHE.ready = true;
+
+    // anchorEnd 以「最後一筆交易日期」為準（你要的是 114/12/12 那種最新日錨）
+    const last = parsed.length ? parsed[parsed.length - 1] : null;
+    if (last?.date8) CACHE.anchorEnd = ymdToDate(last.date8);
+
+    return true;
+  }
+
+  // =========================
+  // 交易明細：依區間重建（累積欄位要從 0 開始）
+  // =========================
+  function rebuildTradesTableForRange(start8, end8) {
+    if (!tradesBody) return;
+
+    const inRange = CACHE.trades.filter(x => x.date8 && x.date8 >= start8 && x.date8 <= end8);
+
+    let cumTheo = 0;
+    let cumAct  = 0;
+
+    const html = inRange.map((x, i) => {
+      cumTheo += x.theo;
+      cumAct  += x.act;
+
+      const clsTheo = x.theo >= 0 ? 'num-pos' : 'num-neg';
+      const clsCumTheo = cumTheo >= 0 ? 'num-pos' : 'num-neg';
+      const clsAct = x.act >= 0 ? 'num-pos' : 'num-neg';
+      const clsCumAct = cumAct >= 0 ? 'num-pos' : 'num-neg';
+
+      return `
+        <tr>
+          <td>${i + 1}</td>
+          <td style="text-align:left;">${x.dtText}</td>
+          <td>${x.price ? x.price.toFixed(0) : ''}</td>
+          <td style="text-align:center;">${x.side || ''}</td>
+          <td>${Number.isFinite(x.pts) ? x.pts.toFixed(0) : ''}</td>
+          <td>${Number.isFinite(x.fee) ? x.fee.toFixed(0) : ''}</td>
+          <td>${Number.isFinite(x.tax) ? x.tax.toFixed(0) : ''}</td>
+          <td class="${clsTheo}">${Number.isFinite(x.theo) ? x.theo.toFixed(0) : ''}</td>
+          <td class="${clsCumTheo}">${cumTheo.toFixed(0)}</td>
+          <td class="${clsAct}">${Number.isFinite(x.act) ? x.act.toFixed(0) : ''}</td>
+          <td class="${clsCumAct}">${cumAct.toFixed(0)}</td>
+        </tr>
+      `;
+    }).join('');
+
+    tradesBody.innerHTML = html || `<tr><td colspan="11" style="text-align:center;color:#777;">（此區間沒有交易）</td></tr>`;
+  }
+
+  // =========================
+  // 每日序列：補齊交易日（無交易=0）
+  // =========================
+  function buildDailySeries(start8, end8) {
+    const days = buildTradingDays(start8, end8);
+
+    // 先把每日損益聚合起來（用「實際淨損益 act」）
+    const map = new Map(); // date8 -> dailyAct
+    for (const t of CACHE.trades) {
+      if (!t.date8) continue;
+      if (t.date8 < start8 || t.date8 > end8) continue;
+      map.set(t.date8, (map.get(t.date8) || 0) + (t.act || 0));
+    }
+
+    const labels = [];
+    const dailyPnl = [];
+    const equity = [];
 
     let cum = 0;
-    const equity = daily.map(v => (cum += v));
-
-    // ✅ 我們自己重畫，所以先 destroy
-    destroyChartsNow();
-
-    const cEq = $('#equityChart');
-    const cPn = $('#weeklyPnlChart');
-
-    if (cEq) {
-      new Chart(cEq, {
-        type: 'line',
-        data: {
-          labels,
-          datasets: [{
-            label: '累積淨損益（每日）',
-            data: equity,
-            tension: 0.15,
-            pointRadius: 0
-          }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          interaction: { mode: 'index', intersect: false },
-          plugins: {
-            legend: { display: false } // ✅ 禁用 legend（我們用上方文字）
-          },
-          scales: {
-            x: { ticks: { maxRotation: 0, autoSkip: true } }
-          }
-        }
-      });
+    for (const d8 of days) {
+      const v = map.get(d8) || 0;
+      cum += v;
+      labels.push(fmtYMD(d8));
+      dailyPnl.push(v);
+      equity.push(cum);
     }
-
-    if (cPn) {
-      new Chart(cPn, {
-        type: 'bar',
-        data: {
-          labels,
-          datasets: [{
-            label: '每日淨損益（無交易=0）',
-            data: daily
-          }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          interaction: { mode: 'index', intersect: false },
-          plugins: {
-            legend: { display: false } // ✅ 禁用 legend（我們用上方文字）
-          },
-          scales: {
-            x: { ticks: { maxRotation: 0, autoSkip: true } }
-          }
-        }
-      });
-    }
+    return { labels, dailyPnl, equity };
   }
 
-  function setActiveRangeButton(preset) {
-    const btns = document.querySelectorAll('.range-btn');
-    btns.forEach(b => b.classList.toggle('active', b.dataset.range === preset));
+  // =========================
+  // 圖表渲染（上下同交易日）
+  // =========================
+  function ensureChartsDestroyed() {
+    try { CACHE.eqChart?.destroy(); } catch (e) {}
+    try { CACHE.pnlChart?.destroy(); } catch (e) {}
+    CACHE.eqChart = null;
+    CACHE.pnlChart = null;
+  }
+
+  function renderChartsForRange(start8, end8) {
+    const c1 = $('#equityChart');
+    const c2 = $('#weeklyPnlChart');
+    if (!c1 || !c2) return;
+
+    const { labels, dailyPnl, equity } = buildDailySeries(start8, end8);
+
+    ensureChartsDestroyed();
+
+    // 上：累積實際淨損益
+    CACHE.eqChart = new Chart(c1, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [{
+          label: '累積實際淨損益（每日）',
+          data: equity,
+          borderWidth: 2,
+          pointRadius: 0,
+          tension: 0.15
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: true }
+        },
+        scales: {
+          x: {
+            ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: 12 }
+          },
+          y: {
+            ticks: { callback: (v) => String(Math.round(v)) }
+          }
+        }
+      }
+    });
+
+    // 下：每日實際淨損益（無交易=0）
+    CACHE.pnlChart = new Chart(c2, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [{
+          label: '每日實際淨損益（無交易=0）',
+          data: dailyPnl,
+          borderWidth: 1
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: true } },
+        scales: {
+          x: {
+            ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: 12 }
+          },
+          y: {
+            ticks: { callback: (v) => String(Math.round(v)) }
+          }
+        }
+      }
+    });
+  }
+
+  // =========================
+  // KPI 顯示規則：只有 all 顯示
+  // =========================
+  function toggleKPI(show) {
+    if (wrapScore) wrapScore.style.display = show ? '' : 'none';
+    if (wrapBad)   wrapBad.style.display   = show ? '' : 'none';
+    if (wrapAll)   wrapAll.style.display   = show ? '' : 'none';
+  }
+
+  function setRangeButtonsActive(key) {
+    $$('.range-btn').forEach(btn => {
+      const k = btn.getAttribute('data-range');
+      btn.classList.toggle('active', k === key);
+    });
+  }
+
+  function applyRange(rangeKey) {
+    if (!CACHE.ready) return;
+
+    CACHE.rangeKey = rangeKey;
+    setRangeButtonsActive(rangeKey);
+
+    const { start8, end8 } = calcRange(rangeKey);
+
+    // periodText：固定以選定區間顯示
+    if (elPeriod) elPeriod.textContent = `期間：${fmtYMD(start8)} ~ ${fmtYMD(end8)}`;
+
+    // hint：顯示「以最新日為錨」與交易日筆數
+    if (elHint) {
+      const days = buildTradingDays(start8, end8);
+      elHint.textContent = `錨定最新日：${fmtYMD(dateToYMD(CACHE.anchorEnd))}｜交易日：${days.length} 天`;
+    }
+
+    // KPI：只有 all 顯示
+    toggleKPI(rangeKey === 'all');
+
+    // 交易明細：依區間重建（累積從 0 開始）
+    rebuildTradesTableForRange(start8, end8);
+
+    // 圖表：每日序列（補齊無交易日=0）上下對齊
+    renderChartsForRange(start8, end8);
   }
 
   function bindRangeButtons() {
-    const btns = document.querySelectorAll('.range-btn');
-    btns.forEach(btn => {
+    $$('.range-btn').forEach(btn => {
       btn.addEventListener('click', () => {
-        const preset = btn.dataset.range;
-        if (!preset) return;
-        setActiveRangeButton(preset);
-        applyRange(preset);
+        const key = btn.getAttribute('data-range') || 'all';
+        applyRange(key);
       });
     });
-    setActiveRangeButton('all');
   }
 
-  async function applyRange(preset) {
-    if (!_mergedCanon) return;
-
-    const r = getRangeByPreset(preset, _lastTradeDate8 || _mergedEnd8);
-    const start8 = r.start8;
-    const end8   = r.end8;
-
-    toggleKpi(r.showKpi);
-
-    if (elPeriod) {
-      elPeriod.textContent =
-        `期間：${rocFmt(start8)}（${ymd8ToSlash(start8)}）～ ${rocFmt(end8)}（${ymd8ToSlash(end8)}）`;
-    }
-
-    const slicedCanon = filterCanonByYmdRange(_mergedCanon, start8, end8);
-    const withInpos = addFakeInpos(slicedCanon);
-    const finalText = '0807-1 MERGED\n' + withInpos;
-
-    setStatus(`套用時區：${preset}（${rocFmt(start8)}～${rocFmt(end8)}），重新分析…`);
-    await feedToSingleTrades((elLatest?.textContent || '0807.txt'), finalText);
-
-    // 等 single-trades.js 先把表格填好，再用表格重建每日圖
-    setTimeout(() => {
-      try {
-        rebuildDailyCharts(start8, end8);
-        setStatus(`分析完成：${rocFmt(start8)}～${rocFmt(end8)}（每日補 0；上下圖交易日對齊）`);
-      } catch (e) {
-        console.error(e);
-        setStatus('圖表重建失敗：' + (e.message || e), true);
-      }
-    }, 0);
-  }
-
+  // =========================
+  // 主流程 boot
+  // =========================
   async function boot() {
     try {
+      if (!sb) {
+        setStatus('Supabase SDK 未載入', true);
+        return;
+      }
+
+      bindRangeButtons();
+
       const url       = new URL(location.href);
       const paramFile = url.searchParams.get('file');
 
       let latest = null;
       let list   = [];
 
+      // 1) 決定最新檔
       if (paramFile) {
         latest = {
           name    : paramFile.split('/').pop() || '0807.txt',
@@ -512,6 +625,7 @@
       } else {
         setStatus('從 Supabase（reports）讀取清單…');
         list = (await listCandidates()).filter(f => WANT.test(f.name) || WANT.test(f.fullPath));
+
         if (!list.length) {
           setStatus('找不到檔名含「0807」的 TXT（可用 ?file= 指定）。', true);
           return;
@@ -519,8 +633,8 @@
 
         list.sort((a, b) => {
           const sa = lastDateScore(a.name);
-          const sb = lastDateScore(b.name);
-          if (sa !== sb) return sb - sa;
+          const sb2 = lastDateScore(b.name);
+          if (sa !== sb2) return sb2 - sa;
           if (a.updatedAt !== b.updatedAt) return b.updatedAt - a.updatedAt;
           return (b.size || 0) - (a.size || 0);
         });
@@ -534,13 +648,15 @@
       }
       if (elLatest) elLatest.textContent = latest.name;
 
+      // 2) 決定基準檔
       let base = null;
       if (!paramFile) {
         const manifest = await readManifest();
         if (manifest?.baseline_path) {
-          base =
-            list.find(x => x.fullPath === manifest.baseline_path) ||
-            { name: manifest.baseline_path.split('/').pop() || manifest.baseline_path, fullPath: manifest.baseline_path };
+          base = list.find(x => x.fullPath === manifest.baseline_path) || {
+            name: manifest.baseline_path.split('/').pop() || manifest.baseline_path,
+            fullPath: manifest.baseline_path
+          };
         } else {
           base = list[1] || null;
         }
@@ -548,6 +664,7 @@
 
       if (elBase) elBase.textContent = base ? base.name : '（尚無）';
 
+      // 3) 下載最新檔 & 基準檔，canonical 化與合併
       setStatus('下載最新 0807 檔案並解碼中…');
 
       const latestUrl = latest.from === 'url' ? latest.fullPath : pubUrl(latest.fullPath);
@@ -558,7 +675,7 @@
         return;
       }
 
-      let mergedCanon = rNew.canon;
+      let mergedText = rNew.canon;
       let start8 = '';
       let end8   = '';
 
@@ -568,25 +685,30 @@
         const rBase   = await fetchSmart(baseUrl);
 
         const m = mergeByBaseline(rBase.canon, rNew.canon);
-        mergedCanon = m.combined;
-        start8 = m.start8;
-        end8   = m.end8;
+        mergedText = m.combined;
+        start8     = m.start8;
+        end8       = m.end8;
       } else {
         const rows = parseCanon(rNew.canon);
         start8 = rows.length ? rows[0].ts.slice(0, 8) : '';
         end8   = rows.length ? rows[rows.length - 1].ts.slice(0, 8) : '';
       }
 
-      _mergedCanon     = mergedCanon;
-      _mergedStart8    = start8;
-      _mergedEnd8      = end8;
-      _lastTradeDate8  = end8;
+      CACHE.fullStart8 = start8;
+      CACHE.fullEnd8   = end8;
 
+      // 先暫時顯示「全區間」
+      if (elPeriod) elPeriod.textContent = `期間：${fmtYMD(start8)} ~ ${fmtYMD(end8)}`;
+
+      // 設基準按鈕
       if (btnBase) {
         btnBase.disabled = false;
         btnBase.onclick = async () => {
           try {
-            const payload = { baseline_path: latest.fullPath, updated_at: new Date().toISOString() };
+            const payload = {
+              baseline_path: latest.fullPath,
+              updated_at: new Date().toISOString()
+            };
             await writeManifest(payload);
             btnBase.textContent = '已設為基準';
           } catch (e) {
@@ -595,12 +717,33 @@
         };
       }
 
-      bindRangeButtons();
+      // 4) 餵給 single-trades：合併後 + fake INPOS + header
+      const mergedWithInpos = addFakeInpos(mergedText);
+      const finalText       = '0807 MERGED\n' + mergedWithInpos;
 
-      toggleKpi(true);
       setStatus('已載入（合併後）資料，開始分析…');
-      await applyRange('all');
+      await feedToSingleTrades(latest.name, finalText);
 
+      // 5) 等 single-trades 渲染完成後，抓交易表→建立快取→套用預設區間（全）
+      //    用 requestAnimationFrame + 短延遲，避免某些機器 DOM 還沒填完
+      const tryCapture = async () => {
+        for (let i = 0; i < 20; i++) {
+          await new Promise(r => requestAnimationFrame(() => setTimeout(r, 50)));
+          if (captureRenderedTrades()) return true;
+        }
+        return false;
+      };
+
+      const ok = await tryCapture();
+      if (!ok) {
+        setStatus('已完成 single-trades 計算，但抓不到交易明細表（tradesBody）。', true);
+        return;
+      }
+
+      // 預設：全（但你也可以改成預設近1週；目前照你的習慣先全）
+      applyRange('all');
+
+      setStatus('分析完成（可用時區快選切換；本金/滑點重算仍由 single-trades 控制）。');
     } catch (err) {
       console.error(err);
       setStatus('初始化失敗：' + (err.message || err), true);
