@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>三劍客量化科技 0807 單檔分析（精進版）</title>
+  <title>三劍客量化科技 0807 單檔分析（0807-1）</title>
 
   <style>
     body {
@@ -13,11 +13,8 @@
       padding: 8px;
       -webkit-font-smoothing: antialiased;
     }
-
     .wrap { max-width: 1100px; margin: 0 auto; }
-
     h1 { font-size: 16px; margin: 0 0 6px 0; text-align: left; }
-
     .muted { color: #666; font-size: 13px; }
 
     .card {
@@ -29,7 +26,12 @@
       margin-bottom: 8px;
     }
 
-    .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
 
     .chip {
       display: inline-block;
@@ -52,8 +54,15 @@
     .btn.gray { background: #6c757d; }
     .btn:disabled { opacity: .5; cursor: not-allowed; }
 
+    /* 時區快選 */
+    .range-bar { display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+    .btn.range { background:#6c757d; }
+    .btn.range.active { background:#0d6efd; }
+    .range-hint { font-size:12px; color:#666; white-space:nowrap; }
+
     #autostatus { white-space: pre-wrap; }
 
+    /* 上方：分數卡 + 工具列 */
     .top-row {
       max-width: 1100px;
       margin: 0 auto 4px auto;
@@ -107,8 +116,8 @@
       white-space: nowrap;
     }
 
-    /* 隱藏選檔，但保留給 single-trades.js 用 */
-    .file-block { display: none; flex-direction: column; gap: 2px; }
+    /* TXT + 雲端檔 block：隱藏，但保留給 single-trades.js 使用 */
+    .file-block { display:none; flex-direction:column; gap:2px; }
     .cloud-select {
       padding: 4px 8px;
       border: 1px solid #d1d5db;
@@ -128,6 +137,7 @@
       text-overflow: ellipsis;
     }
 
+    /* KPI */
     .kpi-wrapper { margin: 4px auto; max-width: 1100px; }
     .kpi-table {
       border-collapse: collapse;
@@ -135,7 +145,8 @@
       font-size: 12px;
       width: 100%;
     }
-    .kpi-table th, .kpi-table td {
+    .kpi-table th,
+    .kpi-table td {
       padding: 4px 6px;
       border-bottom: 1px solid #eee;
       white-space: nowrap;
@@ -160,40 +171,6 @@
     .chart-main { height: 420px; }
     .chart-weekly { height: 260px; }
 
-    /* 區間：一整排按鈕（在主圖上方一行） */
-    .range-row {
-      max-width: 1100px;
-      margin: 0 auto 4px auto;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      flex-wrap: wrap;
-    }
-    .range-label {
-      font-size: 12px;
-      color: #444;
-      background: #fff;
-      border: 1px solid #e5e7eb;
-      border-radius: 999px;
-      padding: 3px 10px;
-    }
-    .range-btn {
-      font-size: 12px;
-      color: #333;
-      background: #fff;
-      border: 1px solid #d1d5db;
-      border-radius: 999px;
-      padding: 3px 10px;
-      cursor: pointer;
-      user-select: none;
-    }
-    .range-btn:hover { background: #f3f4f6; }
-    .range-btn.active {
-      background: #0d6efd;
-      border-color: #0d6efd;
-      color: #fff;
-    }
-
     table.trade-table {
       border-collapse: collapse;
       background: #fff;
@@ -201,15 +178,14 @@
       margin: 4px auto 0 auto;
       width: 100%;
     }
-
     thead.trade-head {
       background: #fafafa;
       position: sticky;
       top: 0;
       z-index: 1;
     }
-
-    table.trade-table th, table.trade-table td {
+    table.trade-table th,
+    table.trade-table td {
       padding: 3px 6px;
       border-bottom: 1px solid #eee;
       white-space: nowrap;
@@ -231,10 +207,8 @@
 
 <body>
   <div class="wrap">
+    <h1>0807版本（0807-1）</h1>
 
-    <h1>0807-1版本</h1>
-
-    <!-- 差異檢查 -->
     <div class="card" id="diffCard">
       <div class="row">
         <strong>差異檢查</strong>
@@ -246,13 +220,11 @@
       <div id="periodText" class="muted" style="margin-top:6px;"></div>
     </div>
 
-    <!-- 自動流程狀態 -->
     <div class="card">
       <span id="autostatus" class="muted">初始化中…</span>
     </div>
 
-    <!-- 上方：綜合分數卡 + 工具列 -->
-    <div class="top-row">
+    <div class="top-row" id="topRow">
       <div class="kpi-score-card" id="scoreCard">
         <div class="score-title">綜合分數</div>
         <div class="score-value">—</div>
@@ -267,8 +239,7 @@
 
         <label>
           滑點（每邊點數）：
-          <!-- 預設 2（但真正是否套用，交由 0807-1.js 做保險強制） -->
-          <input type="number" id="slipInput" value="2" step="0.1">
+          <input type="number" id="slipInput" value="0" step="0.1">
         </label>
 
         <div class="file-block">
@@ -288,34 +259,37 @@
       </div>
     </div>
 
-    <!-- TXT 第一行參數 -->
     <div class="param-line" id="paramLine"></div>
 
-    <!-- 區間按鈕列（在主圖上方一行） -->
-    <div class="range-row" id="rangeRow">
-      <span class="range-label">區間</span>
-      <button class="range-btn active" data-range="ALL">全</button>
-      <button class="range-btn" data-range="1Y">近1年</button>
-      <button class="range-btn" data-range="6M">近6月</button>
-      <button class="range-btn" data-range="3M">近3月</button>
-      <button class="range-btn" data-range="2M">近2月</button>
-      <button class="range-btn" data-range="1M">近1月</button>
-      <button class="range-btn" data-range="2W">近2週</button>
-      <button class="range-btn" data-range="1W">近1週</button>
+    <!-- 時區快選 -->
+    <div class="card" id="rangeCard">
+      <div class="row">
+        <strong>時區快選</strong>
+        <div class="range-bar" id="rangeBar">
+          <button class="btn range" data-range="W1">近1週</button>
+          <button class="btn range" data-range="W2">近2週</button>
+          <button class="btn range" data-range="M1">近1月</button>
+          <button class="btn range" data-range="M2">近2月</button>
+          <button class="btn range" data-range="M3">近3月</button>
+          <button class="btn range" data-range="M6">近6月</button>
+          <button class="btn range" data-range="Y1">近1年</button>
+          <button class="btn range active" data-range="ALL">全</button>
+        </div>
+        <span style="flex:1"></span>
+        <span class="range-hint" id="rangeHint">—</span>
+      </div>
     </div>
 
-    <!-- 主資產曲線 -->
     <div class="chart-wrapper chart-main">
       <canvas id="equityChart"></canvas>
     </div>
 
-    <!-- 每週損益圖 -->
     <div class="chart-wrapper chart-weekly">
       <canvas id="weeklyPnlChart"></canvas>
     </div>
 
-    <!-- 建議優化指標 -->
-    <div class="kpi-wrapper kpi-bad-card">
+    <!-- KPI：只有 ALL 顯示 -->
+    <div class="kpi-wrapper kpi-bad-card" id="kpiBadWrap">
       <table class="kpi-table">
         <thead>
           <tr>
@@ -334,8 +308,7 @@
       </table>
     </div>
 
-    <!-- 全部 KPI 明細 -->
-    <div class="kpi-wrapper">
+    <div class="kpi-wrapper" id="kpiAllWrap">
       <table class="kpi-table">
         <thead>
           <tr>
@@ -351,7 +324,6 @@
       </table>
     </div>
 
-    <!-- 交易明細 -->
     <div class="card">
       <table class="trade-table">
         <thead class="trade-head">
@@ -375,6 +347,7 @@
   </div>
 
   <script src="single-trades.js"></script>
+  <!-- 注意：這裡改成載入 0807-1.js -->
   <script src="0807-1.js"></script>
 </body>
 </html>
