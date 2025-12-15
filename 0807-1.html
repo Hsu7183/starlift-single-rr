@@ -137,7 +137,7 @@
       text-overflow: ellipsis;
     }
 
-    /* KPI */
+    /* KPI（補回原本會用到的 class，避免「全」顏色不見） */
     .kpi-wrapper { margin: 4px auto; max-width: 1100px; }
     .kpi-table {
       border-collapse: collapse;
@@ -157,8 +157,16 @@
     .kpi-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
     .kpi-table td.center, .kpi-table th.center { text-align: center; }
 
+    .kpi-name { font-weight: 600; }
+    .kpi-desc { color: #777; font-size: 11px; }
+    .kpi-section { background: #f0f0f0; font-weight: 700; }
+
     .kpi-bad-card .kpi-table { background: #fff5f5; border: 1px solid #ffd0d0; }
     .kpi-bad-card thead th { background: #ffe5e5; }
+
+    .rating-strong  { color: #e60000; font-weight: 600; }
+    .rating-adequate{ color: #c9a500; font-weight: 600; }
+    .rating-improve { color: #008000; font-weight: 600; }
 
     .chart-wrapper {
       max-width: 1100px;
@@ -239,7 +247,8 @@
 
         <label>
           滑點（每邊點數）：
-          <input type="number" id="slipInput" value="0" step="0.1">
+          <!-- 1) 改成預設 2 -->
+          <input type="number" id="slipInput" value="2" step="0.1">
         </label>
 
         <div class="file-block">
@@ -261,7 +270,6 @@
 
     <div class="param-line" id="paramLine"></div>
 
-    <!-- 時區快選 -->
     <div class="card" id="rangeCard">
       <div class="row">
         <strong>時區快選</strong>
@@ -280,6 +288,7 @@
       </div>
     </div>
 
+    <!-- 2) 圖表：改成「日頻、補 0、上下對齊」 -->
     <div class="chart-wrapper chart-main">
       <canvas id="equityChart"></canvas>
     </div>
@@ -288,7 +297,6 @@
       <canvas id="weeklyPnlChart"></canvas>
     </div>
 
-    <!-- KPI：只有 ALL 顯示 -->
     <div class="kpi-wrapper kpi-bad-card" id="kpiBadWrap">
       <table class="kpi-table">
         <thead>
@@ -347,7 +355,6 @@
   </div>
 
   <script src="single-trades.js"></script>
-  <!-- 注意：這裡改成載入 0807-1.js -->
   <script src="0807-1.js"></script>
 </body>
 </html>
