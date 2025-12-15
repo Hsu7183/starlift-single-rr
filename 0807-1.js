@@ -1,4 +1,4 @@
-// 0807-1.js — 時區快選(按鈕) + 只在「全」顯示 KPI + 日線補 0 + 上下圖交易日對齊
+// 0807-1.js — 時區快選(圖表內按鈕) + 只在「全」顯示 KPI + 日線補 0 + 上下圖交易日對齊
 (function () {
   'use strict';
 
@@ -16,14 +16,9 @@
 
   if (status) status.style.whiteSpace = 'pre-wrap';
 
-  // Supabase 設定（與其他頁一致）
   const SUPABASE_URL  = "https://byhbmmnacezzgkwfkozs.supabase.co";
   const SUPABASE_ANON = "sb_publishable_xVe8fGbqQ0XGwi4DsmjPMg_Y2RBOD3t";
   const BUCKET        = "reports";
-
-  if (!window.supabase) {
-    console.error('Supabase SDK 未載入');
-  }
 
   const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON, {
     global: { fetch: (u, o = {}) => fetch(u, { ...o, cache: 'no-store' }) }
@@ -32,12 +27,10 @@
   const WANT          = /0807/i;
   const MANIFEST_PATH = "manifests/0807.json";
 
-  // canonical 3 欄行
   const CANON_RE   = /^(\d{14})\.0{6}\s+(\d+\.\d{6})\s+(新買|平賣|新賣|平買|強制平倉)\s*$/;
   const EXTRACT_RE = /.*?(\d{14})(?:\.0{1,6})?\s+(\d+(?:\.\d{1,6})?)\s*(新買|平賣|新賣|平買|強制平倉)\s*$/;
 
-  // ===== runtime caches =====
-  let _mergedCanon = '';     // 合併後 canonical（不含 header、不含 fake INPOS）
+  let _mergedCanon = '';
   let _mergedStart8 = '';
   let _mergedEnd8   = '';
   let _lastTradeDate8 = '';
@@ -82,7 +75,6 @@
     return Math.max(...m.map(s => +s || 0));
   }
 
-  // ===== 文字正規化 & canonical 行抽取 =====
   function normalizeText(raw) {
     let s = raw
       .replace(/\ufeff/gi, '')
@@ -170,7 +162,6 @@
     return { combined: mergedLines.join('\n'), start8: baseMin, end8: endDay };
   }
 
-  // ===== fake INPOS（給 single-trades.js 判方向用） =====
   function addFakeInpos(text) {
     const lines = (text || '').split('\n').map(s => s.trim()).filter(Boolean);
 
@@ -193,7 +184,6 @@
     return out.join('\n');
   }
 
-  // ===== manifest =====
   async function readManifest() {
     try {
       const { data, error } = await sb.storage.from(BUCKET).download(MANIFEST_PATH);
@@ -215,7 +205,6 @@
     if (error) throw new Error(error.message);
   }
 
-  // ===== 日期/交易日工具 =====
   function ymd8ToDate(ymd8) {
     const y = +ymd8.slice(0, 4);
     const m = +ymd8.slice(4, 6);
@@ -275,25 +264,15 @@
     return `${ymd8.slice(0,4)}/${ymd8.slice(4,6)}/${ymd8.slice(6,8)}`;
   }
 
-  // ===== 時區快選規則（交易日數） =====
   function getRangeByPreset(preset, end8) {
     if (preset === 'all') return { start8: _mergedStart8, end8: _mergedEnd8, showKpi: true };
 
-    const map = {
-      w1: 5,
-      w2: 10,
-      m1: 22,
-      m2: 44,
-      m3: 66,
-      m6: 132,
-      y1: 252
-    };
+    const map = { w1: 5, w2: 10, m1: 22, m2: 44, m3: 66, m6: 132, y1: 252 };
     const n = map[preset] || 10;
     const r = tradingDayRangeEndingAt(end8, n);
     return { start8: r.start8, end8: r.end8, showKpi: false };
   }
 
-  // ===== canonical 依日期切片 =====
   function filterCanonByYmdRange(canonText, start8, end8) {
     const rows = parseCanon(canonText);
     const keep = rows.filter(r => {
@@ -303,7 +282,6 @@
     return keep.map(x => x.line).join('\n');
   }
 
-  // ===== feed to single-trades.js =====
   async function feedToSingleTrades(filename, mergedTextWithHeaderAndInpos) {
     const fileInput = $('#fileInput');
     const runBtn    = $('#runBtn');
@@ -325,7 +303,6 @@
     if (runBtn) runBtn.click();
   }
 
-  // ===== KPI 顯示切換 =====
   function toggleKpi(show) {
     const on = !!show;
     if (scoreCard)  scoreCard.classList.toggle('hide-kpi', !on);
@@ -333,7 +310,6 @@
     if (kpiAllWrap) kpiAllWrap.classList.toggle('hide-kpi', !on);
   }
 
-  // ===== 從 trades table 重建「每日」序列（缺交易日補 0）並重畫兩張圖 =====
   function parseNumber(text) {
     const t = String(text || '').replace(/,/g, '').trim();
     const n = Number(t);
@@ -377,16 +353,10 @@
     const equity = daily.map(v => (cum += v));
 
     const cEq = $('#equityChart');
-    const cPn = $('#weeklyPnlChart'); // 這張改畫「每日損益」，上下同交易日
+    const cPn = $('#weeklyPnlChart');
 
-    try {
-      const oldEq = Chart.getChart(cEq);
-      if (oldEq) oldEq.destroy();
-    } catch (e) {}
-    try {
-      const oldPn = Chart.getChart(cPn);
-      if (oldPn) oldPn.destroy();
-    } catch (e) {}
+    try { const oldEq = Chart.getChart(cEq); if (oldEq) oldEq.destroy(); } catch (e) {}
+    try { const oldPn = Chart.getChart(cPn); if (oldPn) oldPn.destroy(); } catch (e) {}
 
     if (cEq) {
       new Chart(cEq, {
@@ -404,10 +374,7 @@
           responsive: true,
           maintainAspectRatio: false,
           interaction: { mode: 'index', intersect: false },
-          scales: {
-            x: { ticks: { maxRotation: 0, autoSkip: true } },
-            y: { ticks: { callback: (v) => v } }
-          }
+          scales: { x: { ticks: { maxRotation: 0, autoSkip: true } } }
         }
       });
     }
@@ -417,41 +384,38 @@
         type: 'bar',
         data: {
           labels,
-          datasets: [{
-            label: '每日淨損益（無交易=0）',
-            data: daily
-          }]
+          datasets: [{ label: '每日淨損益（無交易=0）', data: daily }]
         },
         options: {
           responsive: true,
           maintainAspectRatio: false,
           interaction: { mode: 'index', intersect: false },
-          scales: {
-            x: { ticks: { maxRotation: 0, autoSkip: true } },
-            y: { ticks: { callback: (v) => v } }
-          }
+          scales: { x: { ticks: { maxRotation: 0, autoSkip: true } } }
         }
       });
     }
   }
 
-  // ===== 時區按鈕事件綁定 =====
+  function setActiveRangeButton(preset) {
+    const btns = document.querySelectorAll('.range-btn');
+    btns.forEach(b => b.classList.toggle('active', b.dataset.range === preset));
+  }
+
   function bindRangeButtons() {
     const btns = document.querySelectorAll('.range-btn');
     btns.forEach(btn => {
       btn.addEventListener('click', () => {
         const preset = btn.dataset.range;
         if (!preset) return;
-
-        btns.forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-
+        setActiveRangeButton(preset);
         applyRange(preset);
       });
     });
+
+    // 保險：預設全
+    setActiveRangeButton('all');
   }
 
-  // ===== 套用時區（重新餵檔、控制 KPI、重畫日線） =====
   async function applyRange(preset) {
     if (!_mergedCanon) return;
 
@@ -485,7 +449,6 @@
     }, 0);
   }
 
-  // ===== 主流程 boot =====
   async function boot() {
     try {
       const url       = new URL(location.href);
@@ -494,7 +457,6 @@
       let latest = null;
       let list   = [];
 
-      // 1) 最新檔
       if (paramFile) {
         latest = {
           name    : paramFile.split('/').pop() || '0807.txt',
@@ -526,7 +488,6 @@
       }
       if (elLatest) elLatest.textContent = latest.name;
 
-      // 2) 基準檔
       let base = null;
       if (!paramFile) {
         const manifest = await readManifest();
@@ -541,7 +502,6 @@
 
       if (elBase) elBase.textContent = base ? base.name : '（尚無）';
 
-      // 3) 下載 & 合併
       setStatus('下載最新 0807 檔案並解碼中…');
 
       const latestUrl = latest.from === 'url' ? latest.fullPath : pubUrl(latest.fullPath);
@@ -576,15 +536,11 @@
       _mergedEnd8      = end8;
       _lastTradeDate8  = end8;
 
-      // 4) 設基準按鈕
       if (btnBase) {
         btnBase.disabled = false;
         btnBase.onclick = async () => {
           try {
-            const payload = {
-              baseline_path: latest.fullPath,
-              updated_at: new Date().toISOString()
-            };
+            const payload = { baseline_path: latest.fullPath, updated_at: new Date().toISOString() };
             await writeManifest(payload);
             btnBase.textContent = '已設為基準';
           } catch (e) {
@@ -593,10 +549,9 @@
         };
       }
 
-      // 5) 綁定時區按鈕
+      // 綁定「圖表內」的時區按鈕
       bindRangeButtons();
 
-      // 6) 預設「全」
       toggleKpi(true);
       setStatus('已載入（合併後）資料，開始分析…');
       await applyRange('all');
