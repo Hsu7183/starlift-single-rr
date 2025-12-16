@@ -229,7 +229,7 @@
     return `${y}${m}${dd}`;
   }
 
-  // ===== UTC 工具 =====
+  // ===== UTC 日序列工具 =====
   function ymdToDateUTC(ymd) {
     const y = +ymd.slice(0, 4), m = +ymd.slice(4, 6), d = +ymd.slice(6, 8);
     return new Date(Date.UTC(y, m - 1, d));
@@ -297,7 +297,7 @@
     return { text: picked.join('\n'), start8, end8 };
   }
 
-  // 產生交易日 labels（週一~週五）→ 你要的「7天」就是這裡出來
+  // 產生「週一~週五」交易日 labels（例如近2週 7 天）
   function buildBizDayLabels(start8, end8) {
     const startDt = ymdToDateUTC(start8);
     const endDt   = ymdToDateUTC(end8);
@@ -314,8 +314,11 @@
     return out;
   }
 
-  function getChart(id) {
-    try { return window.Chart?.getChart?.(id); } catch { return null; }
+  // ===== Chart 取得（最穩）=====
+  function getChartByCanvasId(id) {
+    const el = document.getElementById(id);
+    if (!el || !window.Chart) return null;
+    try { return window.Chart.getChart(el) || null; } catch { return null; }
   }
 
   function toISO(label) {
@@ -329,22 +332,21 @@
     return null;
   }
 
-  // ✅ 核心：強制上圖 labels=交易日序列；缺日=0/橫移；X 軸 category + autoSkip=false
+  // ✅ 核心：接管 X 軸（category + autoSkip=false），並補齊日序列（沒交易=0/橫移）
   function forceEquityChartToBizDays(start8, end8) {
-    const ch = getChart('equityChart');
+    const ch = getChartByCanvasId('equityChart');
     if (!ch || !ch.data?.datasets?.length) return null;
 
     const labels = buildBizDayLabels(start8, end8);
 
     const oldLabels = ch.data.labels || [];
 
-    // 對每條線做 map：date->value，再用 labels 重建
     ch.data.datasets.forEach(ds => {
       const map = new Map();
       let last = 0;
       let has = false;
 
-      // 支援 ds.data 為數列（最常見）
+      // 支援 array number
       if (Array.isArray(ds.data) && ds.data.length && (typeof ds.data[0] !== 'object')) {
         for (let i = 0; i < Math.min(oldLabels.length, ds.data.length); i++) {
           const iso = toISO(oldLabels[i]);
@@ -360,19 +362,32 @@
         }
       }
 
-      ds.data = labels.map(lab => {
+      // 若 map 完全抓不到（有些 single-trades 只給月刻度），至少保留最後值在最後一天
+      let lastVal = 0;
+      if (Array.isArray(ds.data) && ds.data.length && typeof ds.data[0] !== 'object') {
+        const t = Number(ds.data[ds.data.length - 1]);
+        if (Number.isFinite(t)) lastVal = t;
+      }
+
+      ds.data = labels.map((lab, idx) => {
         if (map.has(lab)) {
           last = map.get(lab);
           has = true;
           return last;
         }
-        return has ? last : 0; // 沒交易日：橫移；若起始前無值則 0
+        if (!has && idx === labels.length - 1 && lastVal !== 0) {
+          // 全都對不到時，把最後值放到最後一天，避免整段變 0
+          last = lastVal;
+          has = true;
+          return last;
+        }
+        return has ? last : 0;
       });
     });
 
     ch.data.labels = labels;
 
-    // 強制 category + 禁止壓縮
+    // 強制 category + 禁止壓縮（這才會看到 7 天）
     ch.options = ch.options || {};
     ch.options.scales = ch.options.scales || {};
     ch.options.scales.x = ch.options.scales.x || {};
@@ -386,9 +401,9 @@
     return labels;
   }
 
-  // ✅ 下圖：每日損益（labels 必須跟上圖一致），沒交易日 delta=0
+  // ✅ 下圖：每日損益（labels 與上圖一致），沒交易日=0
   function rebuildDailyPnlChartFromEquity() {
-    const eq = getChart('equityChart');
+    const eq = getChartByCanvasId('equityChart');
     if (!eq || !eq.data?.labels?.length || !eq.data?.datasets?.length) return;
 
     const labels = eq.data.labels.map(x => String(x));
@@ -405,7 +420,7 @@
 
     const bg = daily.map(v => (v > 0 ? '#e60000' : (v < 0 ? '#0a7f00' : '#c0c0c0')));
 
-    const old = getChart('weeklyPnlChart');
+    const old = getChartByCanvasId('weeklyPnlChart');
     if (old) { try { old.destroy(); } catch {} }
 
     const ctx = $('#weeklyPnlChart')?.getContext?.('2d');
@@ -472,28 +487,31 @@
     }
   }
 
+  // 後處理：做多次覆蓋，避免 single-trades 之後 update 把我們改掉
+  function scheduleFixes(start8, end8) {
+    const run = () => {
+      forceEquityChartToBizDays(start8, end8);
+      rebuildDailyPnlChartFromEquity();
+      applyTradeTableColors();
+    };
+    run();
+    setTimeout(run, 150);
+    setTimeout(run, 350);
+    setTimeout(run, 800);
+    setTimeout(run, 1400);
+  }
+
   async function postProcessWait(start8, end8) {
     // 等 single-trades 完成 chart/table
     let tries = 0;
-    while (tries < 120) {
-      const eq = getChart('equityChart');
+    while (tries < 140) { // 7 秒
+      const eq = getChartByCanvasId('equityChart');
       const tb = $('#tradesBody');
       if (eq && eq.data?.datasets?.length && tb) break;
       await new Promise(r => setTimeout(r, 50));
       tries++;
     }
-
-    // 上圖補齊日序列（7天）
-    forceEquityChartToBizDays(start8, end8);
-
-    // 下圖同步日序列
-    rebuildDailyPnlChartFromEquity();
-
-    // 表格上色（多次）
-    applyTradeTableColors();
-    setTimeout(applyTradeTableColors, 120);
-    setTimeout(applyTradeTableColors, 300);
-    setTimeout(applyTradeTableColors, 600);
+    scheduleFixes(start8, end8);
   }
 
   // ===== 主流程 =====
