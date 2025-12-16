@@ -195,8 +195,6 @@
       if (act === '新買' || act === '新賣') {
         const dir = (act === '新買') ? 1 : -1;
         out.push(line);
-        // 假 INPOS 行，格式只要符合 single-trades.js 的判斷邏輯即可
-        // ps.length >= 6 且最後一個欄位為 "INPOS"，第 4 欄是方向
         out.push(`${ts}.000000 0 0 ${dir} 0 INPOS`);
       } else {
         out.push(line);
@@ -210,7 +208,7 @@
     const fileInput = $('#fileInput');
     const runBtn    = $('#runBtn');
 
-    // (關鍵) 確保「第一次自動計算」就用滑點=2，而不是先用0算完才顯示2
+    // 確保第一次自動計算就用滑點=2
     const slipInput = $('#slipInput');
     if (slipInput) {
       slipInput.value = '2';
@@ -221,12 +219,10 @@
     const fname = filename || '0807.txt';
     const file  = new File([mergedText], fname, { type: 'text/plain' });
 
-    // 1) 通知 single-trades.js：目前要分析的檔案
     if (window.__singleTrades_setFile) {
       window.__singleTrades_setFile(file);
     }
 
-    // 2) 把檔案塞進隱藏的 #fileInput，讓 event 流程一致
     if (fileInput) {
       const dt = new DataTransfer();
       dt.items.add(file);
@@ -234,35 +230,33 @@
       fileInput.dispatchEvent(new Event('change', { bubbles: true }));
     }
 
-    // 3) 自動按下「計算」按鈕
-    // 延後一個 tick，避免 single-trades.js 還沒吃到 slip/change 就先跑舊值
     if (runBtn) {
       setTimeout(() => runBtn.click(), 0);
     }
   }
 
-  // ===== 讀寫 manifest（基準檔資訊） =====
+  // ===== 讀寫 manifest（基準檔資訊）=====
+  // 目的：把 Console 紅字「GET ... manifests/0807.json 400」消掉
+  // 做法：不再用 storage.download（會 400），改用 public URL + fetch；不存在就靜默回 null
   async function readManifest() {
     try {
-      const { data, error } = await sb.storage.from(BUCKET).download(MANIFEST_PATH);
-      if (error || !data) return null;
-      const text = await data.text();
+      const url = pubUrl(MANIFEST_PATH);
+      if (!url || url === '#') return null;
+
+      const res = await fetch(url, { cache: 'no-store' });
+      if (!res.ok) return null;          // 404/400 都直接當作沒有
+      const text = await res.text();
+      if (!text) return null;
+
       return JSON.parse(text);
     } catch (e) {
       return null;
     }
   }
 
-  async function writeManifest(obj) {
-    const blob = new Blob([JSON.stringify(obj, null, 2)], {
-      type: 'application/json'
-    });
-    const { error } = await sb.storage.from(BUCKET).upload(
-      MANIFEST_PATH,
-      blob,
-      { upsert: true, cacheControl: '0', contentType: 'application/json' }
-    );
-    if (error) throw new Error(error.message);
+  // GitHub Pages 一般無法寫回 Supabase（會報錯/紅字），因此這裡直接禁用寫入：
+  async function writeManifest(_obj) {
+    throw new Error('此頁面為唯讀模式：不支援寫入基準（manifest）。');
   }
 
   // ===== 主流程 =====
@@ -276,7 +270,6 @@
 
       // 1) 決定最新檔
       if (paramFile) {
-        // 可用 ?file=reports/xxx 直接指定
         latest = {
           name    : paramFile.split('/').pop() || '0807.txt',
           fullPath: paramFile,
@@ -359,7 +352,6 @@
         start8     = m.start8;
         end8       = m.end8;
       } else {
-        // 沒有基準 → 直接以最新檔的日期區間為主
         const rows = parseCanon(rNew.canon);
         start8 = rows.length ? rows[0].ts.slice(0, 8) : '';
         end8   = rows.length ? rows[rows.length - 1].ts.slice(0, 8) : '';
@@ -369,26 +361,15 @@
         elPeriod.textContent = `期間：${start8 || '—'} 開始到 ${end8 || '—'} 結束`;
       }
 
-      // 4) 設「最新檔」為基準的按鈕
+      // 4) 「設此為基準」：此頁改為唯讀，直接禁用，不再嘗試寫入（避免任何紅字）
       if (btnBase) {
-        btnBase.disabled = false;
-        btnBase.onclick = async () => {
-          try {
-            const payload = {
-              baseline_path: latest.from === 'url'
-                ? latest.fullPath
-                : latest.fullPath,
-              updated_at: new Date().toISOString()
-            };
-            await writeManifest(payload);
-            btnBase.textContent = '已設為基準';
-          } catch (e) {
-            setStatus('寫入基準失敗：' + (e.message || e), true);
-          }
-        };
+        btnBase.disabled = true;
+        btnBase.textContent = '唯讀模式';
+        btnBase.title = '此頁面不支援寫入基準（manifest）。';
+        btnBase.onclick = null;
       }
 
-      // 5) 在合併後的資料上插入假的 INPOS，並加一行 header，餵給 single-trades.js
+      // 5) 合併後插入假的 INPOS，並加一行 header，餵給 single-trades.js
       const mergedWithInpos = addFakeInpos(mergedText);
       const finalText       = '0807 MERGED\n' + mergedWithInpos;
 
