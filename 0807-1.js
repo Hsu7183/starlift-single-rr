@@ -1,3 +1,8 @@
+// 0807-1.js — 修正版（必定 7 天顯示 / 沒交易=0 / 不再觸發 Chart.js recursion）
+// 1) 不再改既有 Chart 的 option/data（容易 Recursion / startsWith error）
+// 2) 改為：抓舊圖資料 → destroy → 用 7 天 labels 重建 equityChart
+// 3) 下圖改為每日損益（labels 與上圖完全一致），沒交易日=0
+// 4) baseline manifest 不再用 Supabase manifests（避免 400），改用 localStorage
 (function () {
   'use strict';
 
@@ -8,14 +13,11 @@
   const elBase   = $('#baseName');
   const elPeriod = $('#periodText');
   const btnBase  = $('#btnSetBaseline');
+  const rangeChips = $('#rangeChips');
 
   const scoreCard  = $('#scoreCard');
   const kpiBadCard = $('#kpiBadCard');
   const kpiAllCard = $('#kpiAllCard');
-
-  const rangeChips = $('#rangeChips');
-
-  if (status) status.style.whiteSpace = 'pre-wrap';
 
   const SUPABASE_URL  = "https://byhbmmnacezzgkwfkozs.supabase.co";
   const SUPABASE_ANON = "sb_publishable_xVe8fGbqQ0XGwi4DsmjPMg_Y2RBOD3t";
@@ -25,11 +27,11 @@
     global: { fetch: (u, o = {}) => fetch(u, { ...o, cache: 'no-store' }) }
   });
 
-  const WANT          = /0807/i;
-  const MANIFEST_PATH = "manifests/0807.json";
-
+  const WANT = /0807/i;
   const CANON_RE   = /^(\d{14})\.0{6}\s+(\d+\.\d{6})\s+(新買|平賣|新賣|平買|強制平倉)\s*$/;
   const EXTRACT_RE = /.*?(\d{14})(?:\.0{1,6})?\s+(\d+(?:\.\d{1,6})?)\s*(新買|平賣|新賣|平買|強制平倉)\s*$/;
+
+  const LS_BASELINE_KEY = '0807_baseline_path';
 
   function setStatus(msg, bad = false) {
     if (!status) return;
@@ -161,7 +163,11 @@
   }
 
   function addFakeInpos(text) {
-    const lines = (text || '').split('\n').map(s => s.trim()).filter(Boolean);
+    const lines = (text || '')
+      .split('\n')
+      .map(s => s.trim())
+      .filter(Boolean);
+
     const out = [];
     for (const line of lines) {
       const m = line.match(CANON_RE);
@@ -199,28 +205,7 @@
     if (runBtn) runBtn.click();
   }
 
-  // ===== 修正：manifest 讀不到（400/404）直接當 null，完全不噴錯、不影響流程 =====
-  async function readManifestSafe() {
-    try {
-      const { data, error } = await sb.storage.from(BUCKET).download(MANIFEST_PATH);
-      if (error || !data) return null;
-      return JSON.parse(await data.text());
-    } catch {
-      return null;
-    }
-  }
-
-  async function writeManifest(obj) {
-    const blob = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' });
-    const { error } = await sb.storage.from(BUCKET).upload(
-      MANIFEST_PATH,
-      blob,
-      { upsert: true, cacheControl: '0', contentType: 'application/json' }
-    );
-    if (error) throw new Error(error.message);
-  }
-
-  // ===== 錨點：以今天為 end（沒交易也要顯示 0）=====
+  // ===== 錨點：今天 (local) =====
   function today8() {
     const d = new Date();
     const y = d.getFullYear();
@@ -229,7 +214,7 @@
     return `${y}${m}${dd}`;
   }
 
-  // ===== UTC 工具（確保跨時區不跑掉）=====
+  // ===== UTC 日序列 =====
   function ymdToDateUTC(ymd) {
     const y = +ymd.slice(0, 4), m = +ymd.slice(4, 6), d = +ymd.slice(6, 8);
     return new Date(Date.UTC(y, m - 1, d));
@@ -297,14 +282,13 @@
     return { text: picked.join('\n'), start8, end8 };
   }
 
-  // 交易日 labels（週一~週五）→ 近2週 = 7 天
   function buildBizDayLabels(start8, end8) {
     const startDt = ymdToDateUTC(start8);
     const endDt   = ymdToDateUTC(end8);
     const out = [];
     const cur = new Date(startDt.getTime());
     while (cur.getTime() <= endDt.getTime()) {
-      const dow = cur.getUTCDay(); // 1..5 = Mon..Fri
+      const dow = cur.getUTCDay(); // 1..5
       if (dow >= 1 && dow <= 5) {
         const ymd = dateToYmdUTC(cur);
         out.push(`${ymd.slice(0,4)}-${ymd.slice(4,6)}-${ymd.slice(6,8)}`);
@@ -314,14 +298,14 @@
     return out;
   }
 
-  // Chart 取得（避免拿不到或拿錯）
+  // ===== Chart 取得 =====
   function getChartByCanvasId(id) {
     const el = document.getElementById(id);
     if (!el || !window.Chart) return null;
     try { return window.Chart.getChart(el) || null; } catch { return null; }
   }
 
-  // 將 label/x 轉 ISO YYYY-MM-DD
+  // 將 label/x 轉 ISO（完全不呼叫 startsWith）
   function toISO(v) {
     if (v == null) return null;
     if (v instanceof Date && !isNaN(v.getTime())) {
@@ -340,64 +324,71 @@
     return null;
   }
 
-  // ✅ 核心：補齊 7 天並強制 category；防呆 ds.data 內含 null
-  function forceEquityChartToBizDays(start8, end8) {
-    const ch = getChartByCanvasId('equityChart');
-    if (!ch || !ch.data?.datasets?.length) return null;
+  // ===== 讀出舊圖資料，重建新圖（避免 recursion/scriptable 問題）=====
+  function rebuildEquityChartAsBizDays(start8, end8) {
+    const old = getChartByCanvasId('equityChart');
+    if (!old) return null;
 
     const labels = buildBizDayLabels(start8, end8);
+    const oldLabels = Array.isArray(old.data.labels) ? old.data.labels : [];
 
-    const oldLabels = Array.isArray(ch.data.labels) ? ch.data.labels : [];
+    // 抽樣保留 dataset 的樣式（只取純值，避免 scriptable/function）
+    function pickStyle(ds) {
+      const style = {
+        label: ds.label,
+        borderColor: (typeof ds.borderColor === 'string') ? ds.borderColor : undefined,
+        borderWidth: (typeof ds.borderWidth === 'number') ? ds.borderWidth : undefined,
+        borderDash: Array.isArray(ds.borderDash) ? ds.borderDash.slice() : undefined,
+        tension: (typeof ds.tension === 'number') ? ds.tension : undefined,
+        pointRadius: (typeof ds.pointRadius === 'number') ? ds.pointRadius : 0,
+        pointHoverRadius: (typeof ds.pointHoverRadius === 'number') ? ds.pointHoverRadius : undefined,
+        fill: !!ds.fill,
+        hidden: !!ds.hidden,
+      };
+      return style;
+    }
 
-    // 確保 options/scales/x 都存在
-    ch.options = ch.options || {};
-    ch.options.scales = ch.options.scales || {};
-    ch.options.scales.x = ch.options.scales.x || {};
-    ch.options.scales.x.type = 'category';
-    ch.options.scales.x.ticks = ch.options.scales.x.ticks || {};
-    ch.options.scales.x.ticks.autoSkip = false;
-    ch.options.scales.x.ticks.maxRotation = 0;
-    ch.options.scales.x.ticks.minRotation = 0;
-
-    // 禁用 parsing/decimation，避免 time/decimation 干擾
-    ch.options.parsing = false;
-    ch.options.plugins = ch.options.plugins || {};
-    if (ch.options.plugins.decimation) ch.options.plugins.decimation.enabled = false;
-
-    ch.data.datasets.forEach(ds => {
-      ds.parsing = false;
-
+    // 建立 map：iso->value
+    function buildMap(ds) {
       const map = new Map();
-      let last = 0;
-      let has = false;
-
       const src = Array.isArray(ds.data) ? ds.data : [];
 
-      // (1) src = number[]
-      if (src.length && (typeof src[0] !== 'object')) {
+      // number[]
+      if (src.length && typeof src[0] !== 'object') {
         for (let i = 0; i < Math.min(oldLabels.length, src.length); i++) {
           const iso = toISO(oldLabels[i]);
           const v = Number(src[i]);
           if (iso && Number.isFinite(v)) map.set(iso, v);
         }
-      } else if (src.length && typeof src[0] === 'object') {
-        // (2) src = {x,y}[] 但可能含 null → 防呆
-        for (const p of src) {
-          if (!p || typeof p !== 'object') continue;
-          const iso = toISO(p.x ?? p.t ?? p.date);
-          const v = Number(p.y);
-          if (iso && Number.isFinite(v)) map.set(iso, v);
-        }
+        return map;
       }
 
-      // fallback：若 map 空，保留最後值在最後一天
+      // {x,y}[]，可能含 null
+      for (const p of src) {
+        if (!p || typeof p !== 'object') continue;
+        const iso = toISO(p.x ?? p.t ?? p.date);
+        const v = Number(p.y);
+        if (iso && Number.isFinite(v)) map.set(iso, v);
+      }
+      return map;
+    }
+
+    const newDatasets = old.data.datasets.map(ds => {
+      const style = pickStyle(ds);
+      const map = buildMap(ds);
+
+      // fallback 最後值
       let lastVal = 0;
+      const src = Array.isArray(ds.data) ? ds.data : [];
       for (let i = src.length - 1; i >= 0; i--) {
         const v = (src[i] && typeof src[i] === 'object') ? Number(src[i].y) : Number(src[i]);
         if (Number.isFinite(v)) { lastVal = v; break; }
       }
 
-      ds.data = labels.map((lab, idx) => {
+      let last = 0;
+      let has = false;
+
+      const data = labels.map((lab, idx) => {
         if (map.has(lab)) {
           last = map.get(lab);
           has = true;
@@ -407,23 +398,49 @@
           last = lastVal; has = true;
           return last;
         }
-        return has ? last : 0;
+        return has ? last : 0; // 沒交易日：橫移；前段無值：0
       });
+
+      return { ...style, data };
     });
 
-    ch.data.labels = labels;
+    // 取舊圖 options 的必要片段（避免帶 scriptable）
+    const ctx = document.getElementById('equityChart')?.getContext?.('2d');
+    if (!ctx) return null;
 
-    try { ch.update('none'); } catch { ch.update(); }
-    return labels;
+    try { old.destroy(); } catch {}
+
+    const newChart = new window.Chart(ctx, {
+      type: 'line',
+      data: { labels, datasets: newDatasets },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: false,
+        parsing: false,
+        normalized: true,
+        plugins: {
+          legend: { display: true }
+        },
+        scales: {
+          x: {
+            type: 'category',
+            ticks: { autoSkip: false, maxRotation: 0, minRotation: 0 }
+          }
+        }
+      }
+    });
+
+    return { labels, chart: newChart };
   }
 
-  // ✅ 下圖：每日損益（labels 跟上圖一致），沒交易日 delta=0
   function rebuildDailyPnlChartFromEquity() {
     const eq = getChartByCanvasId('equityChart');
     if (!eq || !eq.data?.labels?.length || !eq.data?.datasets?.length) return;
 
     const labels = eq.data.labels.map(x => String(x));
 
+    // 找含滑價總損益
     let idx = 0;
     for (let i = 0; i < eq.data.datasets.length; i++) {
       const name = String(eq.data.datasets[i]?.label || '');
@@ -438,7 +455,7 @@
     const old = getChartByCanvasId('weeklyPnlChart');
     if (old) { try { old.destroy(); } catch {} }
 
-    const ctx = $('#weeklyPnlChart')?.getContext?.('2d');
+    const ctx = document.getElementById('weeklyPnlChart')?.getContext?.('2d');
     if (!ctx) return;
 
     new window.Chart(ctx, {
@@ -455,16 +472,17 @@
       options: {
         responsive: true,
         maintainAspectRatio: false,
+        animation: false,
+        parsing: false,
+        normalized: true,
         plugins: { legend: { display: true } },
         scales: {
-          x: { type: 'category', ticks: { autoSkip: false, maxRotation: 0, minRotation: 0 } },
-          y: { ticks: { callback: (v) => v } }
+          x: { type: 'category', ticks: { autoSkip: false, maxRotation: 0, minRotation: 0 } }
         }
       }
     });
   }
 
-  // 交易表上色：點數/損益/累積損益 正紅負綠
   function applyTradeTableColors() {
     const tbody = $('#tradesBody');
     if (!tbody) return;
@@ -472,6 +490,7 @@
     const rows = Array.from(tbody.querySelectorAll('tr'));
     if (!rows.length) return;
 
+    // 4 點數；7/8/9/10 損益/累積
     const idxs = [4, 7, 8, 9, 10];
 
     function parseNum(txt) {
@@ -501,22 +520,18 @@
     }
   }
 
-  // 多次覆蓋，避免 single-trades.js update 後把我們改掉
   function scheduleFixes(start8, end8) {
     const run = () => {
       try {
-        forceEquityChartToBizDays(start8, end8);
+        rebuildEquityChartAsBizDays(start8, end8);
         rebuildDailyPnlChartFromEquity();
         applyTradeTableColors();
-      } catch (e) {
-        // 不讓錯誤中斷整體流程
-      }
+      } catch {}
     };
     run();
-    setTimeout(run, 150);
-    setTimeout(run, 350);
-    setTimeout(run, 800);
-    setTimeout(run, 1400);
+    setTimeout(run, 250);
+    setTimeout(run, 600);
+    setTimeout(run, 1200);
   }
 
   async function postProcessWait(start8, end8) {
@@ -534,7 +549,7 @@
   // ===== 主流程 =====
   let __FULL_CANON = '';
   let __LATEST_NAME = '0807.txt';
-  let __END8_ANCHOR = '';
+  let __END8_ANCHOR = ''; // max(最後交易日, 今天)
 
   async function applyRangeAndRun(rangeKey) {
     if (!__FULL_CANON || !__END8_ANCHOR) return;
@@ -595,13 +610,12 @@
       __LATEST_NAME = latest.name;
       if (elLatest) elLatest.textContent = latest.name;
 
-      // manifest 可能不存在 → 用 safe 版本
+      // baseline：改用 localStorage（避免 manifests 400）
       let base = null;
       if (!paramFile) {
-        const manifest = await readManifestSafe();
-        if (manifest?.baseline_path) {
-          base = list.find(x => x.fullPath === manifest.baseline_path) ||
-                 { name: manifest.baseline_path.split('/').pop() || manifest.baseline_path, fullPath: manifest.baseline_path };
+        const saved = localStorage.getItem(LS_BASELINE_KEY) || '';
+        if (saved) {
+          base = list.find(x => x.fullPath === saved) || { name: saved.split('/').pop() || saved, fullPath: saved };
         } else {
           base = list[1] || null;
         }
@@ -637,15 +651,16 @@
       const t8 = today8();
       __END8_ANCHOR = (t8 > lastTrade8) ? t8 : lastTrade8;
 
+      // 設基準：寫 localStorage（不再寫 manifests）
       if (btnBase) {
         btnBase.disabled = false;
         btnBase.onclick = async () => {
           try {
-            const payload = { baseline_path: latest.fullPath, updated_at: new Date().toISOString() };
-            await writeManifest(payload);
+            localStorage.setItem(LS_BASELINE_KEY, latest.fullPath);
             btnBase.textContent = '已設為基準';
+            setStatus('已設最新檔為基準（localStorage）。');
           } catch (e) {
-            setStatus('寫入基準失敗：' + (e.message || e), true);
+            setStatus('設基準失敗：' + (e.message || e), true);
           }
         };
       }
