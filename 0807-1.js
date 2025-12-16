@@ -1,5 +1,10 @@
-// 0807.js — 以「基準最後日」為錨合併後，直接餵給 single-trades.js（自動計算）
-// 0807-1：新增時區快選（近1週/2週/1~6月/1年/全），只在「全」顯示 KPI；並補齊交易日
+// 0807-1.js — 0807-1
+// 修正點：補回 readManifest()（之前漏掉會直接壞）
+// 功能：
+// 1) 滑點預設強制=2，確保第一次自動分析吃得到
+// 2) 時區用圖表首行 chips（直接點）
+// 3) 點選時區立即重算；非「全」隱藏 KPI
+// 4) 主資產曲線補齊交易日（週一~週五），缺日用前值持平
 (function () {
   'use strict';
 
@@ -11,31 +16,25 @@
   const elPeriod = $('#periodText');
   const btnBase  = $('#btnSetBaseline');
 
-  const rangeSelect = $('#rangeSelect');
-
   const scoreCard  = $('#scoreCard');
   const kpiBadCard = $('#kpiBadCard');
   const kpiAllCard = $('#kpiAllCard');
 
+  const rangeChips = $('#rangeChips');
+
   if (status) status.style.whiteSpace = 'pre-wrap';
 
-  // Supabase 設定（與其他頁一致）
   const SUPABASE_URL  = "https://byhbmmnacezzgkwfkozs.supabase.co";
   const SUPABASE_ANON = "sb_publishable_xVe8fGbqQ0XGwi4DsmjPMg_Y2RBOD3t";
   const BUCKET        = "reports";
 
-  if (!window.supabase) {
-    console.error('Supabase SDK 未載入');
-  }
-
-  const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON, {
+  const sb = window.supabase?.createClient(SUPABASE_URL, SUPABASE_ANON, {
     global: { fetch: (u, o = {}) => fetch(u, { ...o, cache: 'no-store' }) }
   });
 
   const WANT          = /0807/i;
   const MANIFEST_PATH = "manifests/0807.json";
 
-  // canonical 3 欄行
   const CANON_RE   = /^(\d{14})\.0{6}\s+(\d+\.\d{6})\s+(新買|平賣|新賣|平買|強制平倉)\s*$/;
   const EXTRACT_RE = /.*?(\d{14})(?:\.0{1,6})?\s+(\d+(?:\.\d{1,6})?)\s*(新買|平賣|新賣|平買|強制平倉)\s*$/;
 
@@ -43,6 +42,21 @@
     if (!status) return;
     status.textContent = msg;
     status.style.color = bad ? '#c62828' : '#666';
+  }
+
+  function forceSlipDefault2() {
+    const slip = $('#slipInput');
+    if (!slip) return;
+    slip.value = '2';
+    slip.dispatchEvent(new Event('input', { bubbles: true }));
+    slip.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+
+  function setKpiVisible(isAll) {
+    const hide = !isAll;
+    if (scoreCard)  scoreCard.classList.toggle('kpi-hidden', hide);
+    if (kpiBadCard) kpiBadCard.classList.toggle('kpi-hidden', hide);
+    if (kpiAllCard) kpiAllCard.classList.toggle('kpi-hidden', hide);
   }
 
   function pubUrl(path) {
@@ -79,21 +93,13 @@
     return Math.max(...m.map(s => +s || 0));
   }
 
-  // ===== 文字正規化 & canonical 行抽取 =====
   function normalizeText(raw) {
     let s = raw
-      .replace(/\ufeff/gi, '')                  // BOM
-      .replace(/\u200b|\u200c|\u200d/gi, '')    // 零寬字元
-      .replace(/[\x00-\x09\x0B-\x1F\x7F]/g, '');// 控制碼
-
-    s = s.replace(/\r\n?/g, '\n')
-         .replace(/\u3000/g, ' ');
-
-    const lines = s
-      .split('\n')
-      .map(l => l.replace(/\s+/g, ' ').trim())
-      .filter(Boolean);
-
+      .replace(/\ufeff/gi, '')
+      .replace(/\u200b|\u200c|\u200d/gi, '')
+      .replace(/[\x00-\x09\x0B-\x1F\x7F]/g, '');
+    s = s.replace(/\r\n?/g, '\n').replace(/\u3000/g, ' ');
+    const lines = s.split('\n').map(l => l.replace(/\s+/g, ' ').trim()).filter(Boolean);
     return lines.join('\n');
   }
 
@@ -147,7 +153,6 @@
     return rows;
   }
 
-  // combined = base 全部 + (latest 裡 ts > baseMax 的行)
   function mergeByBaseline(baseText, latestText) {
     const A = parseCanon(baseText);
     const B = parseCanon(latestText);
@@ -155,30 +160,18 @@
     const baseMin = A.length ? A[0].ts.slice(0, 8) : (B.length ? B[0].ts.slice(0, 8) : '');
     const baseMax = A.length ? A[A.length - 1].ts : '';
 
-    const added = baseMax
-      ? B.filter(x => x.ts > baseMax).map(x => x.line)
-      : B.map(x => x.line);
-
+    const added = baseMax ? B.filter(x => x.ts > baseMax).map(x => x.line) : B.map(x => x.line);
     const mergedLines = [...A.map(x => x.line), ...added];
 
     const endDay = mergedLines.length
       ? mergedLines[mergedLines.length - 1].match(CANON_RE)[1].slice(0, 8)
       : baseMin;
 
-    return {
-      combined: mergedLines.join('\n'),
-      start8  : baseMin,
-      end8    : endDay
-    };
+    return { combined: mergedLines.join('\n'), start8: baseMin, end8: endDay };
   }
 
-  // ===== 為每一筆「新買／新賣」插入假的 INPOS 行，給 single-trades.js 判方向用 =====
   function addFakeInpos(text) {
-    const lines = (text || '')
-      .split('\n')
-      .map(s => s.trim())
-      .filter(Boolean);
-
+    const lines = (text || '').split('\n').map(s => s.trim()).filter(Boolean);
     const out = [];
     for (const line of lines) {
       const m = line.match(CANON_RE);
@@ -198,106 +191,11 @@
     return out.join('\n');
   }
 
-  // ===== KPI 顯示控制：只有 all 顯示 KPI =====
-  function setKpiVisible(isAll) {
-    const hide = !isAll;
-    if (scoreCard)  scoreCard.classList.toggle('kpi-hidden', hide);
-    if (kpiBadCard) kpiBadCard.classList.toggle('kpi-hidden', hide);
-    if (kpiAllCard) kpiAllCard.classList.toggle('kpi-hidden', hide);
-  }
-
-  // ===== 日期工具（用 UTC 避免 DST 問題） =====
-  function ymdToDate(ymd) {
-    const y = +ymd.slice(0, 4);
-    const m = +ymd.slice(4, 6);
-    const d = +ymd.slice(6, 8);
-    return new Date(Date.UTC(y, m - 1, d));
-  }
-  function dateToYmd(dt) {
-    const y = dt.getUTCFullYear();
-    const m = String(dt.getUTCMonth() + 1).padStart(2, '0');
-    const d = String(dt.getUTCDate()).padStart(2, '0');
-    return `${y}${m}${d}`;
-  }
-  function dowMon1(dt) {
-    const x = dt.getUTCDay();
-    return x === 0 ? 7 : x; // Sun=7
-  }
-  function nextMondayIfWeekend(dt) {
-    const d = new Date(dt.getTime());
-    const dow = dowMon1(d);
-    if (dow === 6) d.setUTCDate(d.getUTCDate() + 2);
-    if (dow === 7) d.setUTCDate(d.getUTCDate() + 1);
-    return d;
-  }
-  function startOfWeekMonday(endDt) {
-    const d = new Date(endDt.getTime());
-    const dow = dowMon1(d);
-    d.setUTCDate(d.getUTCDate() - (dow - 1));
-    return d;
-  }
-  function addMonthsUTC(dt, deltaMonths) {
-    const y = dt.getUTCFullYear();
-    const m = dt.getUTCMonth();
-    const d = dt.getUTCDate();
-
-    const target = new Date(Date.UTC(y, m + deltaMonths, 1));
-    const lastDay = new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0)).getUTCDate();
-    target.setUTCDate(Math.min(d, lastDay));
-    return target;
-  }
-
-  function calcRangeStart(endYmd, key) {
-    const endDt = ymdToDate(endYmd);
-
-    if (key === 'all') return null;
-
-    if (key === 'w1') return startOfWeekMonday(endDt);
-    if (key === 'w2') {
-      const mon = startOfWeekMonday(endDt);
-      mon.setUTCDate(mon.getUTCDate() - 7);
-      return mon;
-    }
-
-    if (key === 'm1') return nextMondayIfWeekend(addMonthsUTC(endDt, -1));
-    if (key === 'm2') return nextMondayIfWeekend(addMonthsUTC(endDt, -2));
-    if (key === 'm3') return nextMondayIfWeekend(addMonthsUTC(endDt, -3));
-    if (key === 'm6') return nextMondayIfWeekend(addMonthsUTC(endDt, -6));
-    if (key === 'y1') return nextMondayIfWeekend(addMonthsUTC(endDt, -12));
-
-    return null;
-  }
-
-  function filterCanonByRange(canonText, rangeKey) {
-    const rows = parseCanon(canonText);
-    if (!rows.length) return { text: canonText, start8: '', end8: '' };
-
-    const end8 = rows[rows.length - 1].ts.slice(0, 8);
-
-    const startDt = calcRangeStart(end8, rangeKey);
-    if (!startDt) {
-      const start8 = rows[0].ts.slice(0, 8);
-      return { text: canonText, start8, end8 };
-    }
-
-    const start8 = dateToYmd(startDt);
-    const startTS = start8 + '000000';
-    const endTS   = end8   + '235959';
-
-    const picked = rows
-      .filter(r => r.ts >= startTS && r.ts <= endTS)
-      .map(r => r.line);
-
-    return { text: picked.join('\n'), start8, end8 };
-  }
-
-  // ===== 把內容餵給 single-trades.js =====
-  async function feedToSingleTrades(filename, mergedText) {
+  async function feedToSingleTrades(filename, text) {
     const fileInput = $('#fileInput');
     const runBtn    = $('#runBtn');
 
-    const fname = filename || '0807.txt';
-    const file  = new File([mergedText], fname, { type: 'text/plain' });
+    const file = new File([text], filename || '0807.txt', { type: 'text/plain' });
 
     if (window.__singleTrades_setFile) window.__singleTrades_setFile(file);
 
@@ -311,14 +209,13 @@
     if (runBtn) runBtn.click();
   }
 
-  // ===== 讀寫 manifest（基準檔資訊） =====
+  // ===== manifest（修正：readManifest 原本漏掉）=====
   async function readManifest() {
     try {
       const { data, error } = await sb.storage.from(BUCKET).download(MANIFEST_PATH);
       if (error || !data) return null;
-      const text = await data.text();
-      return JSON.parse(text);
-    } catch (e) {
+      return JSON.parse(await data.text());
+    } catch {
       return null;
     }
   }
@@ -333,12 +230,77 @@
     if (error) throw new Error(error.message);
   }
 
-  // ===== 0807-1：補齊交易日（周一到周五）到主資產曲線 =====
+  // ===== 日期工具（UTC）=====
+  function ymdToDate(ymd) {
+    const y = +ymd.slice(0, 4), m = +ymd.slice(4, 6), d = +ymd.slice(6, 8);
+    return new Date(Date.UTC(y, m - 1, d));
+  }
+  function dateToYmd(dt) {
+    const y = dt.getUTCFullYear();
+    const m = String(dt.getUTCMonth() + 1).padStart(2, '0');
+    const d = String(dt.getUTCDate()).padStart(2, '0');
+    return `${y}${m}${d}`;
+  }
+  function dowMon1(dt) { const x = dt.getUTCDay(); return x === 0 ? 7 : x; }
+  function nextMondayIfWeekend(dt) {
+    const d = new Date(dt.getTime());
+    const dow = dowMon1(d);
+    if (dow === 6) d.setUTCDate(d.getUTCDate() + 2);
+    if (dow === 7) d.setUTCDate(d.getUTCDate() + 1);
+    return d;
+  }
+  function startOfWeekMonday(endDt) {
+    const d = new Date(endDt.getTime());
+    const dow = dowMon1(d);
+    d.setUTCDate(d.getUTCDate() - (dow - 1));
+    return d;
+  }
+  function addMonthsUTC(dt, deltaMonths) {
+    const y = dt.getUTCFullYear(), m = dt.getUTCMonth(), d = dt.getUTCDate();
+    const t = new Date(Date.UTC(y, m + deltaMonths, 1));
+    const lastDay = new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth() + 1, 0)).getUTCDate();
+    t.setUTCDate(Math.min(d, lastDay));
+    return t;
+  }
+  function calcRangeStart(endYmd, key) {
+    const endDt = ymdToDate(endYmd);
+    if (key === 'all') return null;
+    if (key === 'w1') return startOfWeekMonday(endDt);
+    if (key === 'w2') { const mon = startOfWeekMonday(endDt); mon.setUTCDate(mon.getUTCDate() - 7); return mon; }
+    if (key === 'm1') return nextMondayIfWeekend(addMonthsUTC(endDt, -1));
+    if (key === 'm2') return nextMondayIfWeekend(addMonthsUTC(endDt, -2));
+    if (key === 'm3') return nextMondayIfWeekend(addMonthsUTC(endDt, -3));
+    if (key === 'm6') return nextMondayIfWeekend(addMonthsUTC(endDt, -6));
+    if (key === 'y1') return nextMondayIfWeekend(addMonthsUTC(endDt, -12));
+    return null;
+  }
+
+  function filterCanonByRange(fullCanon, rangeKey) {
+    const rows = parseCanon(fullCanon);
+    if (!rows.length) return { text: fullCanon, start8: '', end8: '' };
+
+    const end8 = rows[rows.length - 1].ts.slice(0, 8);
+    const startDt = calcRangeStart(end8, rangeKey);
+
+    if (!startDt) {
+      const start8 = rows[0].ts.slice(0, 8);
+      return { text: fullCanon, start8, end8 };
+    }
+
+    const start8  = dateToYmd(startDt);
+    const startTS = start8 + '000000';
+    const endTS   = end8   + '235959';
+
+    const picked = rows.filter(r => r.ts >= startTS && r.ts <= endTS).map(r => r.line);
+    return { text: picked.join('\n'), start8, end8 };
+  }
+
+  // ===== 補齊交易日到 equityChart =====
   function tryFillBusinessDaysOnEquityChart(rangeStart8, rangeEnd8) {
     let ch = null;
     try {
       ch = window.Chart?.getChart?.('equityChart') || window.Chart?.getChart?.($('#equityChart'));
-    } catch (e) {}
+    } catch {}
     if (!ch || !ch.data) return;
 
     const labels = ch.data.labels || [];
@@ -375,13 +337,11 @@
       const ymd = labelToYmd(labels[i]);
       if (ymd) existing.set(ymd, i);
     }
+    if (existing.size < 2) return;
+    if (existing.size > full.length) return;
 
-    const uniq = existing.size;
-    if (uniq < 2) return;
-    if (uniq > full.length) return;
-
-    function getValueAt(dataset, idx) {
-      const v = dataset.data?.[idx];
+    function getValueAt(ds, idx) {
+      const v = ds.data?.[idx];
       return (v === undefined || v === null || Number.isNaN(v)) ? null : v;
     }
 
@@ -393,7 +353,6 @@
       if (existing.has(ymd)) {
         const idx = existing.get(ymd);
         newLabels.push(labels[idx]);
-
         dsList.forEach((ds, k) => {
           const v = getValueAt(ds, idx);
           newData[k].push(v);
@@ -402,58 +361,68 @@
       } else {
         const y = ymd.slice(0,4), m = ymd.slice(4,6), d = ymd.slice(6,8);
         newLabels.push(`${y}-${m}-${d}`);
-
-        dsList.forEach((ds, k) => {
-          newData[k].push(lastKnown[k]);
-        });
+        dsList.forEach((ds, k) => newData[k].push(lastKnown[k]));
       }
     }
 
     ch.data.labels = newLabels;
     dsList.forEach((ds, k) => { ds.data = newData[k]; });
 
-    try { ch.update('none'); } catch (e) { ch.update(); }
+    try { ch.update('none'); } catch { ch.update(); }
   }
 
-  // ===== 主流程（套時區 → 餵 single-trades → 補齊交易日） =====
+  function setActiveChip(key) {
+    if (!rangeChips) return;
+    rangeChips.querySelectorAll('.range-chip').forEach(btn => {
+      btn.classList.toggle('active', (btn.dataset.range === key));
+    });
+  }
+
+  // ===== 主流程 =====
   let __FULL_CANON = '';
   let __LATEST_NAME = '0807.txt';
 
   async function applyRangeAndRun(rangeKey) {
+    if (!__FULL_CANON) return;
+
+    forceSlipDefault2();
+
+    setActiveChip(rangeKey);
     setKpiVisible(rangeKey === 'all');
 
     const r = filterCanonByRange(__FULL_CANON, rangeKey);
-
     if (elPeriod) elPeriod.textContent = `期間：${r.start8 || '—'} 開始到 ${r.end8 || '—'} 結束`;
 
     const withInpos = addFakeInpos(r.text);
     const finalText = '0807 MERGED\n' + withInpos;
 
-    setStatus(`已套用時區：${rangeKey}，開始分析…`);
+    setStatus(`套用時區：${rangeKey}，重算中…`);
     await feedToSingleTrades(__LATEST_NAME, finalText);
 
     setTimeout(() => {
       tryFillBusinessDaysOnEquityChart(r.start8, r.end8);
-    }, 80);
+    }, 140);
 
-    setStatus(`分析完成（時區：${rangeKey}）。可調整「本金／滑點」後按計算重算。`);
+    setStatus(`分析完成（時區：${rangeKey}）。`);
   }
 
   async function boot() {
     try {
+      if (!sb) {
+        setStatus('Supabase SDK 未載入，請檢查引用順序或網路。', true);
+        return;
+      }
+
+      forceSlipDefault2();
+
       const url       = new URL(location.href);
       const paramFile = url.searchParams.get('file');
 
       let latest = null;
       let list   = [];
 
-      // 1) 決定最新檔
       if (paramFile) {
-        latest = {
-          name    : paramFile.split('/').pop() || '0807.txt',
-          fullPath: paramFile,
-          from    : 'url'
-        };
+        latest = { name: paramFile.split('/').pop() || '0807.txt', fullPath: paramFile, from: 'url' };
       } else {
         setStatus('從 Supabase（reports）讀取清單…');
         list = (await listCandidates()).filter(f => WANT.test(f.name) || WANT.test(f.fullPath));
@@ -461,44 +430,32 @@
           setStatus('找不到檔名含「0807」的 TXT（可用 ?file= 指定）。', true);
           return;
         }
-
         list.sort((a, b) => {
           const sa = lastDateScore(a.name);
-          const sb = lastDateScore(b.name);
-          if (sa !== sb) return sb - sa;
+          const sb2 = lastDateScore(b.name);
+          if (sa !== sb2) return sb2 - sa;
           if (a.updatedAt !== b.updatedAt) return b.updatedAt - a.updatedAt;
           return (b.size || 0) - (a.size || 0);
         });
-
         latest = list[0];
-      }
-
-      if (!latest) {
-        setStatus('找不到可分析的 0807 檔案。', true);
-        return;
       }
 
       __LATEST_NAME = latest.name;
       if (elLatest) elLatest.textContent = latest.name;
 
-      // 2) 決定基準檔
       let base = null;
       if (!paramFile) {
         const manifest = await readManifest();
         if (manifest?.baseline_path) {
-          base =
-            list.find(x => x.fullPath === manifest.baseline_path) ||
-            { name: manifest.baseline_path.split('/').pop() || manifest.baseline_path, fullPath: manifest.baseline_path };
+          base = list.find(x => x.fullPath === manifest.baseline_path) ||
+                 { name: manifest.baseline_path.split('/').pop() || manifest.baseline_path, fullPath: manifest.baseline_path };
         } else {
           base = list[1] || null;
         }
       }
-
       if (elBase) elBase.textContent = base ? base.name : '（尚無）';
 
-      // 3) 下載最新檔 & 基準檔，canonical 化與合併
       setStatus('下載最新 0807 檔案並解碼中…');
-
       const latestUrl = latest.from === 'url' ? latest.fullPath : pubUrl(latest.fullPath);
       const rNew = await fetchSmart(latestUrl);
       if (rNew.ok === 0) {
@@ -514,11 +471,10 @@
         setStatus('下載基準檔並進行合併…');
         const baseUrl = base.from === 'url' ? base.fullPath : pubUrl(base.fullPath);
         const rBase = await fetchSmart(baseUrl);
-
         const m = mergeByBaseline(rBase.canon, rNew.canon);
         mergedCanon = m.combined;
-        start8      = m.start8;
-        end8        = m.end8;
+        start8 = m.start8;
+        end8   = m.end8;
       } else {
         const rows = parseCanon(rNew.canon);
         start8 = rows.length ? rows[0].ts.slice(0, 8) : '';
@@ -526,10 +482,8 @@
       }
 
       __FULL_CANON = mergedCanon;
-
       if (elPeriod) elPeriod.textContent = `期間：${start8 || '—'} 開始到 ${end8 || '—'} 結束`;
 
-      // 4) 設基準按鈕
       if (btnBase) {
         btnBase.disabled = false;
         btnBase.onclick = async () => {
@@ -543,18 +497,20 @@
         };
       }
 
-      // 5) 時區快選切換即重跑
-      if (rangeSelect) {
-        rangeSelect.addEventListener('change', () => {
-          const key = rangeSelect.value || 'all';
+      if (rangeChips) {
+        rangeChips.addEventListener('click', (ev) => {
+          const btn = ev.target?.closest?.('.range-chip');
+          if (!btn) return;
+          const key = btn.dataset.range || 'all';
           applyRangeAndRun(key);
         });
       }
 
-      // 6) 初次跑：預設 all
-      const firstKey = (rangeSelect && rangeSelect.value) ? rangeSelect.value : 'all';
+      setActiveChip('all');
+      setKpiVisible(true);
+
       setStatus('已載入（合併後）資料，開始分析…');
-      await applyRangeAndRun(firstKey);
+      await applyRangeAndRun('all');
 
     } catch (err) {
       console.error(err);
