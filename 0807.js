@@ -1,5 +1,6 @@
-// 0807.js — 以「基準最後日」為錨合併後，直接餵給 single-trades.js（自動計算）
+// 0807.js — 以「次新檔」為基準合併後，直接餵給 single-trades.js（自動計算）
 // 分析資料 = 基準全段 + 最新檔的新增；畫面只顯示期間＋KPI＋資產曲線
+// ★已移除 manifests/0807.json 的任何讀取/寫入，以消除 DevTools 400 紅字
 (function () {
   'use strict';
 
@@ -26,8 +27,7 @@
     global: { fetch: (u, o = {}) => fetch(u, { ...o, cache: 'no-store' }) }
   });
 
-  const WANT          = /0807/i;
-  const MANIFEST_PATH = "manifests/0807.json";
+  const WANT = /0807/i;
 
   // canonical 3 欄行
   const CANON_RE   = /^(\d{14})\.0{6}\s+(\d+\.\d{6})\s+(新買|平賣|新賣|平買|強制平倉)\s*$/;
@@ -54,10 +54,10 @@
     return (data || [])
       .filter(it => !(it.id === null && !it.metadata))
       .map(it => ({
-        name    : it.name,
-        fullPath: p + it.name,
+        name     : it.name,
+        fullPath : p + it.name,
         updatedAt: it.updated_at ? Date.parse(it.updated_at) : 0,
-        size    : it.metadata?.size || 0
+        size     : it.metadata?.size || 0
       }));
   }
 
@@ -95,7 +95,6 @@
     const out = [];
     const lines = (txt || '').split('\n');
     let ok = 0;
-    let bad = 0;
 
     for (const l of lines) {
       const m = l.match(EXTRACT_RE);
@@ -106,18 +105,14 @@
         const act = m[3];
         out.push(`${ts}.000000 ${px6} ${act}`);
         ok++;
-      } else {
-        bad++;
       }
     }
-    return { canon: out.join('\n'), ok, bad };
+    return { canon: out.join('\n'), ok };
   }
 
   async function fetchSmart(url) {
     const res = await fetch(url, { cache: 'no-store' });
-    if (!res.ok) {
-      throw new Error(`HTTP ${res.status} ${res.statusText}`);
-    }
+    if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
     const buf = await res.arrayBuffer();
 
     for (const enc of ['utf-8', 'big5', 'utf-16le', 'utf-16be']) {
@@ -125,12 +120,8 @@
         const td   = new TextDecoder(enc, { fatal: false });
         const norm = normalizeText(td.decode(buf));
         const { canon, ok } = canonicalize(norm);
-        if (ok > 0) {
-          return { enc, canon, ok };
-        }
-      } catch (e) {
-        // ignore and try next encoding
-      }
+        if (ok > 0) return { enc, canon, ok };
+      } catch (e) {}
     }
 
     const td   = new TextDecoder('utf-8');
@@ -144,9 +135,7 @@
     if (!text) return rows;
     for (const line of text.split('\n')) {
       const m = line.match(CANON_RE);
-      if (m) {
-        rows.push({ ts: m[1], line });
-      }
+      if (m) rows.push({ ts: m[1], line });
     }
     rows.sort((a, b) => a.ts.localeCompare(b.ts));
     return rows;
@@ -235,30 +224,6 @@
     }
   }
 
-  // ===== 讀寫 manifest（基準檔資訊）=====
-  // 目的：把 Console 紅字「GET ... manifests/0807.json 400」消掉
-  // 做法：不再用 storage.download（會 400），改用 public URL + fetch；不存在就靜默回 null
-  async function readManifest() {
-    try {
-      const url = pubUrl(MANIFEST_PATH);
-      if (!url || url === '#') return null;
-
-      const res = await fetch(url, { cache: 'no-store' });
-      if (!res.ok) return null;          // 404/400 都直接當作沒有
-      const text = await res.text();
-      if (!text) return null;
-
-      return JSON.parse(text);
-    } catch (e) {
-      return null;
-    }
-  }
-
-  // GitHub Pages 一般無法寫回 Supabase（會報錯/紅字），因此這裡直接禁用寫入：
-  async function writeManifest(_obj) {
-    throw new Error('此頁面為唯讀模式：不支援寫入基準（manifest）。');
-  }
-
   // ===== 主流程 =====
   async function boot() {
     try {
@@ -280,12 +245,13 @@
         list = (await listCandidates()).filter(f =>
           WANT.test(f.name) || WANT.test(f.fullPath)
         );
+
         if (!list.length) {
           setStatus('找不到檔名含「0807」的 TXT（可用 ?file= 指定）。', true);
           return;
         }
 
-        // 排序規則：先比檔名中的最大日期（如果有），再比 updatedAt，再比 size
+        // 排序：檔名最大日期 > updatedAt > size
         list.sort((a, b) => {
           const sa = lastDateScore(a.name);
           const sb = lastDateScore(b.name);
@@ -303,25 +269,13 @@
       }
       if (elLatest) elLatest.textContent = latest.name;
 
-      // 2) 決定基準檔
+      // 2) 基準檔：固定用「次新檔」（不讀 manifest，完全不發出 manifests 的 GET）
       let base = null;
       if (!paramFile) {
-        const manifest = await readManifest();
-        if (manifest?.baseline_path) {
-          base =
-            list.find(x => x.fullPath === manifest.baseline_path) ||
-            {
-              name    : manifest.baseline_path.split('/').pop() || manifest.baseline_path,
-              fullPath: manifest.baseline_path
-            };
-        } else {
-          base = list[1] || null; // 沒有 manifest → 用次新檔當基準（若存在）
-        }
+        base = list[1] || null;
       }
 
-      if (elBase) {
-        elBase.textContent = base ? base.name : '（尚無）';
-      }
+      if (elBase) elBase.textContent = base ? base.name : '（尚無）';
 
       // 3) 下載最新檔 & 基準檔，做 canonical 化與合併
       setStatus('下載最新 0807 檔案並解碼中…');
@@ -361,11 +315,11 @@
         elPeriod.textContent = `期間：${start8 || '—'} 開始到 ${end8 || '—'} 結束`;
       }
 
-      // 4) 「設此為基準」：此頁改為唯讀，直接禁用，不再嘗試寫入（避免任何紅字）
+      // 4) 「設此為基準」：此頁固定唯讀（不寫入，避免任何額外紅字）
       if (btnBase) {
         btnBase.disabled = true;
         btnBase.textContent = '唯讀模式';
-        btnBase.title = '此頁面不支援寫入基準（manifest）。';
+        btnBase.title = '此頁不寫入基準（不使用 manifest），基準固定為次新檔。';
         btnBase.onclick = null;
       }
 
