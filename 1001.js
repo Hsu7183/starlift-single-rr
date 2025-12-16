@@ -1,5 +1,6 @@
-// 1001.js — 以「基準最後日」為錨合併後，直接餵給 single-trades.js（自動計算）
+// 1001.js — 以「次新檔」為基準合併後，直接餵給 single-trades.js（自動計算）
 // 分析資料 = 基準全段 + 最新檔的新增；畫面只顯示期間＋KPI＋資產曲線
+// ★對齊 0807 基準：滑點預設=2 且首次載入即用2計算；不使用 manifest；基準固定次新檔(唯讀)
 (function () {
   'use strict';
 
@@ -26,8 +27,7 @@
     global: { fetch: (u, o = {}) => fetch(u, { ...o, cache: 'no-store' }) }
   });
 
-  const WANT          = /1001/i;                // ★ 改成找 1001
-  const MANIFEST_PATH = "manifests/1001.json";  // ★ 專屬 1001 的基準 manifest
+  const WANT = /1001/i;
 
   // canonical 3 欄行
   const CANON_RE   = /^(\d{14})\.0{6}\s+(\d+\.\d{6})\s+(新買|平賣|新賣|平買|強制平倉)\s*$/;
@@ -54,10 +54,10 @@
     return (data || [])
       .filter(it => !(it.id === null && !it.metadata))
       .map(it => ({
-        name    : it.name,
-        fullPath: p + it.name,
+        name     : it.name,
+        fullPath : p + it.name,
         updatedAt: it.updated_at ? Date.parse(it.updated_at) : 0,
-        size    : it.metadata?.size || 0
+        size     : it.metadata?.size || 0
       }));
   }
 
@@ -95,7 +95,6 @@
     const out = [];
     const lines = (txt || '').split('\n');
     let ok = 0;
-    let bad = 0;
 
     for (const l of lines) {
       const m = l.match(EXTRACT_RE);
@@ -106,18 +105,14 @@
         const act = m[3];
         out.push(`${ts}.000000 ${px6} ${act}`);
         ok++;
-      } else {
-        bad++;
       }
     }
-    return { canon: out.join('\n'), ok, bad };
+    return { canon: out.join('\n'), ok };
   }
 
   async function fetchSmart(url) {
     const res = await fetch(url, { cache: 'no-store' });
-       if (!res.ok) {
-      throw new Error(`HTTP ${res.status} ${res.statusText}`);
-    }
+    if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
     const buf = await res.arrayBuffer();
 
     for (const enc of ['utf-8', 'big5', 'utf-16le', 'utf-16be']) {
@@ -125,12 +120,8 @@
         const td   = new TextDecoder(enc, { fatal: false });
         const norm = normalizeText(td.decode(buf));
         const { canon, ok } = canonicalize(norm);
-        if (ok > 0) {
-          return { enc, canon, ok };
-        }
-      } catch (e) {
-        // ignore and try next encoding
-      }
+        if (ok > 0) return { enc, canon, ok };
+      } catch (e) {}
     }
 
     const td   = new TextDecoder('utf-8');
@@ -144,9 +135,7 @@
     if (!text) return rows;
     for (const line of text.split('\n')) {
       const m = line.match(CANON_RE);
-      if (m) {
-        rows.push({ ts: m[1], line });
-      }
+      if (m) rows.push({ ts: m[1], line });
     }
     rows.sort((a, b) => a.ts.localeCompare(b.ts));
     return rows;
@@ -195,7 +184,6 @@
       if (act === '新買' || act === '新賣') {
         const dir = (act === '新買') ? 1 : -1;
         out.push(line);
-        // 假 INPOS 行，只要符合 single-trades.js 的判斷邏輯即可
         out.push(`${ts}.000000 0 0 ${dir} 0 INPOS`);
       } else {
         out.push(line);
@@ -209,15 +197,21 @@
     const fileInput = $('#fileInput');
     const runBtn    = $('#runBtn');
 
+    // 對齊 0807：確保第一次自動計算就用滑點=2
+    const slipInput = $('#slipInput');
+    if (slipInput) {
+      slipInput.value = '2';
+      slipInput.dispatchEvent(new Event('input',  { bubbles: true }));
+      slipInput.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
     const fname = filename || '1001.txt';
     const file  = new File([mergedText], fname, { type: 'text/plain' });
 
-    // 1) 通知 single-trades.js：目前要分析的檔案
     if (window.__singleTrades_setFile) {
       window.__singleTrades_setFile(file);
     }
 
-    // 2) 把檔案塞進隱藏的 #fileInput，讓 event 流程一致
     if (fileInput) {
       const dt = new DataTransfer();
       dt.items.add(file);
@@ -225,34 +219,10 @@
       fileInput.dispatchEvent(new Event('change', { bubbles: true }));
     }
 
-    // 3) 自動按下「計算」按鈕，直接畫圖＋算 KPI
+    // 延後一個 tick，避免 race condition（先用舊 slip 計算）
     if (runBtn) {
-      runBtn.click();
+      setTimeout(() => runBtn.click(), 0);
     }
-  }
-
-  // ===== 讀寫 manifest（基準檔資訊） =====
-  async function readManifest() {
-    try {
-      const { data, error } = await sb.storage.from(BUCKET).download(MANIFEST_PATH);
-      if (error || !data) return null;
-      const text = await data.text();
-      return JSON.parse(text);
-    } catch (e) {
-      return null;
-    }
-  }
-
-  async function writeManifest(obj) {
-    const blob = new Blob([JSON.stringify(obj, null, 2)], {
-      type: 'application/json'
-    });
-    const { error } = await sb.storage.from(BUCKET).upload(
-      MANIFEST_PATH,
-      blob,
-      { upsert: true, cacheControl: '0', contentType: 'application/json' }
-    );
-    if (error) throw new Error(error.message);
   }
 
   // ===== 主流程 =====
@@ -266,7 +236,6 @@
 
       // 1) 決定最新檔
       if (paramFile) {
-        // 可用 ?file=reports/xxx 直接指定
         latest = {
           name    : paramFile.split('/').pop() || '1001.txt',
           fullPath: paramFile,
@@ -277,12 +246,13 @@
         list = (await listCandidates()).filter(f =>
           WANT.test(f.name) || WANT.test(f.fullPath)
         );
+
         if (!list.length) {
           setStatus('找不到檔名含「1001」的 TXT（可用 ?file= 指定）。', true);
           return;
         }
 
-        // 排序規則：先比檔名中的最大日期（如果有），再比 updatedAt，再比 size
+        // 排序：檔名最大日期 > updatedAt > size
         list.sort((a, b) => {
           const sa = lastDateScore(a.name);
           const sb = lastDateScore(b.name);
@@ -300,25 +270,13 @@
       }
       if (elLatest) elLatest.textContent = latest.name;
 
-      // 2) 決定基準檔
+      // 2) 基準檔：固定用「次新檔」（不讀 manifest，完全乾淨）
       let base = null;
       if (!paramFile) {
-        const manifest = await readManifest();
-        if (manifest?.baseline_path) {
-          base =
-            list.find(x => x.fullPath === manifest.baseline_path) ||
-            {
-              name    : manifest.baseline_path.split('/').pop() || manifest.baseline_path,
-              fullPath: manifest.baseline_path
-            };
-        } else {
-          base = list[1] || null; // 沒有 manifest → 用次新檔當基準（若存在）
-        }
+        base = list[1] || null;
       }
 
-      if (elBase) {
-        elBase.textContent = base ? base.name : '（尚無）';
-      }
+      if (elBase) elBase.textContent = base ? base.name : '（尚無）';
 
       // 3) 下載最新檔 & 基準檔，做 canonical 化與合併
       setStatus('下載最新 1001 檔案並解碼中…');
@@ -349,7 +307,6 @@
         start8     = m.start8;
         end8       = m.end8;
       } else {
-        // 沒有基準 → 直接以最新檔的日期區間為主
         const rows = parseCanon(rNew.canon);
         start8 = rows.length ? rows[0].ts.slice(0, 8) : '';
         end8   = rows.length ? rows[rows.length - 1].ts.slice(0, 8) : '';
@@ -359,26 +316,15 @@
         elPeriod.textContent = `期間：${start8 || '—'} 開始到 ${end8 || '—'} 結束`;
       }
 
-      // 4) 設「最新檔」為基準的按鈕
+      // 4) 「設此為基準」：此頁固定唯讀（不寫入，避免任何額外紅字）
       if (btnBase) {
-        btnBase.disabled = false;
-        btnBase.onclick = async () => {
-          try {
-            const payload = {
-              baseline_path: latest.from === 'url'
-                ? latest.fullPath
-                : latest.fullPath,
-              updated_at: new Date().toISOString()
-            };
-            await writeManifest(payload);
-            btnBase.textContent = '已設為基準';
-          } catch (e) {
-            setStatus('寫入基準失敗：' + (e.message || e), true);
-          }
-        };
+        btnBase.disabled = true;
+        btnBase.textContent = '唯讀模式';
+        btnBase.title = '此頁不寫入基準（不使用 manifest），基準固定為次新檔。';
+        btnBase.onclick = null;
       }
 
-      // 5) 在合併後的資料上插入假的 INPOS，並加一行 header，餵給 single-trades.js
+      // 5) 合併後插入假的 INPOS，並加一行 header，餵給 single-trades.js
       const mergedWithInpos = addFakeInpos(mergedText);
       const finalText       = '1001 MERGED\n' + mergedWithInpos;
 
