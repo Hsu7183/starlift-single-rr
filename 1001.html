@@ -332,7 +332,8 @@
 
         <label>
           滑點（每邊點數）：
-          <input type="number" id="slipInput" value="0" step="0.1">
+          <!-- 對齊 0807 基準：預設 2 -->
+          <input type="number" id="slipInput" value="2" step="0.1">
         </label>
 
         <!-- TXT 檔 + 雲端檔 block：在 1001 頁面隱藏，但保留給 single-trades.js 使用 -->
@@ -428,7 +429,7 @@
 
   <!-- 單檔分析主邏輯（機構級期貨單檔分析版本） -->
   <script src="single-trades.js"></script>
-  <!-- 1001 專屬：自動找最新 1001 + 基準，合併後直接餵給 single-trades.js -->
+  <!-- 1001 專屬：自動找最新 1001 + 基準(次新檔)，合併後直接餵給 single-trades.js -->
   <script src="1001.js"></script>
 </body>
 </html>
