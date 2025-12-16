@@ -1,10 +1,6 @@
-// 0807-1.js — 0807-1
-// 修正點：補回 readManifest()（之前漏掉會直接壞）
-// 功能：
-// 1) 滑點預設強制=2，確保第一次自動分析吃得到
-// 2) 時區用圖表首行 chips（直接點）
-// 3) 點選時區立即重算；非「全」隱藏 KPI
-// 4) 主資產曲線補齊交易日（週一~週五），缺日用前值持平
+// 0807-1.js
+// 1) 交易明細：淨損益欄位正負顏色（>0紅、<0綠）
+// 2) 圖表：補齊交易日（週一~週五）；下方圖改為「每日損益」且與上方日序列對齊
 (function () {
   'use strict';
 
@@ -57,6 +53,13 @@
     if (scoreCard)  scoreCard.classList.toggle('kpi-hidden', hide);
     if (kpiBadCard) kpiBadCard.classList.toggle('kpi-hidden', hide);
     if (kpiAllCard) kpiAllCard.classList.toggle('kpi-hidden', hide);
+  }
+
+  function setActiveChip(key) {
+    if (!rangeChips) return;
+    rangeChips.querySelectorAll('.range-chip').forEach(btn => {
+      btn.classList.toggle('active', (btn.dataset.range === key));
+    });
   }
 
   function pubUrl(path) {
@@ -133,7 +136,7 @@
         const norm = normalizeText(td.decode(buf));
         const { canon, ok } = canonicalize(norm);
         if (ok > 0) return { enc, canon, ok };
-      } catch (e) {}
+      } catch {}
     }
 
     const td   = new TextDecoder('utf-8');
@@ -209,7 +212,6 @@
     if (runBtn) runBtn.click();
   }
 
-  // ===== manifest（修正：readManifest 原本漏掉）=====
   async function readManifest() {
     try {
       const { data, error } = await sb.storage.from(BUCKET).download(MANIFEST_PATH);
@@ -295,17 +297,15 @@
     return { text: picked.join('\n'), start8, end8 };
   }
 
-  // ===== 補齊交易日到 equityChart =====
+  // ===== 上圖：補齊交易日（週一~週五），缺日 carry-forward（等價於該日損益=0）=====
   function tryFillBusinessDaysOnEquityChart(rangeStart8, rangeEnd8) {
     let ch = null;
-    try {
-      ch = window.Chart?.getChart?.('equityChart') || window.Chart?.getChart?.($('#equityChart'));
-    } catch {}
-    if (!ch || !ch.data) return;
+    try { ch = window.Chart?.getChart?.('equityChart') || window.Chart?.getChart?.($('#equityChart')); } catch {}
+    if (!ch || !ch.data) return null;
 
     const labels = ch.data.labels || [];
     const dsList = ch.data.datasets || [];
-    if (!labels.length || !dsList.length) return;
+    if (!labels.length || !dsList.length) return null;
 
     function labelToYmd(lab) {
       const s = String(lab).trim();
@@ -319,7 +319,7 @@
 
     const firstYmd = rangeStart8 || labelToYmd(labels[0]) || '';
     const lastYmd  = rangeEnd8   || labelToYmd(labels[labels.length - 1]) || '';
-    if (!firstYmd || !lastYmd) return;
+    if (!firstYmd || !lastYmd) return null;
 
     const startDt = ymdToDate(firstYmd);
     const endDt   = ymdToDate(lastYmd);
@@ -337,8 +337,8 @@
       const ymd = labelToYmd(labels[i]);
       if (ymd) existing.set(ymd, i);
     }
-    if (existing.size < 2) return;
-    if (existing.size > full.length) return;
+    if (existing.size < 2) return null;
+    if (existing.size > full.length) return null;
 
     function getValueAt(ds, idx) {
       const v = ds.data?.[idx];
@@ -369,13 +369,115 @@
     dsList.forEach((ds, k) => { ds.data = newData[k]; });
 
     try { ch.update('none'); } catch { ch.update(); }
+
+    return { labels: newLabels, datasets: ch.data.datasets };
   }
 
-  function setActiveChip(key) {
-    if (!rangeChips) return;
-    rangeChips.querySelectorAll('.range-chip').forEach(btn => {
-      btn.classList.toggle('active', (btn.dataset.range === key));
+  // ===== 下圖：改成「每日損益」且與上圖 labels 完全對齊 =====
+  function rebuildDailyPnlChartFromEquity() {
+    let eq = null;
+    try { eq = window.Chart?.getChart?.('equityChart') || window.Chart?.getChart?.($('#equityChart')); } catch {}
+    if (!eq || !eq.data?.labels?.length || !eq.data?.datasets?.length) return;
+
+    const labels = eq.data.labels.slice();
+
+    // 找最可能代表「含滑價總損益」的 dataset；找不到就用第 0 條
+    let idx = 0;
+    for (let i = 0; i < eq.data.datasets.length; i++) {
+      const name = String(eq.data.datasets[i]?.label || '');
+      if (name.includes('含滑價') && (name.includes('總損益') || name.includes('總損益'))) { idx = i; break; }
+      if (name.includes('含滑價') && name.includes('總')) { idx = i; break; }
+      if (name.includes('含滑價總')) { idx = i; break; }
+    }
+    const series = (eq.data.datasets[idx].data || []).map(v => (v == null ? null : Number(v)));
+
+    // 計算每日損益（delta）；缺日 carry-forward 會導致 delta=0，符合你的需求
+    const daily = [];
+    let prev = (series.length ? (series[0] ?? 0) : 0);
+    for (let i = 0; i < series.length; i++) {
+      const cur = (series[i] == null ? prev : series[i]);
+      const d = i === 0 ? 0 : (cur - prev);
+      daily.push(d);
+      prev = cur;
+    }
+
+    // bar 顏色：>0 紅、<0 綠、=0 灰
+    const bg = daily.map(v => (v > 0 ? '#e60000' : (v < 0 ? '#0a7f00' : '#c0c0c0')));
+
+    // 取得/重建下方 chart
+    let pnl = null;
+    try { pnl = window.Chart?.getChart?.('weeklyPnlChart') || window.Chart?.getChart?.($('#weeklyPnlChart')); } catch {}
+    if (pnl) {
+      try { pnl.destroy(); } catch {}
+    }
+
+    const ctx = $('#weeklyPnlChart')?.getContext?.('2d');
+    if (!ctx) return;
+
+    // 建立每日損益圖（仍沿用原 canvas id）
+    new window.Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [{
+          label: '每日損益',
+          data: daily,
+          backgroundColor: bg,
+          borderWidth: 0
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: true }
+        },
+        scales: {
+          x: {
+            ticks: { maxRotation: 0, autoSkip: true }
+          },
+          y: {
+            ticks: { callback: (v) => v }
+          }
+        }
+      }
     });
+  }
+
+  // ===== 交易明細：淨損益欄位正負顏色 =====
+  function applyPnlColorsOnTradesTable() {
+    const tbody = $('#tradesBody');
+    if (!tbody) return;
+
+    const rows = Array.from(tbody.querySelectorAll('tr'));
+    if (!rows.length) return;
+
+    // 欄位索引（依你的表頭固定）：7~10 四欄要上色
+    // 0 #,1 日期時間,2 成交點位,3 類別,4 點數,5 手續費,6 交易稅,
+    // 7 理論淨損益,8 累積理論淨損益,9 實際淨損益,10 累積實際淨損益
+    const targetIdx = [7, 8, 9, 10];
+
+    function parseNum(txt) {
+      const s = String(txt || '').replace(/,/g, '').trim();
+      const v = Number(s);
+      return Number.isFinite(v) ? v : null;
+    }
+
+    for (const tr of rows) {
+      const tds = tr.querySelectorAll('td');
+      if (!tds || tds.length < 11) continue;
+
+      for (const i of targetIdx) {
+        const td = tds[i];
+        const v = parseNum(td?.textContent);
+        if (v == null) continue;
+
+        td.style.fontWeight = '600';
+        if (v > 0) td.style.color = '#e60000';
+        else if (v < 0) td.style.color = '#0a7f00';
+        else td.style.color = ''; // 0 不改
+      }
+    }
   }
 
   // ===== 主流程 =====
@@ -386,7 +488,6 @@
     if (!__FULL_CANON) return;
 
     forceSlipDefault2();
-
     setActiveChip(rangeKey);
     setKpiVisible(rangeKey === 'all');
 
@@ -399,9 +500,12 @@
     setStatus(`套用時區：${rangeKey}，重算中…`);
     await feedToSingleTrades(__LATEST_NAME, finalText);
 
+    // 等 single-trades.js 畫完，再做「補齊交易日」+「下圖改每日損益」+「交易表上色」
     setTimeout(() => {
       tryFillBusinessDaysOnEquityChart(r.start8, r.end8);
-    }, 140);
+      rebuildDailyPnlChartFromEquity();
+      applyPnlColorsOnTradesTable();
+    }, 180);
 
     setStatus(`分析完成（時區：${rangeKey}）。`);
   }
