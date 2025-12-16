@@ -157,8 +157,7 @@
     const B = parseCanon(latestText);
     const baseMax = A.length ? A[A.length - 1].ts : '';
     const added = baseMax ? B.filter(x => x.ts > baseMax).map(x => x.line) : B.map(x => x.line);
-    const mergedLines = [...A.map(x => x.line), ...added];
-    return mergedLines.join('\n');
+    return [...A.map(x => x.line), ...added].join('\n');
   }
 
   function addFakeInpos(text) {
@@ -200,7 +199,8 @@
     if (runBtn) runBtn.click();
   }
 
-  async function readManifest() {
+  // ===== 修正：manifest 讀不到（400/404）直接當 null，完全不噴錯、不影響流程 =====
+  async function readManifestSafe() {
     try {
       const { data, error } = await sb.storage.from(BUCKET).download(MANIFEST_PATH);
       if (error || !data) return null;
@@ -229,7 +229,7 @@
     return `${y}${m}${dd}`;
   }
 
-  // ===== UTC 日序列工具 =====
+  // ===== UTC 工具（確保跨時區不跑掉）=====
   function ymdToDateUTC(ymd) {
     const y = +ymd.slice(0, 4), m = +ymd.slice(4, 6), d = +ymd.slice(6, 8);
     return new Date(Date.UTC(y, m - 1, d));
@@ -297,7 +297,7 @@
     return { text: picked.join('\n'), start8, end8 };
   }
 
-  // 產生「週一~週五」交易日 labels（例如近2週 7 天）
+  // 交易日 labels（週一~週五）→ 近2週 = 7 天
   function buildBizDayLabels(start8, end8) {
     const startDt = ymdToDateUTC(start8);
     const endDt   = ymdToDateUTC(end8);
@@ -314,15 +314,23 @@
     return out;
   }
 
-  // ===== Chart 取得（最穩）=====
+  // Chart 取得（避免拿不到或拿錯）
   function getChartByCanvasId(id) {
     const el = document.getElementById(id);
     if (!el || !window.Chart) return null;
     try { return window.Chart.getChart(el) || null; } catch { return null; }
   }
 
-  function toISO(label) {
-    const s = String(label || '').trim();
+  // 將 label/x 轉 ISO YYYY-MM-DD
+  function toISO(v) {
+    if (v == null) return null;
+    if (v instanceof Date && !isNaN(v.getTime())) {
+      const y = v.getFullYear();
+      const m = String(v.getMonth() + 1).padStart(2, '0');
+      const d = String(v.getDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    }
+    const s = String(v).trim();
     let m = s.match(/^(\d{4})[-/](\d{2})[-/](\d{2})$/);
     if (m) return `${m[1]}-${m[2]}-${m[3]}`;
     m = s.match(/^(\d{4})(\d{2})(\d{2})$/);
@@ -332,62 +340,16 @@
     return null;
   }
 
-  // ✅ 核心：接管 X 軸（category + autoSkip=false），並補齊日序列（沒交易=0/橫移）
+  // ✅ 核心：補齊 7 天並強制 category；防呆 ds.data 內含 null
   function forceEquityChartToBizDays(start8, end8) {
     const ch = getChartByCanvasId('equityChart');
     if (!ch || !ch.data?.datasets?.length) return null;
 
     const labels = buildBizDayLabels(start8, end8);
 
-    const oldLabels = ch.data.labels || [];
+    const oldLabels = Array.isArray(ch.data.labels) ? ch.data.labels : [];
 
-    ch.data.datasets.forEach(ds => {
-      const map = new Map();
-      let last = 0;
-      let has = false;
-
-      // 支援 array number
-      if (Array.isArray(ds.data) && ds.data.length && (typeof ds.data[0] !== 'object')) {
-        for (let i = 0; i < Math.min(oldLabels.length, ds.data.length); i++) {
-          const iso = toISO(oldLabels[i]);
-          const v = Number(ds.data[i]);
-          if (iso && Number.isFinite(v)) map.set(iso, v);
-        }
-      } else if (Array.isArray(ds.data) && ds.data.length && typeof ds.data[0] === 'object') {
-        // 支援 {x,y}
-        for (const p of ds.data) {
-          const iso = toISO(p.x ?? p.t);
-          const v = Number(p.y);
-          if (iso && Number.isFinite(v)) map.set(iso, v);
-        }
-      }
-
-      // 若 map 完全抓不到（有些 single-trades 只給月刻度），至少保留最後值在最後一天
-      let lastVal = 0;
-      if (Array.isArray(ds.data) && ds.data.length && typeof ds.data[0] !== 'object') {
-        const t = Number(ds.data[ds.data.length - 1]);
-        if (Number.isFinite(t)) lastVal = t;
-      }
-
-      ds.data = labels.map((lab, idx) => {
-        if (map.has(lab)) {
-          last = map.get(lab);
-          has = true;
-          return last;
-        }
-        if (!has && idx === labels.length - 1 && lastVal !== 0) {
-          // 全都對不到時，把最後值放到最後一天，避免整段變 0
-          last = lastVal;
-          has = true;
-          return last;
-        }
-        return has ? last : 0;
-      });
-    });
-
-    ch.data.labels = labels;
-
-    // 強制 category + 禁止壓縮（這才會看到 7 天）
+    // 確保 options/scales/x 都存在
     ch.options = ch.options || {};
     ch.options.scales = ch.options.scales || {};
     ch.options.scales.x = ch.options.scales.x || {};
@@ -397,18 +359,71 @@
     ch.options.scales.x.ticks.maxRotation = 0;
     ch.options.scales.x.ticks.minRotation = 0;
 
+    // 禁用 parsing/decimation，避免 time/decimation 干擾
+    ch.options.parsing = false;
+    ch.options.plugins = ch.options.plugins || {};
+    if (ch.options.plugins.decimation) ch.options.plugins.decimation.enabled = false;
+
+    ch.data.datasets.forEach(ds => {
+      ds.parsing = false;
+
+      const map = new Map();
+      let last = 0;
+      let has = false;
+
+      const src = Array.isArray(ds.data) ? ds.data : [];
+
+      // (1) src = number[]
+      if (src.length && (typeof src[0] !== 'object')) {
+        for (let i = 0; i < Math.min(oldLabels.length, src.length); i++) {
+          const iso = toISO(oldLabels[i]);
+          const v = Number(src[i]);
+          if (iso && Number.isFinite(v)) map.set(iso, v);
+        }
+      } else if (src.length && typeof src[0] === 'object') {
+        // (2) src = {x,y}[] 但可能含 null → 防呆
+        for (const p of src) {
+          if (!p || typeof p !== 'object') continue;
+          const iso = toISO(p.x ?? p.t ?? p.date);
+          const v = Number(p.y);
+          if (iso && Number.isFinite(v)) map.set(iso, v);
+        }
+      }
+
+      // fallback：若 map 空，保留最後值在最後一天
+      let lastVal = 0;
+      for (let i = src.length - 1; i >= 0; i--) {
+        const v = (src[i] && typeof src[i] === 'object') ? Number(src[i].y) : Number(src[i]);
+        if (Number.isFinite(v)) { lastVal = v; break; }
+      }
+
+      ds.data = labels.map((lab, idx) => {
+        if (map.has(lab)) {
+          last = map.get(lab);
+          has = true;
+          return last;
+        }
+        if (!has && idx === labels.length - 1 && lastVal !== 0) {
+          last = lastVal; has = true;
+          return last;
+        }
+        return has ? last : 0;
+      });
+    });
+
+    ch.data.labels = labels;
+
     try { ch.update('none'); } catch { ch.update(); }
     return labels;
   }
 
-  // ✅ 下圖：每日損益（labels 與上圖一致），沒交易日=0
+  // ✅ 下圖：每日損益（labels 跟上圖一致），沒交易日 delta=0
   function rebuildDailyPnlChartFromEquity() {
     const eq = getChartByCanvasId('equityChart');
     if (!eq || !eq.data?.labels?.length || !eq.data?.datasets?.length) return;
 
     const labels = eq.data.labels.map(x => String(x));
 
-    // 找含滑價總損益（找不到就第0）
     let idx = 0;
     for (let i = 0; i < eq.data.datasets.length; i++) {
       const name = String(eq.data.datasets[i]?.label || '');
@@ -449,7 +464,7 @@
     });
   }
 
-  // ✅ 交易表上色：點數/損益/累積損益 正紅負綠
+  // 交易表上色：點數/損益/累積損益 正紅負綠
   function applyTradeTableColors() {
     const tbody = $('#tradesBody');
     if (!tbody) return;
@@ -457,7 +472,6 @@
     const rows = Array.from(tbody.querySelectorAll('tr'));
     if (!rows.length) return;
 
-    // 4 點數；7/8/9/10 損益/累積
     const idxs = [4, 7, 8, 9, 10];
 
     function parseNum(txt) {
@@ -487,12 +501,16 @@
     }
   }
 
-  // 後處理：做多次覆蓋，避免 single-trades 之後 update 把我們改掉
+  // 多次覆蓋，避免 single-trades.js update 後把我們改掉
   function scheduleFixes(start8, end8) {
     const run = () => {
-      forceEquityChartToBizDays(start8, end8);
-      rebuildDailyPnlChartFromEquity();
-      applyTradeTableColors();
+      try {
+        forceEquityChartToBizDays(start8, end8);
+        rebuildDailyPnlChartFromEquity();
+        applyTradeTableColors();
+      } catch (e) {
+        // 不讓錯誤中斷整體流程
+      }
     };
     run();
     setTimeout(run, 150);
@@ -502,9 +520,8 @@
   }
 
   async function postProcessWait(start8, end8) {
-    // 等 single-trades 完成 chart/table
     let tries = 0;
-    while (tries < 140) { // 7 秒
+    while (tries < 160) {
       const eq = getChartByCanvasId('equityChart');
       const tb = $('#tradesBody');
       if (eq && eq.data?.datasets?.length && tb) break;
@@ -517,7 +534,7 @@
   // ===== 主流程 =====
   let __FULL_CANON = '';
   let __LATEST_NAME = '0807.txt';
-  let __END8_ANCHOR = ''; // max(最後交易日, 今天)
+  let __END8_ANCHOR = '';
 
   async function applyRangeAndRun(rangeKey) {
     if (!__FULL_CANON || !__END8_ANCHOR) return;
@@ -578,9 +595,10 @@
       __LATEST_NAME = latest.name;
       if (elLatest) elLatest.textContent = latest.name;
 
+      // manifest 可能不存在 → 用 safe 版本
       let base = null;
       if (!paramFile) {
-        const manifest = await readManifest();
+        const manifest = await readManifestSafe();
         if (manifest?.baseline_path) {
           base = list.find(x => x.fullPath === manifest.baseline_path) ||
                  { name: manifest.baseline_path.split('/').pop() || manifest.baseline_path, fullPath: manifest.baseline_path };
