@@ -210,9 +210,13 @@
     const fileInput = $('#fileInput');
     const runBtn    = $('#runBtn');
 
-    // ★改動：滑點預設 2（保險，避免 HTML/快取造成不是 2）
+    // (關鍵) 確保「第一次自動計算」就用滑點=2，而不是先用0算完才顯示2
     const slipInput = $('#slipInput');
-    if (slipInput) slipInput.value = '2';
+    if (slipInput) {
+      slipInput.value = '2';
+      slipInput.dispatchEvent(new Event('input',  { bubbles: true }));
+      slipInput.dispatchEvent(new Event('change', { bubbles: true }));
+    }
 
     const fname = filename || '0807.txt';
     const file  = new File([mergedText], fname, { type: 'text/plain' });
@@ -230,13 +234,10 @@
       fileInput.dispatchEvent(new Event('change', { bubbles: true }));
     }
 
-    // 3) 自動按下「計算」按鈕，直接畫圖＋算 KPI
-    // ★改動：雙保險（避免偶發 race condition：change 還沒被 single-trades.js 處理完就 click）
+    // 3) 自動按下「計算」按鈕
+    // 延後一個 tick，避免 single-trades.js 還沒吃到 slip/change 就先跑舊值
     if (runBtn) {
-      requestAnimationFrame(() => {
-        runBtn.click();
-        setTimeout(() => runBtn.click(), 0);
-      });
+      setTimeout(() => runBtn.click(), 0);
     }
   }
 
