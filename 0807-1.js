@@ -1,8 +1,9 @@
 // 0807-1.js
-// 修正重點：
-// A) 時區 end 以「今天日期」為錨（台北本地日），若今天 > 最後交易日，仍要補到今天；沒交易日=0
-// B) 上下圖都以同一份「完整交易日序列（週一~週五）」對齊
-// C) 交易明細：點數/損益/累積損益強制正紅負綠，並在每次重算後再次套色（避免被 single-trades 覆蓋）
+// 修正：
+// 1) 近2週例：114/12/08~114/12/16（扣六日=7天）→ 7 天都要顯示；沒交易=0（上圖水平、下圖0）
+// 2) X 軸強制 category + 關 autoSkip，避免被壓成「月」刻度
+// 3) 下圖改成「每日損益」且 labels 與上圖完全一致
+// 4) 交易明細：點數/損益/累積損益正紅負綠，並多次套色避免被 single-trades 覆蓋
 
 (function () {
   'use strict';
@@ -161,7 +162,6 @@
   function mergeByBaseline(baseText, latestText) {
     const A = parseCanon(baseText);
     const B = parseCanon(latestText);
-
     const baseMax = A.length ? A[A.length - 1].ts : '';
     const added = baseMax ? B.filter(x => x.ts > baseMax).map(x => x.line) : B.map(x => x.line);
     const mergedLines = [...A.map(x => x.line), ...added];
@@ -227,7 +227,7 @@
     if (error) throw new Error(error.message);
   }
 
-  // ===== 日期工具（本地日為準；台灣環境 local 就是 +8）=====
+  // ===== 錨點：以「今天」為 end（台灣環境 local date），若今天>最後交易日，仍補到今天 =====
   function today8() {
     const d = new Date();
     const y = d.getFullYear();
@@ -235,6 +235,8 @@
     const dd = String(d.getDate()).padStart(2, '0');
     return `${y}${m}${dd}`;
   }
+
+  // ===== UTC 工具（用 UTC 做日序列最穩定）=====
   function ymdToDateUTC(ymd) {
     const y = +ymd.slice(0, 4), m = +ymd.slice(4, 6), d = +ymd.slice(6, 8);
     return new Date(Date.UTC(y, m - 1, d));
@@ -245,7 +247,7 @@
     const d = String(dt.getUTCDate()).padStart(2, '0');
     return `${y}${m}${d}`;
   }
-  function dowMon1(dt) { const x = dt.getUTCDay(); return x === 0 ? 7 : x; } // Mon=1..Sun=7
+  function dowMon1(dt) { const x = dt.getUTCDay(); return x === 0 ? 7 : x; }
   function startOfWeekMonday(endDt) {
     const d = new Date(endDt.getTime());
     const dow = dowMon1(d);
@@ -279,7 +281,6 @@
     if (key === 'm3') return nextMondayIfWeekend(addMonthsUTC(endDt, -3));
     if (key === 'm6') return nextMondayIfWeekend(addMonthsUTC(endDt, -6));
     if (key === 'y1') return nextMondayIfWeekend(addMonthsUTC(endDt, -12));
-
     return null;
   }
 
@@ -303,11 +304,11 @@
     return { text: picked.join('\n'), start8, end8 };
   }
 
+  // 產生「週一~週五」完整日期 labels（YYYY-MM-DD），沒交易也要有
   function buildBizDayLabels(start8, end8) {
     const startDt = ymdToDateUTC(start8);
     const endDt   = ymdToDateUTC(end8);
     const out = [];
-
     const cur = new Date(startDt.getTime());
     while (cur.getTime() <= endDt.getTime()) {
       const dow = dowMon1(cur);
@@ -328,42 +329,14 @@
     }
   }
 
-  // 將各 dataset 的來源點（可能是 number / {x,y} / {t,y}）映射到 ISO 日期
-  function buildPointMapFromDataset(ds, labels) {
-    const map = new Map();
-
-    // 1) 若 ds.data 是 {x,y} 形式
-    if (Array.isArray(ds.data) && ds.data.length && typeof ds.data[0] === 'object' && ds.data[0] !== null) {
-      for (const p of ds.data) {
-        const iso = toISODate(p.x ?? p.t);
-        const y = Number(p.y);
-        if (iso && Number.isFinite(y)) map.set(iso, y);
-      }
-      return map;
-    }
-
-    // 2) 否則用 labels + ds.data index 對應
-    const arr = Array.isArray(ds.data) ? ds.data : [];
-    for (let i = 0; i < Math.min(labels.length, arr.length); i++) {
-      const iso = toISODate(labels[i]);
-      const y = Number(arr[i]);
-      if (iso && Number.isFinite(y)) map.set(iso, y);
-    }
-    return map;
-  }
-
   function toISODate(v) {
     if (v == null) return null;
-
-    // Date
     if (v instanceof Date && !isNaN(v.getTime())) {
       const y = v.getFullYear();
       const m = String(v.getMonth() + 1).padStart(2, '0');
       const d = String(v.getDate()).padStart(2, '0');
       return `${y}-${m}-${d}`;
     }
-
-    // timestamp (ms)
     if (typeof v === 'number' && Number.isFinite(v)) {
       const d = new Date(v);
       if (!isNaN(d.getTime())) {
@@ -373,70 +346,97 @@
         return `${y}-${m}-${dd}`;
       }
     }
-
     const s = String(v).trim();
-
-    // YYYY-MM-DD / YYYY/MM/DD
     let m = s.match(/^(\d{4})[-/](\d{2})[-/](\d{2})$/);
     if (m) return `${m[1]}-${m[2]}-${m[3]}`;
-
-    // YYYYMMDD
     m = s.match(/^(\d{4})(\d{2})(\d{2})$/);
     if (m) return `${m[1]}-${m[2]}-${m[3]}`;
-
-    // 內嵌 20251205
     m = s.match(/\b(20\d{2})(\d{2})(\d{2})\b/);
     if (m) return `${m[1]}-${m[2]}-${m[3]}`;
-
     return null;
   }
 
+  // 把 equityChart 強制變成「7 天這種日序列」：labels=日，缺日=0（前段）/carry-forward（後段）
   function forceEquityChartToBizDays(start8, end8) {
     const ch = getChartById('equityChart');
     if (!ch || !ch.data?.datasets?.length) return null;
 
     const targetLabels = buildBizDayLabels(start8, end8);
 
+    // 建 srcLabel->index
     const srcLabels = (ch.data.labels || []).map(x => x);
+    const idxMap = new Map();
+    for (let i = 0; i < srcLabels.length; i++) {
+      const iso = toISODate(srcLabels[i]);
+      if (iso) idxMap.set(iso, i);
+    }
+
     const newDataAll = ch.data.datasets.map(ds => {
-      const pm = buildPointMapFromDataset(ds, srcLabels);
+      const src = Array.isArray(ds.data) ? ds.data : [];
+
+      // 如果 src 是 {x,y} 物件，先做 map
+      const pm = new Map();
+      if (src.length && typeof src[0] === 'object' && src[0] !== null) {
+        for (const p of src) {
+          const iso = toISODate(p.x ?? p.t);
+          const y = Number(p.y);
+          if (iso && Number.isFinite(y)) pm.set(iso, y);
+        }
+      }
+
       const out = [];
       let last = 0;
       let has = false;
 
       for (const iso of targetLabels) {
-        if (pm.has(iso)) {
-          last = pm.get(iso);
+        let v = null;
+
+        if (pm.size) {
+          if (pm.has(iso)) v = pm.get(iso);
+        } else if (idxMap.has(iso)) {
+          const raw = src[idxMap.get(iso)];
+          const n = Number(raw);
+          if (Number.isFinite(n)) v = n;
+        }
+
+        if (v != null) {
+          last = v;
           has = true;
           out.push(last);
         } else {
-          out.push(has ? last : 0); // 缺日：沒遇到任何值前用 0，之後 carry-forward
+          out.push(has ? last : 0);
         }
       }
+
       return out;
     });
 
+    // 重要：強制 category，並關掉 autoSkip，避免被壓成「月」
     ch.data.labels = targetLabels;
     ch.data.datasets.forEach((ds, i) => { ds.data = newDataAll[i]; });
 
-    // 強制用 category，避免 time scale 把點壓成月
     ch.options = ch.options || {};
     ch.options.scales = ch.options.scales || {};
     ch.options.scales.x = ch.options.scales.x || {};
     ch.options.scales.x.type = 'category';
+    ch.options.scales.x.ticks = ch.options.scales.x.ticks || {};
+    ch.options.scales.x.ticks.autoSkip = false;
+    ch.options.scales.x.ticks.maxRotation = 0;
+    ch.options.scales.x.ticks.minRotation = 0;
 
     try { ch.update('none'); } catch { ch.update(); }
 
     return targetLabels;
   }
 
+  // 下圖：每日損益（labels 與上圖完全相同），缺日=0
   function rebuildDailyPnlChartFromEquity() {
     const eq = getChartById('equityChart');
     if (!eq || !eq.data?.labels?.length || !eq.data?.datasets?.length) return;
 
     const labels = eq.data.labels.map(x => String(x));
 
-    // 找含滑價總損益，不行就用第 0 條（至少不會空白）
+    // 找含滑價總損益（找不到就第0條）
     let idx = 0;
     for (let i = 0; i < eq.data.datasets.length; i++) {
       const name = String(eq.data.datasets[i]?.label || '');
@@ -446,9 +446,7 @@
     const series = (eq.data.datasets[idx].data || []).map(v => Number(v) || 0);
 
     const daily = [];
-    for (let i = 0; i < series.length; i++) {
-      daily.push(i === 0 ? 0 : (series[i] - series[i - 1])); // 缺日 carry-forward => delta=0
-    }
+    for (let i = 0; i < series.length; i++) daily.push(i === 0 ? 0 : (series[i] - series[i - 1]));
 
     const bg = daily.map(v => (v > 0 ? '#e60000' : (v < 0 ? '#0a7f00' : '#c0c0c0')));
 
@@ -474,13 +472,17 @@
         maintainAspectRatio: false,
         plugins: { legend: { display: true } },
         scales: {
-          x: { type: 'category', ticks: { autoSkip: true, maxRotation: 0 } },
+          x: {
+            type: 'category',
+            ticks: { autoSkip: false, maxRotation: 0, minRotation: 0 }
+          },
           y: { ticks: { callback: (v) => v } }
         }
       }
     });
   }
 
+  // 交易表：點數/損益/累積損益 正紅負綠
   function applyTradeTableColors() {
     const tbody = $('#tradesBody');
     if (!tbody) return;
@@ -488,7 +490,7 @@
     const rows = Array.from(tbody.querySelectorAll('tr'));
     if (!rows.length) return;
 
-    // 4 點數；7/8/9/10 損益相關
+    // 4 點數；7/8/9/10 損益/累積
     const idxs = [4, 7, 8, 9, 10];
 
     function parseNum(txt) {
@@ -519,23 +521,27 @@
   }
 
   async function postProcessWait(start8, end8) {
-    // 等 single-trades 完成渲染（chart + table），避免被覆蓋
+    // 等 single-trades 完成渲染
     let tries = 0;
-    while (tries < 80) { // 4 秒
+    while (tries < 100) {
       const eq = getChartById('equityChart');
       const tb = $('#tradesBody');
-      if (eq && eq.data?.datasets?.length && tb && tb.querySelectorAll('tr').length) break;
+      if (eq && eq.data?.datasets?.length && tb) break;
       await new Promise(r => setTimeout(r, 50));
       tries++;
     }
 
+    // 上圖補齊日序列
     forceEquityChartToBizDays(start8, end8);
+
+    // 下圖同步日序列、缺日=0
     rebuildDailyPnlChartFromEquity();
 
-    // 再等一點，確保表格最終狀態，再上色一次
+    // 表格上色：多次套色避免被覆蓋
     applyTradeTableColors();
     setTimeout(applyTradeTableColors, 120);
     setTimeout(applyTradeTableColors, 300);
+    setTimeout(applyTradeTableColors, 600);
   }
 
   // ===== 主流程 =====
@@ -618,7 +624,7 @@
       const latestUrl = latest.from === 'url' ? latest.fullPath : pubUrl(latest.fullPath);
       const rNew = await fetchSmart(latestUrl);
       if (rNew.ok === 0) {
-        setStatus(`最新檔沒有合法交易行。`, true);
+        setStatus('最新檔沒有合法交易行。', true);
         return;
       }
 
@@ -641,9 +647,8 @@
 
       const lastTrade8 = fullRows[fullRows.length - 1].ts.slice(0, 8);
       const t8 = today8();
-      __END8_ANCHOR = (t8 > lastTrade8) ? t8 : lastTrade8; // 這就是你要的：即使沒交易，也補到 12/16
+      __END8_ANCHOR = (t8 > lastTrade8) ? t8 : lastTrade8;
 
-      // baseline button
       if (btnBase) {
         btnBase.disabled = false;
         btnBase.onclick = async () => {
@@ -669,7 +674,6 @@
       setActiveChip('all');
       setKpiVisible(true);
 
-      // 初次跑 all
       setStatus('已載入（合併後）資料，開始分析…');
       await applyRangeAndRun('all');
 
