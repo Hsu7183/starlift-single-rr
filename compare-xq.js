@@ -1,536 +1,445 @@
 /* compare-xq.js
-   TXT vs XQ 回測對帳（純前端）
-   - TXT：策略輸出交易紀錄（含 INPOS 行）
-   - XLSX：XQ 回測匯出（交易分析）
-*/
-(function(){
-  const $ = (id)=>document.getElementById(id);
-  const state = {
-    txtName: null,
-    xlsName: null,
-    txtText: null,
-    xqRows: null,
-    lastResult: null,
+ * XQ 回測匯出（xlsx/csv） → TXT（只輸出交易列）
+ * + 可選擇載入策略 TXT 對帳（忽略參數列、INPOS、非交易動作）
+ */
+(function () {
+  'use strict';
+
+  const ACTIONS = new Set(['新買', '平賣', '新賣', '平買', '強制平倉']);
+
+  const els = {
+    xqFile: document.getElementById('xqFile'),
+    tsMode: document.getElementById('tsMode'),
+    pxMode: document.getElementById('pxMode'),
+    outName: document.getElementById('outName'),
+    btnConvert: document.getElementById('btnConvert'),
+    dlCanon: document.getElementById('dlCanon'),
+    xqStatus: document.getElementById('xqStatus'),
+    canonPreview: document.getElementById('canonPreview'),
+
+    canonFile: document.getElementById('canonFile'),
+    btnCompare: document.getElementById('btnCompare'),
+    cmpStatus: document.getElementById('cmpStatus'),
+    cmpResult: document.getElementById('cmpResult'),
+
+    tblBody: document.getElementById('tblBody'),
   };
 
-  const el = {
-    txtFile: $("txtFile"),
-    xlsFile: $("xlsFile"),
-    txtName: $("txtName"),
-    xlsName: $("xlsName"),
-    tolMin: $("tolMin"),
-    tolPx: $("tolPx"),
-    tolMinLabel: $("tolMinLabel"),
-    tolPxLabel: $("tolPxLabel"),
-    btnRun: $("btnRun"),
-    btnExport: $("btnExport"),
-    status: $("status"),
-    quick: $("quick"),
-    tbody: $("tbody"),
-    drop: $("drop"),
-    // KPI
-    k_txtTrades: $("k_txtTrades"),
-    k_xqTrades: $("k_xqTrades"),
-    k_matched: $("k_matched"),
-    k_unmatched: $("k_unmatched"),
-    k_dEntry: $("k_dEntry"),
-    k_dExit: $("k_dExit"),
-    k_dPnl: $("k_dPnl"),
-    k_dPnlMax: $("k_dPnlMax"),
-  };
+  let xqEvents = [];        // {ts, px, act, src}
+  let xqOutText = '';
+  let userCanonEvents = []; // {ts, px, act, src}
 
-  function setStatus(html){ el.status.innerHTML = html; }
-  function esc(s){ return String(s ?? "").replace(/[&<>"]/g, c=>({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[c])); }
+  function pad2(n) { return String(n).padStart(2, '0'); }
 
-  function pad2(n){ return (n<10?"0":"")+n; }
-
-  // Parse "YYYYMMDDhhmmss" -> Date (local)
-  function parseTS14(ts14){
-    if(!ts14) return null;
-    const s = String(ts14).trim();
-    if(!/^\d{14}$/.test(s)) return null;
-    const y = +s.slice(0,4), mo = +s.slice(4,6), d = +s.slice(6,8);
-    const h = +s.slice(8,10), mi = +s.slice(10,12), se = +s.slice(12,14);
-    return new Date(y, mo-1, d, h, mi, se, 0);
-  }
-  function fmtTS(dt){
-    if(!dt) return "";
-    return `${dt.getFullYear()}/${pad2(dt.getMonth()+1)}/${pad2(dt.getDate())} ${pad2(dt.getHours())}:${pad2(dt.getMinutes())}`;
-  }
-  function minutesKey(dt){
-    if(!dt) return null;
-    return dt.getFullYear()*100000000 + (dt.getMonth()+1)*1000000 + dt.getDate()*10000 + dt.getHours()*100 + dt.getMinutes();
+  function fmtTs14(dt) {
+    const y = dt.getFullYear();
+    const mo = dt.getMonth() + 1;
+    const d = dt.getDate();
+    const h = dt.getHours();
+    const mi = dt.getMinutes();
+    const ss = dt.getSeconds();
+    return `${y}${pad2(mo)}${pad2(d)}${pad2(h)}${pad2(mi)}${pad2(ss)}`;
   }
 
-  function parseTxtTrades(txt){
-    const lines = String(txt||"").split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
-    if(!lines.length) return { trades: [], meta:{}, errors:["TXT 檔案內容為空"] };
-
-    const meta = { rawHeader: null };
-    const errors = [];
-
-    // 第一列可能是參數列（含 BeginTime=...）
-    if(lines[0].includes("BeginTime=") || lines[0].includes("EndTime=") || lines[0].includes("ForceExitTime=")){
-      meta.rawHeader = lines[0];
-    }
-
-    const actionSet = new Set(["新買","平賣","新賣","平買","強制平倉"]);
-    // 只抽出 action lines：格式可能為 "YYYYMMDDhhmmss price action"
-    const actions = [];
-    for(const line of lines){
-      if(line===meta.rawHeader) continue;
-      const parts = line.split(/\s+/);
-      if(parts.length < 3) continue;
-      const act = parts[parts.length-1];
-      if(!actionSet.has(act)) continue;
-      const ts = parts[0];
-      const px = parseFloat(parts[1]);
-      const dt = parseTS14(ts);
-      if(!dt || !Number.isFinite(px)){
-        errors.push("無法解析列: "+line);
-        continue;
-      }
-      actions.push({ ts14:ts, dt, px, act, raw: line });
-    }
-
-    // 一進一出配對
-    const trades = [];
-    let open = null; // {dir, entryDt, entryPx, entryAct}
-    let idx = 0;
-    for(const a of actions){
-      const isEntry = (a.act==="新買" || a.act==="新賣");
-      const isExit  = (a.act==="平賣" || a.act==="平買" || a.act==="強制平倉");
-
-      if(isEntry){
-        if(open){
-          // 前一筆未出場就又進場：先把前一筆標記為異常（不丟掉）
-          trades.push({
-            id: ++idx,
-            dir: open.dir,
-            entryDt: open.entryDt,
-            entryPx: open.entryPx,
-            exitDt: null,
-            exitPx: null,
-            pnl: null,
-            status: "TXT：缺少出場（遇到新進場）",
-          });
-        }
-        open = {
-          dir: (a.act==="新買") ? "L" : "S",
-          entryDt: a.dt,
-          entryPx: a.px,
-          entryAct: a.act,
-        };
-        continue;
-      }
-
-      if(isExit){
-        if(!open){
-          // 出場無對應進場
-          trades.push({
-            id: ++idx,
-            dir: "?",
-            entryDt: null,
-            entryPx: null,
-            exitDt: a.dt,
-            exitPx: a.px,
-            pnl: null,
-            status: "TXT：缺少進場（遇到出場）",
-          });
-          continue;
-        }
-        // 決定出場方向合理性：多單應平賣/強制，空單應平買/強制
-        const ok =
-          (open.dir==="L" && (a.act==="平賣" || a.act==="強制平倉")) ||
-          (open.dir==="S" && (a.act==="平買" || a.act==="強制平倉"));
-
-        const pnl = (open.dir==="L") ? (a.px - open.entryPx) : (open.entryPx - a.px);
-
-        trades.push({
-          id: ++idx,
-          dir: open.dir,
-          entryDt: open.entryDt,
-          entryPx: open.entryPx,
-          exitDt: a.dt,
-          exitPx: a.px,
-          pnl,
-          status: ok ? "OK" : ("TXT：方向不一致（"+open.entryAct+"→"+a.act+"）"),
-          exitAct: a.act,
-        });
-        open = null;
-      }
-    }
-
-    if(open){
-      trades.push({
-        id: ++idx,
-        dir: open.dir,
-        entryDt: open.entryDt,
-        entryPx: open.entryPx,
-        exitDt: null,
-        exitPx: null,
-        pnl: null,
-        status: "TXT：缺少出場（檔案結尾）",
-      });
-    }
-
-    // 只保留完整交易用於對帳（entry+exit 都有）
-    const complete = trades.filter(t=>t.entryDt && t.exitDt);
-    return { trades: complete, meta, errors };
+  function fmtTsCanon(dt) {
+    return `${fmtTs14(dt)}.000000`;
   }
 
-  function parseXqTradesFromWorkbook(wb){
-    const sheetName = wb.SheetNames.includes("交易分析") ? "交易分析" : wb.SheetNames[0];
-    const ws = wb.Sheets[sheetName];
-    if(!ws) return { trades:[], sheetName, errors:["找不到工作表: "+sheetName] };
+  function parseXqDatetime(v) {
+    if (!v) return null;
+    if (v instanceof Date && !isNaN(v.getTime())) return v;
 
-    // 轉為 JSON（第一列為 header）
-    const rows = XLSX.utils.sheet_to_json(ws, { defval:"", raw:false });
-    // 預期欄位（中文）
-    const need = ["進場時間","進場方向","進場價格","出場時間","出場價格","獲利金額"];
-    const errors = [];
-    for(const k of need){
-      if(rows.length && !(k in rows[0])) errors.push(`欄位缺少：${k}（請確認為 XQ 回測匯出之「交易分析」工作表）`);
+    const s = String(v).trim();
+    // 常見：YYYY/MM/DD HH:MM 或 YYYY/MM/DD HH:MM:SS
+    const m = s.match(/^(\d{4})\/(\d{2})\/(\d{2})\s+(\d{2}):(\d{2})(?::(\d{2}))?$/);
+    if (m) {
+      const y = +m[1], mo = +m[2], d = +m[3], h = +m[4], mi = +m[5], ss = m[6] ? +m[6] : 0;
+      return new Date(y, mo - 1, d, h, mi, ss);
     }
 
-    const trades = [];
-    let id = 0;
-    for(const r of rows){
-      const entryT = parseXqDateTime(r["進場時間"]);
-      const exitT  = parseXqDateTime(r["出場時間"]);
-      const dirStr = String(r["進場方向"]||"").trim();
-      const entryPx = toNum(r["進場價格"]);
-      const exitPx  = toNum(r["出場價格"]);
-      const pnl     = toNum(r["獲利金額"]);
-      if(!entryT || !exitT || !Number.isFinite(entryPx) || !Number.isFinite(exitPx)) continue;
+    const d2 = new Date(s);
+    if (!isNaN(d2.getTime())) return d2;
 
-      const dir = (dirStr==="買進" || dirStr==="買入" || dirStr==="多" || dirStr==="做多") ? "L"
-               : (dirStr==="賣出" || dirStr==="賣" || dirStr==="空" || dirStr==="放空" || dirStr==="做空") ? "S"
-               : "?";
-
-      trades.push({
-        id: ++id,
-        dir,
-        entryDt: entryT,
-        entryPx,
-        exitDt: exitT,
-        exitPx,
-        pnl: Number.isFinite(pnl) ? pnl : ((dir==="L") ? (exitPx-entryPx) : (entryPx-exitPx)),
-        raw: r
-      });
-    }
-    return { trades, sheetName, errors };
-
-    function toNum(v){
-      if(v===null || v===undefined) return NaN;
-      if(typeof v==="number") return v;
-      const s = String(v).replace(/,/g,"").trim();
-      const n = parseFloat(s);
-      return Number.isFinite(n) ? n : NaN;
-    }
-    function parseXqDateTime(v){
-      // 例：2020/02/04 08:54
-      const s = String(v||"").trim();
-      const m = s.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
-      if(!m) return null;
-      const y=+m[1], mo=+m[2], d=+m[3], h=+m[4], mi=+m[5], se=+(m[6]||0);
-      return new Date(y, mo-1, d, h, mi, se, 0);
-    }
+    throw new Error(`無法解析時間：${s}`);
   }
 
-  function matchTrades(txtTrades, xqTrades, tolMin, tolPx){
-    // 以 TXT 為主：為每筆 TXT 找一筆最接近的 XQ（同方向）
-    const xqLeft = xqTrades.map(t=>({ ...t, _used:false }));
-    const rows = [];
+  function toNumber(v) {
+    if (v === null || v === undefined || v === '') return NaN;
+    return Number(String(v).replace(/,/g, '').trim());
+  }
 
-    function abs(x){ return Math.abs(x); }
-    function diffMin(a,b){ return (a.getTime()-b.getTime())/60000; }
+  function fmtPrice(v, mode) {
+    const n = toNumber(v);
+    if (!isFinite(n)) return '';
+    if (mode === 'fixed6') return n.toFixed(6);
+    // raw：整數不補 .0，小數保留原本 number 文字表現（避免強制 6 位）
+    // 但若來源本來是字串小數，XLSX 可能已變成 number；這裡用最短表示
+    return (Number.isInteger(n) ? String(n) : String(n));
+  }
 
-    let matched = 0;
-    for(const t of txtTrades){
-      let best = null;
-      for(const x of xqLeft){
-        if(x._used) continue;
-        if(x.dir !== t.dir) continue;
+  function entryAct(dir) {
+    const s = String(dir || '');
+    // 只要含「買」視為多單進場；否則視為空單進場（新賣）
+    return s.includes('買') ? '新買' : '新賣';
+  }
 
-        const dEntryMin = abs(diffMin(x.entryDt, t.entryDt));
-        if(dEntryMin > tolMin) continue;
+  function exitAct(dir) {
+    const s = String(dir || '');
+    // 只要含「賣」視為多單出場（平賣）；否則視為空單回補（平買）
+    return s.includes('賣') ? '平賣' : '平買';
+  }
 
-        const dEntryPx = abs(x.entryPx - t.entryPx);
-        if(dEntryPx > tolPx) continue;
+  function setPill(el, text, kind) {
+    el.textContent = text;
+    el.classList.remove('ok', 'bad');
+    if (kind) el.classList.add(kind);
+  }
 
-        // 評分：先比時間，再比價格
-        const score = dEntryMin*100 + dEntryPx;
-        if(!best || score < best.score){
-          best = { x, score, dEntryMin, dEntryPx };
-        }
-      }
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  }
 
-      if(best){
-        best.x._used = true;
-        matched++;
+  function renderTable() {
+    const items = [];
+    for (const e of xqEvents) items.push(e);
+    for (const e of userCanonEvents) items.push(e);
 
-        const dEntry = best.x.entryPx - t.entryPx;
-        const dExit  = best.x.exitPx - t.exitPx;
-        const dPnl   = (best.x.pnl ?? NaN) - (t.pnl ?? NaN);
-
-        rows.push({
-          type: "matched",
-          dir: t.dir,
-          txt: t,
-          xq: best.x,
-          dEntry,
-          dExit,
-          dPnl,
-          note: `OK（Δt≤${tolMin}m & Δp≤${tolPx}）`
-        });
-      }else{
-        rows.push({ type:"txt_only", dir:t.dir, txt:t, xq:null, dEntry:null, dExit:null, dPnl:null, note:"TXT 無對應 XQ" });
-      }
+    if (!items.length) {
+      els.tblBody.innerHTML = '<tr><td colspan="5" class="hint">尚未載入資料</td></tr>';
+      return;
     }
 
-    // 找 XQ 未配對
-    for(const x of xqLeft){
-      if(!x._used){
-        rows.push({ type:"xq_only", dir:x.dir, txt:null, xq:x, dEntry:null, dExit:null, dPnl:null, note:"XQ 無對應 TXT" });
-      }
-    }
+    items.sort((a, b) => a.ts.localeCompare(b.ts) || a.src.localeCompare(b.src));
 
-    // 排序：先 matched，再 txt_only，再 xq_only；各自依進場時間
-    const rank = (t)=>t.type==="matched"?0:(t.type==="txt_only"?1:2);
-    rows.sort((a,b)=>{
-      const ra = rank(a), rb = rank(b);
-      if(ra!==rb) return ra-rb;
-      const ta = (a.txt?.entryDt || a.xq?.entryDt || new Date(0)).getTime();
-      const tb = (b.txt?.entryDt || b.xq?.entryDt || new Date(0)).getTime();
-      return ta-tb;
+    const rows = items.slice(0, 2000).map((e, i) => (
+      `<tr>
+        <td class="mono">${i + 1}</td>
+        <td class="mono">${escapeHtml(e.ts)}</td>
+        <td class="mono">${escapeHtml(e.px)}</td>
+        <td class="mono">${escapeHtml(e.act)}</td>
+        <td>${escapeHtml(e.src)}</td>
+      </tr>`
+    ));
+
+    els.tblBody.innerHTML = rows.join('') + (items.length > 2000
+      ? `<tr><td colspan="5" class="hint">（僅顯示前 2000 筆；實際共有 ${items.length} 筆事件）</td></tr>`
+      : '');
+  }
+
+  async function readFileAsArrayBuffer(file) {
+    return new Promise((resolve, reject) => {
+      const fr = new FileReader();
+      fr.onload = () => resolve(fr.result);
+      fr.onerror = () => reject(fr.error || new Error('讀檔失敗'));
+      fr.readAsArrayBuffer(file);
     });
-
-    return { rows, matched, xqUnmatched: xqLeft.filter(x=>!x._used).length, txtUnmatched: txtTrades.length - matched };
   }
 
-  function computeStats(result){
-    const matchedRows = result.rows.filter(r=>r.type==="matched");
-    const n = matchedRows.length;
-    const avg = (arr)=> arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : NaN;
-    const dEntry = matchedRows.map(r=>r.dEntry).filter(Number.isFinite);
-    const dExit  = matchedRows.map(r=>r.dExit).filter(Number.isFinite);
-    const dPnl   = matchedRows.map(r=>r.dPnl).filter(Number.isFinite);
-    const maxAbs = (arr)=> arr.length ? Math.max(...arr.map(x=>Math.abs(x))) : NaN;
+  async function readFileAsText(file) {
+    return new Promise((resolve, reject) => {
+      const fr = new FileReader();
+      fr.onload = () => resolve(fr.result);
+      fr.onerror = () => reject(fr.error || new Error('讀檔失敗'));
+      fr.readAsText(file);
+    });
+  }
 
+  function sheetToRows(ws) {
+    return XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: '' });
+  }
+
+  function parseCsvRows(text) {
+    return (text || '').split(/\r?\n/).map(line => {
+      // XQ 匯出大多簡單 CSV；不處理複雜嵌逗號
+      return line.split(',').map(s => s.replace(/^"|"$/g, '').trim());
+    });
+  }
+
+  function findHeaderRow(rows) {
+    const need = ['進場時間', '進場方向', '進場價格', '出場時間', '出場方向', '出場價格'];
+    for (let i = 0; i < Math.min(rows.length, 80); i++) {
+      const r = (rows[i] || []).map(x => String(x || '').trim());
+      const ok = need.every(k => r.includes(k));
+      if (ok) return { header: rows[i], headerIdx: i };
+    }
+    return null;
+  }
+
+  function parseXqRows(rows) {
+    const found = findHeaderRow(rows);
+    if (!found) throw new Error('找不到欄位列（需要含：進場時間/方向/價格、出場時間/方向/價格）');
+
+    const headerRow = found.header.map(x => String(x || '').trim());
+    const headerIdx = found.headerIdx;
+
+    const idx = (name) => headerRow.indexOf(name);
+    const iEntT = idx('進場時間');
+    const iEntD = idx('進場方向');
+    const iEntP = idx('進場價格');
+    const iExT = idx('出場時間');
+    const iExD = idx('出場方向');
+    const iExP = idx('出場價格');
+
+    const tsMode = els.tsMode.value;  // '14' or 'canon'
+    const pxMode = els.pxMode.value;  // 'raw' or 'fixed6'
+
+    const events = [];
+
+    for (let r = headerIdx + 1; r < rows.length; r++) {
+      const row = rows[r];
+      if (!row || row.length === 0) continue;
+
+      const entT = row[iEntT];
+      const entD = row[iEntD];
+      const entP = row[iEntP];
+      const exT = row[iExT];
+      const exD = row[iExD];
+      const exP = row[iExP];
+
+      if (!entT || !entD || entP === '' || !exT || !exD || exP === '') continue;
+
+      const entDt = parseXqDatetime(entT);
+      const exDt = parseXqDatetime(exT);
+
+      const ts1 = (tsMode === 'canon') ? fmtTsCanon(entDt) : fmtTs14(entDt);
+      const ts2 = (tsMode === 'canon') ? fmtTsCanon(exDt) : fmtTs14(exDt);
+
+      events.push({
+        ts: ts1,
+        px: fmtPrice(entP, pxMode),
+        act: entryAct(entD),
+        src: 'XQ匯出',
+      });
+      events.push({
+        ts: ts2,
+        px: fmtPrice(exP, pxMode),
+        act: exitAct(exD),
+        src: 'XQ匯出',
+      });
+    }
+
+    if (!events.length) throw new Error('解析不到任何交易（請確認匯出檔含「交易分析」明細表）');
+    return events;
+  }
+
+  async function parseXqFile(file) {
+    const name = file.name.toLowerCase();
+    if (name.endsWith('.xlsx')) {
+      const ab = await readFileAsArrayBuffer(file);
+      const wb = XLSX.read(ab, { type: 'array' });
+
+      // 優先「交易分析」，否則第一張
+      const sname = wb.SheetNames.includes('交易分析') ? '交易分析' : wb.SheetNames[0];
+      const ws = wb.Sheets[sname];
+      const rows = sheetToRows(ws);
+      return parseXqRows(rows);
+    }
+
+    // CSV fallback
+    const text = await readFileAsText(file);
+    const rows = parseCsvRows(text);
+    return parseXqRows(rows);
+  }
+
+  function buildOutTextFromEvents(events) {
+    // 只輸出：ts px act（三欄）
+    return events.map(e => `${e.ts} ${e.px} ${e.act}`).join('\n') + '\n';
+  }
+
+  function setDownload(text, filename) {
+    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    els.dlCanon.href = url;
+    els.dlCanon.download = filename || 'xq-export.txt';
+    els.dlCanon.style.display = '';
+  }
+
+  function parseUserTxt(text) {
+    const lines = (text || '').split(/\r?\n/);
+    const out = [];
+
+    for (const ln of lines) {
+      const s = ln.trim();
+      if (!s) continue;
+
+      // 參數列：BeginTime=... 直接略過
+      if (s.includes('BeginTime=') || s.includes('EndTime=') || s.includes('ForceExitTime=')) continue;
+
+      // 把多空 INPOS 行排除：最後一欄 INPOS
+      if (/\bINPOS\b/.test(s)) continue;
+
+      // 正常交易列：ts px act（ts 可能是 14碼或 14碼.000000）
+      const parts = s.split(/\s+/);
+      if (parts.length < 3) continue;
+
+      const ts = parts[0];
+      const px = parts[1];
+      const act = parts[2];
+
+      if (!ACTIONS.has(act)) continue;
+
+      out.push({
+        ts,
+        px: px, // 不強制補小數；以你原本 TXT 為主
+        act,
+        src: '策略TXT',
+      });
+    }
+
+    return out;
+  }
+
+  function normalizeForCompare(e) {
+    // 比較用：時間保持字串；價格用 number 做一致化（避免 17792 vs 17792.000000）
+    const pxNum = toNumber(e.px);
     return {
-      n,
-      avgEntry: avg(dEntry),
-      avgExit: avg(dExit),
-      avgPnl: avg(dPnl),
-      maxAbsPnl: maxAbs(dPnl),
+      ts: String(e.ts),
+      act: String(e.act),
+      pxNum: isFinite(pxNum) ? pxNum : NaN,
     };
   }
 
-  function render(result, stats){
-    el.btnExport.disabled = !result || !result.rows || !result.rows.length;
+  function compareSeq(a, b) {
+    const A = a.map(normalizeForCompare);
+    const B = b.map(normalizeForCompare);
 
-    el.k_txtTrades.textContent = String(state.lastResult?.txtTrades ?? "—");
-    el.k_xqTrades.textContent  = String(state.lastResult?.xqTrades ?? "—");
-    el.k_matched.textContent   = String(stats?.n ?? "—");
-    el.k_unmatched.textContent = `${state.lastResult?.txtUnmatched ?? "—"} / ${state.lastResult?.xqUnmatched ?? "—"}`;
+    const n = Math.max(A.length, B.length);
+    let firstBad = -1;
 
-    const fmt = (x)=> Number.isFinite(x) ? x.toFixed(2) : "—";
-    el.k_dEntry.textContent = fmt(stats?.avgEntry);
-    el.k_dExit.textContent  = fmt(stats?.avgExit);
-    el.k_dPnl.textContent   = fmt(stats?.avgPnl);
-    el.k_dPnlMax.textContent= fmt(stats?.maxAbsPnl);
+    for (let i = 0; i < n; i++) {
+      const x = A[i], y = B[i];
+      if (!x || !y) { firstBad = i; break; }
+      const sameTs = (x.ts === y.ts);
+      const sameAct = (x.act === y.act);
+      const samePx = (isFinite(x.pxNum) && isFinite(y.pxNum)) ? (x.pxNum === y.pxNum) : (String(a[i].px) === String(b[i].px));
 
-    el.tbody.innerHTML = "";
-    if(!result.rows.length){
-      el.tbody.innerHTML = `<tr><td colspan="12" class="muted">沒有資料。</td></tr>`;
-      return;
+      if (!(sameTs && sameAct && samePx)) { firstBad = i; break; }
     }
 
-    let i=0;
-    for(const r of result.rows){
-      i++;
-      const dirLabel = r.dir==="L" ? "多" : (r.dir==="S" ? "空" : "?");
-      const cls = r.type==="matched" ? "ok" : (r.type==="txt_only" ? "warn" : "bad");
-      const txtEntry = r.txt ? `${fmtTS(r.txt.entryDt)} @ <span class="mono">${r.txt.entryPx}</span>` : "—";
-      const txtExit  = r.txt ? `${fmtTS(r.txt.exitDt)} @ <span class="mono">${r.txt.exitPx}</span>` : "—";
-      const xqEntry  = r.xq  ? `${fmtTS(r.xq.entryDt)} @ <span class="mono">${r.xq.entryPx}</span>` : "—";
-      const xqExit   = r.xq  ? `${fmtTS(r.xq.exitDt)} @ <span class="mono">${r.xq.exitPx}</span>` : "—";
-
-      const txtPnl = (r.txt && Number.isFinite(r.txt.pnl)) ? r.txt.pnl : null;
-      const xqPnl  = (r.xq  && Number.isFinite(r.xq.pnl))  ? r.xq.pnl  : null;
-
-      const dEntry = Number.isFinite(r.dEntry) ? r.dEntry : null;
-      const dExit  = Number.isFinite(r.dExit)  ? r.dExit  : null;
-      const dPnl   = Number.isFinite(r.dPnl)   ? r.dPnl   : null;
-
-      el.tbody.insertAdjacentHTML("beforeend", `
-        <tr>
-          <td class="num">${i}</td>
-          <td><span class="${cls}">${dirLabel}</span></td>
-          <td>${txtEntry}</td>
-          <td>${txtExit}</td>
-          <td class="num">${txtPnl===null?"—":txtPnl.toFixed(0)}</td>
-          <td>${xqEntry}</td>
-          <td>${xqExit}</td>
-          <td class="num">${xqPnl===null?"—":xqPnl.toFixed(0)}</td>
-          <td class="num">${dEntry===null?"—":dEntry.toFixed(2)}</td>
-          <td class="num">${dExit===null?"—":dExit.toFixed(2)}</td>
-          <td class="num">${dPnl===null?"—":dPnl.toFixed(0)}</td>
-          <td class="${cls}">${esc(r.note)}</td>
-        </tr>
-      `);
-    }
-  }
-
-  function buildQuickSummary(txtParsed, xqParsed){
-    const parts = [];
-    if(txtParsed.errors.length) parts.push(`<div class="bad">TXT 警告：${esc(txtParsed.errors[0])}${txtParsed.errors.length>1?`（+${txtParsed.errors.length-1}）`:""}</div>`);
-    if(xqParsed.errors.length) parts.push(`<div class="bad">XQ 警告：${esc(xqParsed.errors[0])}${xqParsed.errors.length>1?`（+${xqParsed.errors.length-1}）`:""}</div>`);
-    parts.push(`<div>TXT 完整交易：<b>${txtParsed.trades.length}</b>；XQ 交易：<b>${xqParsed.trades.length}</b>；XQ 工作表：<span class="mono">${esc(xqParsed.sheetName)}</span></div>`);
-
-    const range = (trades)=>{
-      if(!trades.length) return "—";
-      const a = trades.map(t=>t.entryDt.getTime()).sort((x,y)=>x-y);
-      const b = trades.map(t=>t.exitDt.getTime()).sort((x,y)=>x-y);
-      return `${fmtTS(new Date(a[0]))} → ${fmtTS(new Date(b[b.length-1]))}`;
-    };
-    parts.push(`<div class="muted">TXT 範圍：${esc(range(txtParsed.trades))}</div>`);
-    parts.push(`<div class="muted">XQ 範圍：${esc(range(xqParsed.trades))}</div>`);
-    return parts.join("");
-  }
-
-  function exportCSV(result){
-    if(!result || !result.rows) return;
     const lines = [];
-    lines.push([
-      "type","dir",
-      "txt_entry_time","txt_entry_px","txt_exit_time","txt_exit_px","txt_pnl",
-      "xq_entry_time","xq_entry_px","xq_exit_time","xq_exit_px","xq_pnl",
-      "d_entry","d_exit","d_pnl","note"
-    ].join(","));
+    lines.push(`XQ 事件數：${a.length}`);
+    lines.push(`策略TXT 事件數：${b.length}`);
 
-    const q = (s)=> `"${String(s??"").replace(/"/g,'""')}"`;
-
-    for(const r of result.rows){
-      const dir = r.dir==="L"?"L":(r.dir==="S"?"S":"?");
-      const t = r.txt, x = r.xq;
-      lines.push([
-        r.type, dir,
-        t?fmtTS(t.entryDt):"", t?.entryPx ?? "", t?fmtTS(t.exitDt):"", t?.exitPx ?? "", t?.pnl ?? "",
-        x?fmtTS(x.entryDt):"", x?.entryPx ?? "", x?fmtTS(x.exitDt):"", x?.exitPx ?? "", x?.pnl ?? "",
-        (r.dEntry??""), (r.dExit??""), (r.dPnl??""), q(r.note)
-      ].join(","));
+    if (firstBad === -1) {
+      lines.push('結果：一致（逐行相同）。');
+      return lines.join('\n');
     }
 
-    const blob = new Blob([lines.join("\n")], {type:"text/csv;charset=utf-8"});
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `recon_${Date.now()}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(()=>URL.revokeObjectURL(a.href), 2000);
+    lines.push(`結果：不一致（第一個 mismatch：第 ${firstBad + 1} 行）。`);
+    lines.push('');
+
+    const from = Math.max(0, firstBad - 5);
+    const to = Math.min(n - 1, firstBad + 5);
+
+    lines.push('--- 對照區段（前後 5 行）---');
+
+    for (let i = from; i <= to; i++) {
+      const la = a[i] ? `${a[i].ts} ${a[i].px} ${a[i].act}` : '(缺)';
+      const lb = b[i] ? `${b[i].ts} ${b[i].px} ${b[i].act}` : '(缺)';
+      const ok = (a[i] && b[i] &&
+        A[i].ts === B[i].ts &&
+        A[i].act === B[i].act &&
+        ((isFinite(A[i].pxNum) && isFinite(B[i].pxNum)) ? (A[i].pxNum === B[i].pxNum) : (String(a[i].px) === String(b[i].px)))
+      );
+      const mark = ok ? ' ' : '!';
+      lines.push(`${mark} ${String(i + 1).padStart(5, ' ')} | XQ : ${la}`);
+      lines.push(`${mark}       | TXT: ${lb}`);
+    }
+
+    lines.push('');
+    lines.push('常見原因：XQ 匯出時間粒度（秒）、或同時點多筆成交在匯出時被合併/拆分。');
+    return lines.join('\n');
   }
 
-  async function loadTxtFile(file){
-    state.txtName = file.name;
-    el.txtName.textContent = file.name;
-    const txt = await file.text();
-    state.txtText = txt;
-  }
+  // UI events
+  els.xqFile.addEventListener('change', async () => {
+    els.btnConvert.disabled = true;
+    els.btnCompare.disabled = true;
+    setPill(els.xqStatus, '讀取中…');
+    els.canonPreview.style.display = 'none';
+    els.dlCanon.style.display = 'none';
 
-  async function loadXlsFile(file){
-    state.xlsName = file.name;
-    el.xlsName.textContent = file.name;
-    const buf = await file.arrayBuffer();
-    const wb = XLSX.read(buf, {type:"array"});
-    const parsed = parseXqTradesFromWorkbook(wb);
-    state.xqRows = parsed;
-  }
+    xqEvents = [];
+    xqOutText = '';
+    renderTable();
 
-  function readyToRun(){
-    return !!state.txtText && !!state.xqRows;
-  }
-
-  async function runRecon(){
-    if(!readyToRun()){
-      setStatus(`<span class="warn">請先匯入 TXT 與 XQ Excel。</span>`);
+    const file = els.xqFile.files && els.xqFile.files[0];
+    if (!file) {
+      setPill(els.xqStatus, '尚未載入');
       return;
     }
-    const tolMin = parseInt(el.tolMin.value,10) || 0;
-    const tolPx  = parseInt(el.tolPx.value,10) || 0;
 
-    const txtParsed = parseTxtTrades(state.txtText);
-    const xqParsed  = state.xqRows;
+    try {
+      xqEvents = await parseXqFile(file);
+      xqOutText = buildOutTextFromEvents(xqEvents);
 
-    el.quick.innerHTML = buildQuickSummary(txtParsed, xqParsed);
-
-    const matched = matchTrades(txtParsed.trades, xqParsed.trades, tolMin, tolPx);
-    const stats = computeStats(matched);
-
-    state.lastResult = {
-      txtTrades: txtParsed.trades.length,
-      xqTrades: xqParsed.trades.length,
-      txtUnmatched: matched.txtUnmatched,
-      xqUnmatched: matched.xqUnmatched,
-      rows: matched.rows
-    };
-
-    render(matched, stats);
-
-    const okRate = (stats.n && txtParsed.trades.length) ? (100*stats.n/txtParsed.trades.length) : 0;
-    setStatus([
-      `<div>完成：TXT <b>${txtParsed.trades.length}</b> 筆，XQ <b>${xqParsed.trades.length}</b> 筆。</div>`,
-      `<div>配對 <b class="ok">${stats.n}</b> 筆（${okRate.toFixed(1)}% of TXT），TXT 未配對 <b class="warn">${matched.txtUnmatched}</b>，XQ 未配對 <b class="bad">${matched.xqUnmatched}</b></div>`,
-      `<div class="muted">容忍：時間 ±${tolMin} 分，價格 ±${tolPx} 點。工作表：<span class="mono">${esc(xqParsed.sheetName)}</span></div>`
-    ].join(""));
-
-    el.btnExport.disabled = false;
-  }
-
-  // Events
-  el.tolMin.addEventListener("input", ()=>{ el.tolMinLabel.textContent = el.tolMin.value; });
-  el.tolPx.addEventListener("input", ()=>{ el.tolPxLabel.textContent = el.tolPx.value; });
-
-  el.txtFile.addEventListener("change", async (e)=>{
-    const f = e.target.files && e.target.files[0];
-    if(!f) return;
-    await loadTxtFile(f);
-    setStatus(`已載入 TXT：<span class="mono">${esc(state.txtName)}</span>`);
-  });
-
-  el.xlsFile.addEventListener("change", async (e)=>{
-    const f = e.target.files && e.target.files[0];
-    if(!f) return;
-    await loadXlsFile(f);
-    setStatus(`已載入 XQ：<span class="mono">${esc(state.xlsName)}</span>（交易分析：${state.xqRows.trades.length} 筆）`);
-  });
-
-  el.btnRun.addEventListener("click", runRecon);
-  el.btnExport.addEventListener("click", ()=> exportCSV(state.lastResult));
-
-  // Drag & drop
-  ["dragenter","dragover"].forEach(ev=>{
-    el.drop.addEventListener(ev, (e)=>{ e.preventDefault(); e.stopPropagation(); el.drop.classList.add("drag"); });
-  });
-  ["dragleave","drop"].forEach(ev=>{
-    el.drop.addEventListener(ev, (e)=>{ e.preventDefault(); e.stopPropagation(); el.drop.classList.remove("drag"); });
-  });
-  el.drop.addEventListener("drop", async (e)=>{
-    const files = Array.from(e.dataTransfer.files || []);
-    for(const f of files){
-      const name = (f.name||"").toLowerCase();
-      if(name.endsWith(".xlsx")){
-        await loadXlsFile(f);
-      }else{
-        await loadTxtFile(f);
-      }
+      setPill(els.xqStatus, `已載入：${file.name}（事件 ${xqEvents.length}）`, 'ok');
+      els.btnConvert.disabled = false;
+      els.btnCompare.disabled = !(els.canonFile.files && els.canonFile.files[0]);
+      renderTable();
+    } catch (err) {
+      console.error(err);
+      setPill(els.xqStatus, '解析失敗', 'bad');
+      alert(err.message || String(err));
     }
-    setStatus(`已載入：TXT=<span class="mono">${esc(state.txtName||"—")}</span>，XQ=<span class="mono">${esc(state.xlsName||"—")}</span>。`);
   });
 
-  // init
-  el.tolMinLabel.textContent = el.tolMin.value;
-  el.tolPxLabel.textContent = el.tolPx.value;
+  // 若切換格式，且已經載入 xqEvents，就即時重建輸出
+  function rebuildIfHaveXq() {
+    if (!xqEvents.length) return;
+    // 重新用 rows 解析會麻煩；這裡直接用既有 dt 已經丟掉了，所以簡化：提示重新選檔
+    // 最安全做法：格式切換後要求重新載入 xqFile
+    // 因為我們在 parseXqRows() 時才決定 ts/px 格式。
+    setPill(els.xqStatus, '格式已改，請重新選擇 XQ 檔案以套用', 'bad');
+  }
+  els.tsMode.addEventListener('change', rebuildIfHaveXq);
+  els.pxMode.addEventListener('change', rebuildIfHaveXq);
+
+  els.btnConvert.addEventListener('click', () => {
+    if (!xqOutText) return;
+    const filename = (els.outName.value || 'xq-export.txt').trim() || 'xq-export.txt';
+    setDownload(xqOutText, filename);
+
+    const lines = xqOutText.split(/\r?\n/);
+    els.canonPreview.textContent = lines.slice(0, 300).join('\n') + (lines.length > 300 ? '\n…（僅預覽前 300 行）' : '');
+    els.canonPreview.style.display = '';
+  });
+
+  els.canonFile.addEventListener('change', async () => {
+    els.btnCompare.disabled = true;
+    setPill(els.cmpStatus, '讀取中…');
+    els.cmpResult.style.display = 'none';
+
+    userCanonEvents = [];
+    renderTable();
+
+    const file = els.canonFile.files && els.canonFile.files[0];
+    if (!file) {
+      setPill(els.cmpStatus, '尚未比較');
+      return;
+    }
+
+    try {
+      const text = await readFileAsText(file);
+      userCanonEvents = parseUserTxt(text);
+
+      setPill(els.cmpStatus, `已載入：${file.name}（交易列 ${userCanonEvents.length}）`, 'ok');
+      els.btnCompare.disabled = !(xqEvents && xqEvents.length);
+      renderTable();
+    } catch (err) {
+      console.error(err);
+      setPill(els.cmpStatus, '解析失敗', 'bad');
+      alert(err.message || String(err));
+    }
+  });
+
+  els.btnCompare.addEventListener('click', () => {
+    if (!xqEvents.length || !userCanonEvents.length) return;
+    const rep = compareSeq(xqEvents, userCanonEvents);
+    els.cmpResult.textContent = rep;
+    els.cmpResult.style.display = '';
+    if (rep.includes('一致')) setPill(els.cmpStatus, '一致', 'ok');
+    else setPill(els.cmpStatus, '不一致', 'bad');
+  });
+
 })();
