@@ -3,155 +3,147 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>TXT vs XQ 回測對帳</title>
+  <title>compare-xq｜XQ 回測匯出 → TXT（交易列）／對帳</title>
   <style>
     :root{
-      --bg:#0b0f17; --card:#121a27; --muted:#9db0c9; --text:#e8f0ff; --line:#223048;
-      --good:#3ddc97; --bad:#ff6b6b; --warn:#ffcc66;
+      --bg:#0b0f14; --card:#121826; --muted:#98a2b3; --text:#e6edf3;
+      --line:#263042; --accent:#5eead4; --danger:#fb7185;
       --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-      --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Arial, "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
+      --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Noto Sans TC", "Microsoft JhengHei", Arial, sans-serif;
     }
-    body{margin:0; background:var(--bg); color:var(--text); font-family:var(--sans);}
-    header{padding:18px 18px 10px; border-bottom:1px solid var(--line); position:sticky; top:0; backdrop-filter: blur(6px); background:rgba(11,15,23,.85);}
-    h1{margin:0 0 6px; font-size:18px; letter-spacing:.2px;}
-    .sub{color:var(--muted); font-size:12px;}
-    main{padding:18px; max-width:1200px; margin:0 auto;}
-    .grid{display:grid; grid-template-columns: 1.2fr .8fr; gap:14px;}
-    @media (max-width: 980px){ .grid{grid-template-columns:1fr;} }
-    .card{background:var(--card); border:1px solid var(--line); border-radius:14px; padding:14px; box-shadow:0 10px 30px rgba(0,0,0,.25);}
-    .card h2{margin:0 0 10px; font-size:14px; color:#d8e6ff;}
-    .row{display:flex; flex-wrap:wrap; gap:10px; align-items:center;}
-    .row > *{flex:0 0 auto;}
-    .btn{background:#1b2a44; border:1px solid #2a3b5b; color:var(--text); padding:9px 10px; border-radius:10px; cursor:pointer; font-size:13px;}
-    .btn:hover{filter:brightness(1.08);}
-    input[type="file"]{background:#0f1726; border:1px dashed #2a3b5b; color:var(--muted); padding:10px; border-radius:10px; max-width:100%;}
-    .kpis{display:grid; grid-template-columns:repeat(4,1fr); gap:10px;}
-    @media (max-width: 980px){ .kpis{grid-template-columns:repeat(2,1fr);} }
-    .kpi{border:1px solid var(--line); border-radius:12px; padding:10px; background:#0f1726;}
-    .kpi .k{font-size:11px; color:var(--muted);}
-    .kpi .v{font-size:16px; font-family:var(--mono); margin-top:4px;}
-    .kpi small{color:var(--muted);}
-    .mono{font-family:var(--mono);}
-    .pill{display:inline-flex; gap:6px; align-items:center; border:1px solid var(--line); border-radius:999px; padding:4px 10px; font-size:12px; color:var(--muted);}
-    .pill b{color:var(--text);}
-    .ok{color:var(--good);} .bad{color:var(--bad);} .warn{color:var(--warn);}
-    .muted{color:var(--muted);}
-    .hr{height:1px; background:var(--line); margin:12px 0;}
-    table{width:100%; border-collapse:collapse; font-size:12px;}
-    th, td{border-bottom:1px solid var(--line); padding:8px 6px; text-align:left; vertical-align:top;}
-    th{position:sticky; top:64px; background:rgba(18,26,39,.95); z-index:2; font-weight:600; color:#d8e6ff;}
-    td.num{text-align:right; font-family:var(--mono);}
-    tr:hover{background:rgba(255,255,255,.03);}
-    .scroll{overflow:auto; max-height:62vh; border-radius:12px; border:1px solid var(--line);}
-    .note{font-size:12px; color:var(--muted); line-height:1.5;}
-    .drop{border:1px dashed #2a3b5b; border-radius:12px; padding:12px; color:var(--muted); text-align:center;}
-    .drop.drag{border-color:#4b7bd8; color:#cfe0ff; background:rgba(75,123,216,.10);}
-    .right{justify-content:flex-end;}
+    body{ margin:0; background:var(--bg); color:var(--text); font-family:var(--sans); }
+    .wrap{ max-width:1100px; margin:0 auto; padding:24px 16px 56px; }
+    h1{ font-size:20px; margin:0 0 8px; }
+    .sub{ color:var(--muted); font-size:13px; margin:0 0 18px; line-height:1.5; }
+    .grid{ display:grid; grid-template-columns: 1fr; gap:12px; }
+    @media(min-width:980px){ .grid{ grid-template-columns: 1fr 1fr; } }
+    .card{ background:var(--card); border:1px solid var(--line); border-radius:14px; padding:14px; }
+    .card h2{ font-size:14px; margin:0 0 10px; color:#cbd5e1; }
+    .row{ display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
+    label{ font-size:12px; color:var(--muted); display:block; margin:8px 0 6px; }
+    input[type="file"], input[type="text"], select{
+      width:100%; box-sizing:border-box;
+      background:#0f172a; border:1px solid var(--line); color:var(--text);
+      padding:10px; border-radius:10px; outline:none;
+    }
+    .ctrl2{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+    button{
+      background:#0f172a; border:1px solid var(--line); color:var(--text);
+      padding:10px 12px; border-radius:10px; cursor:pointer;
+    }
+    button.primary{ border-color:#1f4f4a; background:rgba(94,234,212,0.08); }
+    button:disabled{ opacity:.45; cursor:not-allowed; }
+    .pill{ display:inline-block; padding:4px 10px; border:1px solid var(--line); border-radius:999px; font-size:12px; color:var(--muted); }
+    .pill.ok{ border-color:#1f4f4a; color:var(--accent); }
+    .pill.bad{ border-color:#3b1f2a; color:var(--danger); }
+    .mono{ font-family:var(--mono); }
+    pre{
+      background:#0f172a; border:1px solid var(--line);
+      border-radius:12px; padding:12px; overflow:auto; max-height:360px;
+      margin:10px 0 0;
+      font-family:var(--mono); font-size:12px; line-height:1.45;
+    }
+    table{ width:100%; border-collapse:collapse; font-size:12px; }
+    th, td{ border-bottom:1px solid var(--line); padding:8px 6px; text-align:left; }
+    th{ color:#cbd5e1; font-weight:600; position:sticky; top:0; background:var(--card); }
+    .scroll{ overflow:auto; max-height:420px; border:1px solid var(--line); border-radius:12px; }
+    .hint{ font-size:12px; color:var(--muted); line-height:1.5; }
+    a{ color:var(--accent); text-decoration:none; }
+    .footer{ color:var(--muted); font-size:12px; margin-top:16px; }
   </style>
 </head>
 <body>
-<header>
-  <h1>TXT vs XQ 回測對帳</h1>
-  <div class="sub">將「檔案1：策略輸出 TXT」與「檔案2：XQ 回測匯出 Excel」對齊，檢查每筆交易進出場是否一致。</div>
-</header>
+  <div class="wrap">
+    <h1>compare-xq｜XQ 回測匯出 → TXT（交易列）／對帳</h1>
+    <p class="sub">
+      XQ 匯出沒有 INPOS，所以本頁將 XQ「交易分析」明細轉成 TXT 只含交易列（新買/平賣/新賣/平買/強制平倉）。
+      你自己的 TXT 若含 INPOS，對帳時會自動忽略。
+    </p>
 
-<main>
-  <div class="grid">
-    <section class="card">
-      <h2>匯入檔案</h2>
-      <div class="row">
-        <label class="pill"><b>TXT</b><span id="txtName" class="muted">未選擇</span></label>
-        <input id="txtFile" type="file" accept=".txt,.log,.csv,text/plain" />
+    <div class="grid">
+      <div class="card">
+        <h2>① 匯入 XQ 回測匯出檔（檔案2）</h2>
+
+        <label>選擇檔案（.xlsx / .csv）</label>
+        <input id="xqFile" type="file" accept=".xlsx,.csv,.txt" />
+
+        <div class="ctrl2">
+          <div>
+            <label>時間格式</label>
+            <select id="tsMode">
+              <option value="14">YYYYMMDDhhmmss（預設，符合你目前 TXT）</option>
+              <option value="canon">YYYYMMDDhhmmss.000000（Canon）</option>
+            </select>
+          </div>
+          <div>
+            <label>價格格式</label>
+            <select id="pxMode">
+              <option value="raw">原樣（預設：整數就整數）</option>
+              <option value="fixed6">固定 6 位小數</option>
+            </select>
+          </div>
+        </div>
+
+        <label>輸出檔名（預設：xq-export.txt）</label>
+        <input id="outName" type="text" value="xq-export.txt" />
+
+        <div class="row" style="margin-top:10px;">
+          <button id="btnConvert" class="primary" disabled>轉成 TXT</button>
+          <a id="dlCanon" href="#" download style="display:none;">下載 TXT</a>
+          <span id="xqStatus" class="pill">尚未載入</span>
+        </div>
+
+        <div class="hint" style="margin-top:10px;">
+          解析欄位：<span class="mono">進場時間/方向/價格</span>、<span class="mono">出場時間/方向/價格</span>，每筆轉成兩行交易列。
+        </div>
+
+        <pre id="canonPreview" class="mono" style="display:none;"></pre>
       </div>
-      <div class="row" style="margin-top:10px;">
-        <label class="pill"><b>XQ Excel</b><span id="xlsName" class="muted">未選擇</span></label>
-        <input id="xlsFile" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" />
+
+      <div class="card">
+        <h2>② 匯入你的 TXT（檔案1）做對帳（可選）</h2>
+
+        <label>選擇策略 TXT（可含參數列與 INPOS 行；會自動忽略）</label>
+        <input id="canonFile" type="file" accept=".txt,.csv" />
+
+        <div class="row" style="margin-top:10px;">
+          <button id="btnCompare" disabled>對帳比較</button>
+          <span id="cmpStatus" class="pill">尚未比較</span>
+        </div>
+
+        <div class="hint" style="margin-top:10px;">
+          對帳：只比較交易動作 <span class="mono">新買、平賣、新賣、平買、強制平倉</span>，忽略 INPOS 與參數列。
+        </div>
+
+        <pre id="cmpResult" class="mono" style="display:none;"></pre>
       </div>
+    </div>
 
-      <div class="hr"></div>
-
-      <div class="row">
-        <label class="pill"><b>配對策略</b></label>
-        <label class="pill">時間容忍 <b><span id="tolMinLabel">0</span></b> 分
-          <input id="tolMin" type="range" min="0" max="5" value="0" style="width:140px; vertical-align:middle;"/>
-        </label>
-        <label class="pill">價格容忍 <b><span id="tolPxLabel">0</span></b> 點
-          <input id="tolPx" type="range" min="0" max="10" value="0" style="width:160px; vertical-align:middle;"/>
-        </label>
-        <button class="btn" id="btnRun">開始對帳</button>
-        <button class="btn" id="btnExport" disabled>匯出對帳結果 CSV</button>
+    <div class="card" style="margin-top:12px;">
+      <h2>③ 事件預覽（解析後）</h2>
+      <div class="scroll">
+        <table id="tbl">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>時間</th>
+              <th>價格</th>
+              <th>動作</th>
+              <th>來源</th>
+            </tr>
+          </thead>
+          <tbody id="tblBody">
+            <tr><td colspan="5" class="hint">尚未載入資料</td></tr>
+          </tbody>
+        </table>
       </div>
-
-      <div class="hr"></div>
-
-      <div class="kpis" id="kpis">
-        <div class="kpi"><div class="k">TXT 交易筆數</div><div class="v" id="k_txtTrades">—</div></div>
-        <div class="kpi"><div class="k">XQ 交易筆數</div><div class="v" id="k_xqTrades">—</div></div>
-        <div class="kpi"><div class="k">成功配對</div><div class="v" id="k_matched">—</div></div>
-        <div class="kpi"><div class="k">未配對（TXT / XQ）</div><div class="v" id="k_unmatched">—</div></div>
-
-        <div class="kpi"><div class="k">平均 進場價差（XQ - TXT）</div><div class="v" id="k_dEntry">—</div></div>
-        <div class="kpi"><div class="k">平均 出場價差（XQ - TXT）</div><div class="v" id="k_dExit">—</div></div>
-        <div class="kpi"><div class="k">平均 PnL 差（XQ - TXT）</div><div class="v" id="k_dPnl">—</div></div>
-        <div class="kpi"><div class="k">最大 |PnL 差|</div><div class="v" id="k_dPnlMax">—</div></div>
+      <div class="footer">
+        之後你要我接到 index.html 時，我會加一張卡片連到 <span class="mono">compare-xq.html</span>。
       </div>
-
-      <div class="hr"></div>
-
-      <div class="note">
-        <div class="mono">TXT 解析規則：</div>
-        <ul>
-          <li>僅取動作列：新買/平賣/新賣/平買/強制平倉；忽略 INPOS 追蹤列。</li>
-          <li>自動以「一進一出」配對成一筆交易（多單：新買→平賣/強制；空單：新賣→平買/強制）。</li>
-        </ul>
-        <div class="mono">XQ 解析規則：</div>
-        <ul>
-          <li>預設讀取工作表「交易分析」，欄位：進場時間/進場方向/進場價格/出場時間/出場價格/獲利金額。</li>
-        </ul>
-      </div>
-    </section>
-
-    <aside class="card">
-      <h2>狀態</h2>
-      <div id="status" class="note">等待匯入檔案。</div>
-      <div class="hr"></div>
-      <h2>快速檢查</h2>
-      <div id="quick" class="note muted">尚未執行。</div>
-      <div class="hr"></div>
-      <h2>拖拉匯入</h2>
-      <div id="drop" class="drop">把 TXT 或 XLSX 拖到這裡（會自動辨識副檔名）</div>
-    </aside>
+    </div>
   </div>
 
-  <section class="card" style="margin-top:14px;">
-    <h2>對帳明細</h2>
-    <div class="scroll">
-      <table id="tbl">
-        <thead>
-          <tr>
-            <th>#</th>
-            <th>方向</th>
-            <th>TXT 進場</th>
-            <th>TXT 出場</th>
-            <th class="num">TXT PnL</th>
-            <th>XQ 進場</th>
-            <th>XQ 出場</th>
-            <th class="num">XQ PnL</th>
-            <th class="num">Δ進</th>
-            <th class="num">Δ出</th>
-            <th class="num">ΔPnL</th>
-            <th>配對狀態</th>
-          </tr>
-        </thead>
-        <tbody id="tbody">
-          <tr><td colspan="12" class="muted">尚未產生資料。</td></tr>
-        </tbody>
-      </table>
-    </div>
-  </section>
-</main>
-
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="./compare-xq.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="./compare-xq.js"></script>
 </body>
 </html>
