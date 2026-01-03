@@ -143,7 +143,7 @@
     });
   }
 
-  // ====== 報酬率計算相關 ======
+  // ====== 交易列解析 / canonicalize ======
   const CANON_RE = /^(\d{14})\.0{6}\s+(\d+\.\d{6})\s+(新買|平賣|新賣|平買|強制平倉)\s*$/;
   const EXTRACT_RE = /.*?(\d{14})(?:\.0{1,6})?\s+(\d+(?:\.\d{1,6})?)\s*(新買|平賣|新賣|平買|強制平倉)\s*$/;
   const CSV_LINE_RE = /^(\d{8}),(\d{5,6}),(\d+(?:\.\d+)?),([^,]+?),/;
@@ -231,116 +231,102 @@
     return { days, vals };
   }
 
-  const d8 = s => new Date(`${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}T00:00:00`);
-  const fmtD8 = s => `${s.slice(0, 4)}/${s.slice(4, 6)}/${s.slice(6, 8)}`;
+  // ====== 日期工具（以本地時間計算週期）=====
+  function atMidnight(d) {
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  }
+  function mondayOf(d) {
+    const x = atMidnight(d);
+    const dow = x.getDay(); // 0=Sun..6=Sat
+    const offsetToMonday = (dow + 6) % 7;
+    x.setDate(x.getDate() - offsetToMonday);
+    return x;
+  }
+  function sundayOfWeek(d) {
+    const m = mondayOf(d);
+    const s = new Date(m.getTime());
+    s.setDate(s.getDate() + 6);
+    return s;
+  }
+  function addMonthsSameDay(d, n) {
+    const x = atMidnight(d);
+    const day = x.getDate();
+    x.setMonth(x.getMonth() + n);
+    // JS 會自動溢出到下個月，這裡保持「同日」語意即可（你的例子 1/4->11/4 是可達）
+    // 若遇到 31 號等月份不存在，JS 會調整到隔月，這屬於一般月回推的合理行為
+    x.setDate(day);
+    return atMidnight(x);
+  }
+  function addYearsSameDay(d, n) {
+    const x = atMidnight(d);
+    const day = x.getDate();
+    x.setFullYear(x.getFullYear() + n);
+    x.setDate(day);
+    return atMidnight(x);
+  }
+  function fmtDate(d) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${y}/${m}/${dd}`;
+  }
 
+  // ====== 區間加總：以 days/vals（交易日序列）計算 start~end 之內的損益 ======
+  function d8ToDate(s8) {
+    return new Date(+s8.slice(0, 4), +s8.slice(4, 6) - 1, +s8.slice(6, 8));
+  }
   function buildPrefix(vals) {
     const p = [0];
     for (const v of vals) p.push(p[p.length - 1] + v);
     return p;
   }
-
-  // 近 N 週：那一週星期一起算，迄今
-  function weekReturnFixed(days, vals, weekIndex) {
-    if (!days.length) return { ret: null, range: '---' };
+  function sumBetween(days, vals, startDate, endDate) {
+    if (!days.length) return null;
     const pref = buildPrefix(vals);
     const lastIdx = days.length - 1;
-    const lastDate = d8(days[lastIdx]);
 
-    const dow = lastDate.getDay();
-    const offsetToMonday = (dow + 6) % 7;
-    const baseMonday = new Date(
-      lastDate.getFullYear(),
-      lastDate.getMonth(),
-      lastDate.getDate() - offsetToMonday
-    );
-
-    const startDate = new Date(baseMonday.getTime() - (weekIndex - 1) * 7 * 86400000);
-    const endDate = lastDate;
-
-    if (endDate < startDate) return { ret: null, range: '---' };
-    if (endDate < d8(days[0]) || startDate > d8(days[lastIdx])) return { ret: null, range: '---' };
-
+    // 找到第一個 >= startDate
     let i = 0;
-    while (i <= lastIdx && d8(days[i]) < startDate) i++;
-    if (i > lastIdx) return { ret: null, range: '---' };
+    while (i <= lastIdx && d8ToDate(days[i]) < startDate) i++;
+    if (i > lastIdx) return null;
 
+    // 找到最後一個 <= endDate
     let j = lastIdx;
-    while (j >= 0 && d8(days[j]) > endDate) j--;
-    if (j < i) return { ret: null, range: '---' };
+    while (j >= 0 && d8ToDate(days[j]) > endDate) j--;
+    if (j < i) return null;
 
-    const sum = pref[j + 1] - pref[i];
-    const startStr = fmtD8(days[i]);
-    const endStr = fmtD8(days[j]);
-
-    return { ret: sum / 1_000_000, range: `${startStr}~${endStr}` };
+    return pref[j + 1] - pref[i];
   }
 
-  // 近 N 月：該月1號起算，迄今
-  function monthReturnFixed(days, vals, monthIndex) {
-    if (!days.length) return { ret: null, range: '---' };
-    const pref = buildPrefix(vals);
-    const lastIdx = days.length - 1;
-    const lastDate = d8(days[lastIdx]);
-
-    const tmp = new Date(lastDate.getFullYear(), lastDate.getMonth(), 1);
-    tmp.setMonth(tmp.getMonth() - (monthIndex - 1));
-
-    const startDate = new Date(tmp.getFullYear(), tmp.getMonth(), 1);
-    const endDate = lastDate;
-
-    if (endDate < startDate) return { ret: null, range: '---' };
-    if (endDate < d8(days[0]) || startDate > d8(days[lastIdx])) return { ret: null, range: '---' };
-
-    let i = 0;
-    while (i <= lastIdx && d8(days[i]) < startDate) i++;
-    if (i > lastIdx) return { ret: null, range: '---' };
-
-    let j = lastIdx;
-    while (j >= 0 && d8(days[j]) > endDate) j--;
-    if (j < i) return { ret: null, range: '---' };
-
-    const sum = pref[j + 1] - pref[i];
-    const startStr = fmtD8(days[i]);
-    const endStr = fmtD8(days[j]);
-
-    return { ret: sum / 1_000_000, range: `${startStr}~${endStr}` };
+  // ====== 你的定義：週/月/年 回報（結束日固定為「本週星期日」）=====
+  function getAnchorWeekEnd() {
+    // 以「今天」所在週為錨點，結束日為該週星期日（可能是未來）
+    const today = new Date();
+    return sundayOfWeek(today);
   }
 
-  // 近 N 年：該年 1/1 起算，迄今；資料不滿 N 年就當無資料
-  function yearReturnFixed(days, vals, yearIndex) {
-    if (!days.length) return { ret: null, range: '---' };
-    const pref = buildPrefix(vals);
-    const firstDate = d8(days[0]);
-    const lastIdx = days.length - 1;
-    const lastDate = d8(days[lastIdx]);
+  function weekReturnUser(days, vals, nWeeks) {
+    const end = getAnchorWeekEnd();
+    const start = new Date(mondayOf(end).getTime());
+    start.setDate(start.getDate() - (nWeeks - 1) * 7);
+    const sum = sumBetween(days, vals, start, end);
+    return { ret: (sum == null ? null : sum / 1_000_000), range: `${fmtDate(start)}~${fmtDate(end)}` };
+  }
 
-    const coverDays = Math.round((lastDate - firstDate) / 86400000) + 1;
-    const minCover = 365 * yearIndex - 60; // 預留 60 天誤差
-    if (coverDays < minCover) return { ret: null, range: '---' };
+  function monthReturnUser(days, vals, nMonths) {
+    const end = getAnchorWeekEnd();
+    const base = addMonthsSameDay(end, -nMonths);     // 結束日往回 N 個月「同日」
+    const start = mondayOf(base);                     // 該日所在週的週一
+    const sum = sumBetween(days, vals, start, end);
+    return { ret: (sum == null ? null : sum / 1_000_000), range: `${fmtDate(start)}~${fmtDate(end)}` };
+  }
 
-    const tmp = new Date(lastDate.getFullYear(), 0, 1);
-    tmp.setFullYear(tmp.getFullYear() - (yearIndex - 1));
-
-    const startDate = new Date(tmp.getFullYear(), 0, 1);
-    const endDate = lastDate;
-
-    if (endDate < startDate) return { ret: null, range: '---' };
-    if (endDate < firstDate || startDate > lastDate) return { ret: null, range: '---' };
-
-    let i = 0;
-    while (i <= lastIdx && d8(days[i]) < startDate) i++;
-    if (i > lastIdx) return { ret: null, range: '---' };
-
-    let j = lastIdx;
-    while (j >= 0 && d8(days[j]) > endDate) j--;
-    if (j < i) return { ret: null, range: '---' };
-
-    const sum = pref[j + 1] - pref[i];
-    const startStr = fmtD8(days[i]);
-    const endStr = fmtD8(days[j]);
-
-    return { ret: sum / 1_000_000, range: `${startStr}~${endStr}` };
+  function yearReturnUser(days, vals, nYears) {
+    const end = getAnchorWeekEnd();
+    const base = addYearsSameDay(end, -nYears);       // 結束日往回 N 年「同日」
+    const start = mondayOf(base);                     // 該日所在週的週一
+    const sum = sumBetween(days, vals, start, end);
+    return { ret: (sum == null ? null : sum / 1_000_000), range: `${fmtDate(start)}~${fmtDate(end)}` };
   }
 
   function setVal(id, v) {
@@ -360,9 +346,15 @@
     if (el) el.textContent = text || '—';
   }
 
+  // 週固定顯示 1~4
   const WEEK_KEYS = ['wk1', 'wk2', 'wk3', 'wk4'];
-  const MONTH_KEYS = ['m2', 'm3', 'm4', 'm5', 'm6'];
+
+  // 月：同時支援 m1~m6（若 HTML 沒有 m1，會自動略過）
+  const MONTH_KEYS = ['m1', 'm2', 'm3', 'm4', 'm5', 'm6'];
+
+  // 年：y1~y5（有資料才顯示）
   const YEAR_KEYS = ['y1', 'y2', 'y3', 'y4', 'y5'];
+
   const ALL_KEYS = WEEK_KEYS.concat(MONTH_KEYS).concat(YEAR_KEYS);
 
   function resetAll(key) {
@@ -382,7 +374,7 @@
     "00909": /(00909|etf[-_]?00909)/i
   };
 
-  // ====== 新增：用檔名/路徑抓分段起訖，串檔合併 ======
+  // ====== 串檔合併（依檔名起訖 YYYYMMDD-YYYYMMDD）=====
   const RANGE_RE = /\b(20\d{6})-(20\d{6})\b/;
 
   function extractRangeFromPath(p) {
@@ -393,7 +385,6 @@
     return { start: a, end: b };
   }
 
-  // 允許一點空窗（例如週末/無交易日），用「日」做簡單容忍
   function addDaysYmd(ymd, days) {
     const s = String(ymd);
     const dt = new Date(+s.slice(0, 4), +s.slice(4, 6) - 1, +s.slice(6, 8));
@@ -404,7 +395,6 @@
     return +(String(y) + m + d);
   }
 
-  // 從所有候選檔中，挑出「能從最早一路延伸到最晚」的一串檔（避免重複下載全重疊大檔）
   function chooseChainByRange(files) {
     const segs = files
       .map(f => {
@@ -415,7 +405,6 @@
 
     if (!segs.length) return null;
 
-    // 先找最早 start
     segs.sort((a, b) => {
       if (a.r.start !== b.r.start) return a.r.start - b.r.start;
       if (a.r.end !== b.r.end) return b.r.end - a.r.end;
@@ -423,8 +412,6 @@
     });
 
     const earliestStart = segs[0].r.start;
-
-    // base：同樣 earliestStart 中 end 最大者
     const baseCandidates = segs.filter(s => s.r.start === earliestStart);
     baseCandidates.sort((a, b) => {
       if (a.r.end !== b.r.end) return b.r.end - a.r.end;
@@ -434,13 +421,9 @@
     const chain = [baseCandidates[0]];
     let curEnd = chain[0].r.end;
 
-    // 反覆找能把 end 往後推的檔
-    // 條件：start <= curEnd(+7天容忍) 且 end > curEnd
-    // 選擇：在符合者中挑 end 最大（同 end 比大小/更新）
     while (true) {
       const allowStart = addDaysYmd(curEnd, 7);
       const cands = segs.filter(s => s.r.start <= allowStart && s.r.end > curEnd);
-
       if (!cands.length) break;
 
       cands.sort((a, b) => {
@@ -452,15 +435,10 @@
       });
 
       const pick = cands[0];
-
-      // 去重：同一路徑就不再加
-      if (!chain.some(x => x.fullPath === pick.fullPath)) {
-        chain.push(pick);
-      }
+      if (!chain.some(x => x.fullPath === pick.fullPath)) chain.push(pick);
       curEnd = Math.max(curEnd, pick.r.end);
     }
 
-    // chain 依 start 排序（下載/合併順序比較直覺）
     chain.sort((a, b) => a.r.start - b.r.start);
 
     return {
@@ -470,7 +448,6 @@
     };
   }
 
-  // 合併多檔 canonical：去重、依 ts 排序
   function mergeCanonTexts(canonTexts) {
     const seen = new Set();
     const rows = [];
@@ -535,30 +512,27 @@
         const all = [];
         await listDeepN('', 0, 8, all);
         return all.filter(it => {
-          const n = (it.name || ''), p = (it.fullPath || '');
-          // 只要是檔案
           if (!it.metadata) return false;
+          const n = (it.name || ''), p = (it.fullPath || '');
           return keyRegex.test(p) || keyRegex.test(n);
         });
       }
 
       function pickLatestByUpdate(files) {
         if (!files.length) return null;
-        files = files.slice();
-        files.sort((a, b) => {
+        const xs = files.slice();
+        xs.sort((a, b) => {
           const ta = Date.parse(a.updated_at || 0) || 0;
           const tb = Date.parse(b.updated_at || 0) || 0;
           if (ta !== tb) return tb - ta;
           return (b.metadata?.size || 0) - (a.metadata?.size || 0);
         });
-        return files[0];
+        return xs[0];
       }
 
       async function resolveMergedForKey(key) {
-        // 仍保留 manifest（若你未來要強制指定 prefix 或 latest_path）
         const mf = await readManifest(key);
 
-        // 先拿候選清單
         let files = [];
         if (mf && mf.prefix) {
           const all = [];
@@ -569,7 +543,6 @@
         }
 
         if (!files.length && mf && mf.latest_path) {
-          // fallback：manifest 明確指定單檔
           return {
             canon: (await fetchSmart(pubUrl(mf.latest_path))).canon,
             periodStart: null,
@@ -579,7 +552,6 @@
 
         if (!files.length) return null;
 
-        // 優先用「起訖期間」串檔；若檔名無日期範圍，退回抓最新檔
         const chainInfo = chooseChainByRange(files);
 
         if (!chainInfo) {
@@ -604,83 +576,76 @@
         };
       }
 
-      async function fillCard(key) {
-        const setPeriod = text => {
-          const el = document.getElementById(`period-${key}`);
-          if (el) el.textContent = text;
-        };
+      function setPeriodText(key, start8, end8) {
+        const el = document.getElementById(`period-${key}`);
+        if (!el) return;
+        if (!start8 || !end8) { el.textContent = '—'; return; }
+        el.textContent = `${start8} - ${end8}`;
+      }
 
+      async function fillCard(key) {
         try {
           const merged = await resolveMergedForKey(key);
           if (!merged || !merged.canon) {
             resetAll(key);
-            setPeriod('—');
+            setPeriodText(key, null, null);
             return;
           }
 
           const mergedText = merged.canon;
 
-          // 期間顯示：優先用檔名/路徑的起訖（你圖2的起訖），若抓不到才用交易列首尾
+          // period 顯示：優先用檔名起訖（你上傳分段的起訖），否則用交易列首尾
           const rows = parseCanon(mergedText);
-          const start8_fallback = rows.length ? rows[0].ts.slice(0, 8) : '';
-          const end8_fallback = rows.length ? rows[rows.length - 1].ts.slice(0, 8) : '';
+          const start8_fallback = rows.length ? rows[0].ts.slice(0, 8) : null;
+          const end8_fallback = rows.length ? rows[rows.length - 1].ts.slice(0, 8) : null;
 
-          const start8 = merged.periodStart || start8_fallback || '—';
-          const end8 = merged.periodEnd || end8_fallback || '—';
+          const start8 = merged.periodStart || start8_fallback;
+          const end8 = merged.periodEnd || end8_fallback;
+
+          setPeriodText(key, start8, end8);
 
           const { days, vals } = dailySeriesFromMerged(mergedText);
 
-          // 4 週
-          const W = {
-            wk1: weekReturnFixed(days, vals, 1),
-            wk2: weekReturnFixed(days, vals, 2),
-            wk3: weekReturnFixed(days, vals, 3),
-            wk4: weekReturnFixed(days, vals, 4)
-          };
-          WEEK_KEYS.forEach(k => {
-            const r = W[k];
+          // 週：wk1~wk4
+          WEEK_KEYS.forEach((k, idx) => {
+            const n = idx + 1;
+            const r = weekReturnUser(days, vals, n);
             setText(`${k}-range-${key}`, r.range);
             setVal(`${k}-${key}`, r.ret);
           });
 
-          // 2~6 月
-          const M = {
-            m2: monthReturnFixed(days, vals, 2),
-            m3: monthReturnFixed(days, vals, 3),
-            m4: monthReturnFixed(days, vals, 4),
-            m5: monthReturnFixed(days, vals, 5),
-            m6: monthReturnFixed(days, vals, 6)
-          };
-          MONTH_KEYS.forEach(k => {
-            const r = M[k];
+          // 月：m1~m6（若元素不存在會略過）
+          MONTH_KEYS.forEach((k, idx) => {
+            const n = idx + 1; // m1=1個月, m2=2個月...
+            const r = monthReturnUser(days, vals, n);
             setText(`${k}-range-${key}`, r.range);
             setVal(`${k}-${key}`, r.ret);
           });
 
-          // 年：有資料才顯示
-          const Y = {
-            y1: yearReturnFixed(days, vals, 1),
-            y2: yearReturnFixed(days, vals, 2),
-            y3: yearReturnFixed(days, vals, 3),
-            y4: yearReturnFixed(days, vals, 4),
-            y5: yearReturnFixed(days, vals, 5)
-          };
-          YEAR_KEYS.forEach(k => {
-            const r = Y[k];
+          // 年：y1~y5（有值才顯示 row）
+          YEAR_KEYS.forEach((k, idx) => {
+            const n = idx + 1;
+            const r = yearReturnUser(days, vals, n);
+
             const row = document.getElementById(`row-${k}-${key}`);
-            if (!r || r.ret == null) {
-              if (row) row.style.display = 'none';
+            if (!row) {
+              // 若你的 HTML 沒有 row-y?-key，就只填值（若存在）
+              setText(`${k}-range-${key}`, r.range);
+              setVal(`${k}-${key}`, r.ret);
+              return;
+            }
+
+            if (r.ret == null) {
+              row.style.display = 'none';
             } else {
-              if (row) row.style.display = 'grid';
+              row.style.display = 'grid';
               setText(`${k}-range-${key}`, r.range);
               setVal(`${k}-${key}`, r.ret);
             }
           });
-
-          setPeriod(`${start8} - ${end8}`);
         } catch (e) {
           resetAll(key);
-          setPeriod('—');
+          setPeriodText(key, null, null);
         }
       }
 
@@ -692,5 +657,5 @@
     })();
   }
 
-  // 啟動載入（在 boot() 成功登入後會呼叫 loadDepsAndRun）
+  //（在 boot() 成功登入後會呼叫 loadDepsAndRun）
 })();
