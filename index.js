@@ -382,6 +382,112 @@
     "00909": /(00909|etf[-_]?00909)/i
   };
 
+  // ====== 新增：用檔名/路徑抓分段起訖，串檔合併 ======
+  const RANGE_RE = /\b(20\d{6})-(20\d{6})\b/;
+
+  function extractRangeFromPath(p) {
+    const m = String(p || '').match(RANGE_RE);
+    if (!m) return null;
+    const a = +m[1], b = +m[2];
+    if (!Number.isFinite(a) || !Number.isFinite(b) || a <= 0 || b <= 0) return null;
+    return { start: a, end: b };
+  }
+
+  // 允許一點空窗（例如週末/無交易日），用「日」做簡單容忍
+  function addDaysYmd(ymd, days) {
+    const s = String(ymd);
+    const dt = new Date(+s.slice(0, 4), +s.slice(4, 6) - 1, +s.slice(6, 8));
+    dt.setDate(dt.getDate() + days);
+    const y = dt.getFullYear();
+    const m = String(dt.getMonth() + 1).padStart(2, '0');
+    const d = String(dt.getDate()).padStart(2, '0');
+    return +(String(y) + m + d);
+  }
+
+  // 從所有候選檔中，挑出「能從最早一路延伸到最晚」的一串檔（避免重複下載全重疊大檔）
+  function chooseChainByRange(files) {
+    const segs = files
+      .map(f => {
+        const r = extractRangeFromPath(f.fullPath) || extractRangeFromPath(f.name);
+        return r ? { ...f, r } : null;
+      })
+      .filter(Boolean);
+
+    if (!segs.length) return null;
+
+    // 先找最早 start
+    segs.sort((a, b) => {
+      if (a.r.start !== b.r.start) return a.r.start - b.r.start;
+      if (a.r.end !== b.r.end) return b.r.end - a.r.end;
+      return (b.metadata?.size || 0) - (a.metadata?.size || 0);
+    });
+
+    const earliestStart = segs[0].r.start;
+
+    // base：同樣 earliestStart 中 end 最大者
+    const baseCandidates = segs.filter(s => s.r.start === earliestStart);
+    baseCandidates.sort((a, b) => {
+      if (a.r.end !== b.r.end) return b.r.end - a.r.end;
+      return (b.metadata?.size || 0) - (a.metadata?.size || 0);
+    });
+
+    const chain = [baseCandidates[0]];
+    let curEnd = chain[0].r.end;
+
+    // 反覆找能把 end 往後推的檔
+    // 條件：start <= curEnd(+7天容忍) 且 end > curEnd
+    // 選擇：在符合者中挑 end 最大（同 end 比大小/更新）
+    while (true) {
+      const allowStart = addDaysYmd(curEnd, 7);
+      const cands = segs.filter(s => s.r.start <= allowStart && s.r.end > curEnd);
+
+      if (!cands.length) break;
+
+      cands.sort((a, b) => {
+        if (a.r.end !== b.r.end) return b.r.end - a.r.end;
+        const ta = Date.parse(a.updated_at || 0) || 0;
+        const tb = Date.parse(b.updated_at || 0) || 0;
+        if (ta !== tb) return tb - ta;
+        return (b.metadata?.size || 0) - (a.metadata?.size || 0);
+      });
+
+      const pick = cands[0];
+
+      // 去重：同一路徑就不再加
+      if (!chain.some(x => x.fullPath === pick.fullPath)) {
+        chain.push(pick);
+      }
+      curEnd = Math.max(curEnd, pick.r.end);
+    }
+
+    // chain 依 start 排序（下載/合併順序比較直覺）
+    chain.sort((a, b) => a.r.start - b.r.start);
+
+    return {
+      chain,
+      start: Math.min(...chain.map(x => x.r.start)),
+      end: Math.max(...chain.map(x => x.r.end))
+    };
+  }
+
+  // 合併多檔 canonical：去重、依 ts 排序
+  function mergeCanonTexts(canonTexts) {
+    const seen = new Set();
+    const rows = [];
+    for (const txt of canonTexts) {
+      if (!txt) continue;
+      for (const line of String(txt).split('\n')) {
+        const m = line.match(CANON_RE);
+        if (!m) continue;
+        if (seen.has(line)) continue;
+        seen.add(line);
+        rows.push({ ts: m[1], line });
+      }
+    }
+    rows.sort((a, b) => a.ts.localeCompare(b.ts));
+    return rows.map(r => r.line).join('\n');
+  }
+
   async function loadDepsAndRun() {
     await loadScript('https://unpkg.com/@supabase/supabase-js@2');
     await loadScript('shared.js?v=txfee45tax2');
@@ -425,20 +531,21 @@
         return null;
       }
 
-      async function latestFileByRegex(keyRegex) {
-        const all = []; await listDeepN('', 0, 8, all);
-        const files = all.filter(it => {
+      async function listAllFilesByRegex(keyRegex) {
+        const all = [];
+        await listDeepN('', 0, 8, all);
+        return all.filter(it => {
           const n = (it.name || ''), p = (it.fullPath || '');
+          // 只要是檔案
+          if (!it.metadata) return false;
           return keyRegex.test(p) || keyRegex.test(n);
         });
+      }
+
+      function pickLatestByUpdate(files) {
         if (!files.length) return null;
-        const scoreByPath = p => {
-          const m = (p || '').match(/\b(20\d{6})\b/g);
-          return m ? Math.max(...m.map(s => +s)) : 0;
-        };
+        files = files.slice();
         files.sort((a, b) => {
-          const sa = scoreByPath(a.fullPath), sb = scoreByPath(b.fullPath);
-          if (sa !== sb) return sb - sa;
           const ta = Date.parse(a.updated_at || 0) || 0;
           const tb = Date.parse(b.updated_at || 0) || 0;
           if (ta !== tb) return tb - ta;
@@ -447,20 +554,54 @@
         return files[0];
       }
 
-      async function resolveLatest(key) {
+      async function resolveMergedForKey(key) {
+        // 仍保留 manifest（若你未來要強制指定 prefix 或 latest_path）
         const mf = await readManifest(key);
-        if (mf) {
-          if (mf.latest_path) return { fullPath: mf.latest_path };
-          if (mf.prefix) {
-            const all = []; await listDeepN(mf.prefix, 0, 5, all);
-            const files = all.filter(it => it.metadata);
-            if (files.length) {
-              files.sort((a, b) => (Date.parse(b.updated_at || 0) || 0) - (Date.parse(a.updated_at || 0) || 0));
-              return files[0];
-            }
-          }
+
+        // 先拿候選清單
+        let files = [];
+        if (mf && mf.prefix) {
+          const all = [];
+          await listDeepN(mf.prefix, 0, 8, all);
+          files = all.filter(it => it.metadata && (WANT[key].test(it.fullPath) || WANT[key].test(it.name)));
+        } else {
+          files = await listAllFilesByRegex(WANT[key]);
         }
-        return await latestFileByRegex(WANT[key]);
+
+        if (!files.length && mf && mf.latest_path) {
+          // fallback：manifest 明確指定單檔
+          return {
+            canon: (await fetchSmart(pubUrl(mf.latest_path))).canon,
+            periodStart: null,
+            periodEnd: null
+          };
+        }
+
+        if (!files.length) return null;
+
+        // 優先用「起訖期間」串檔；若檔名無日期範圍，退回抓最新檔
+        const chainInfo = chooseChainByRange(files);
+
+        if (!chainInfo) {
+          const latest = pickLatestByUpdate(files);
+          if (!latest) return null;
+          const canon = (await fetchSmart(pubUrl(latest.fullPath))).canon;
+          return { canon, periodStart: null, periodEnd: null };
+        }
+
+        const canonTexts = [];
+        for (const f of chainInfo.chain) {
+          const { canon } = await fetchSmart(pubUrl(f.fullPath));
+          canonTexts.push(canon);
+        }
+
+        const mergedCanon = mergeCanonTexts(canonTexts);
+
+        return {
+          canon: mergedCanon,
+          periodStart: String(chainInfo.start),
+          periodEnd: String(chainInfo.end)
+        };
       }
 
       async function fillCard(key) {
@@ -470,27 +611,32 @@
         };
 
         try {
-          const latest = await resolveLatest(key);
-          if (!latest) {
+          const merged = await resolveMergedForKey(key);
+          if (!merged || !merged.canon) {
             resetAll(key);
             setPeriod('—');
             return;
           }
 
-          const latestText = (await fetchSmart(pubUrl(latest.fullPath))).canon;
+          const mergedText = merged.canon;
 
-          const rows = parseCanon(latestText);
-          const start8 = rows.length ? rows[0].ts.slice(0, 8) : '';
-          const end8 = rows.length ? rows[rows.length - 1].ts.slice(0, 8) : '';
+          // 期間顯示：優先用檔名/路徑的起訖（你圖2的起訖），若抓不到才用交易列首尾
+          const rows = parseCanon(mergedText);
+          const start8_fallback = rows.length ? rows[0].ts.slice(0, 8) : '';
+          const end8_fallback = rows.length ? rows[rows.length - 1].ts.slice(0, 8) : '';
 
-          const { days, vals } = dailySeriesFromMerged(latestText);
+          const start8 = merged.periodStart || start8_fallback || '—';
+          const end8 = merged.periodEnd || end8_fallback || '—';
+
+          const { days, vals } = dailySeriesFromMerged(mergedText);
 
           // 4 週
-          const W1 = weekReturnFixed(days, vals, 1);
-          const W2 = weekReturnFixed(days, vals, 2);
-          const W3 = weekReturnFixed(days, vals, 3);
-          const W4 = weekReturnFixed(days, vals, 4);
-          const W = { wk1: W1, wk2: W2, wk3: W3, wk4: W4 };
+          const W = {
+            wk1: weekReturnFixed(days, vals, 1),
+            wk2: weekReturnFixed(days, vals, 2),
+            wk3: weekReturnFixed(days, vals, 3),
+            wk4: weekReturnFixed(days, vals, 4)
+          };
           WEEK_KEYS.forEach(k => {
             const r = W[k];
             setText(`${k}-range-${key}`, r.range);
@@ -498,12 +644,13 @@
           });
 
           // 2~6 月
-          const M2 = monthReturnFixed(days, vals, 2);
-          const M3 = monthReturnFixed(days, vals, 3);
-          const M4 = monthReturnFixed(days, vals, 4);
-          const M5 = monthReturnFixed(days, vals, 5);
-          const M6 = monthReturnFixed(days, vals, 6);
-          const M = { m2: M2, m3: M3, m4: M4, m5: M5, m6: M6 };
+          const M = {
+            m2: monthReturnFixed(days, vals, 2),
+            m3: monthReturnFixed(days, vals, 3),
+            m4: monthReturnFixed(days, vals, 4),
+            m5: monthReturnFixed(days, vals, 5),
+            m6: monthReturnFixed(days, vals, 6)
+          };
           MONTH_KEYS.forEach(k => {
             const r = M[k];
             setText(`${k}-range-${key}`, r.range);
@@ -511,12 +658,13 @@
           });
 
           // 年：有資料才顯示
-          const Y1 = yearReturnFixed(days, vals, 1);
-          const Y2 = yearReturnFixed(days, vals, 2);
-          const Y3 = yearReturnFixed(days, vals, 3);
-          const Y4 = yearReturnFixed(days, vals, 4);
-          const Y5 = yearReturnFixed(days, vals, 5);
-          const Y = { y1: Y1, y2: Y2, y3: Y3, y4: Y4, y5: Y5 };
+          const Y = {
+            y1: yearReturnFixed(days, vals, 1),
+            y2: yearReturnFixed(days, vals, 2),
+            y3: yearReturnFixed(days, vals, 3),
+            y4: yearReturnFixed(days, vals, 4),
+            y5: yearReturnFixed(days, vals, 5)
+          };
           YEAR_KEYS.forEach(k => {
             const r = Y[k];
             const row = document.getElementById(`row-${k}-${key}`);
@@ -529,11 +677,10 @@
             }
           });
 
-          setPeriod(`${start8 || '—'} - ${end8 || '—'}`);
+          setPeriod(`${start8} - ${end8}`);
         } catch (e) {
           resetAll(key);
-          const el = document.getElementById(`period-${key}`);
-          if (el) el.textContent = '—';
+          setPeriod('—');
         }
       }
 
@@ -545,6 +692,5 @@
     })();
   }
 
-  // 啟動載入
-  //（在 boot() 成功登入後會呼叫 loadDepsAndRun）
+  // 啟動載入（在 boot() 成功登入後會呼叫 loadDepsAndRun）
 })();
