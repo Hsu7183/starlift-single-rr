@@ -1,6 +1,7 @@
 // 1001.js — 以「次新檔」為基準合併後，直接餵給 single-trades.js（自動計算）
 // 分析資料 = 基準全段 + 最新檔的新增；畫面只顯示期間＋KPI＋資產曲線
 // ★對齊 0807 基準：滑點預設=2 且首次載入即用2計算；不使用 manifest；基準固定次新檔(唯讀)
+// ★修正：若最新檔包含「比基準更早的歷史段」，會補在最前面（避免 2020~2023 被截掉）
 (function () {
   'use strict';
 
@@ -141,55 +142,38 @@
     return rows;
   }
 
-  // combined = base 全部 + (latest 裡 ts > baseMax 的行)
+  // ===== 合併（修正版）=====
+  // combined = (latest 補在基準前面的更早段) + base 全部 + (latest 補在基準後面的新增尾段)
   function mergeByBaseline(baseText, latestText) {
-    const A = parseCanon(baseText);
-    const B = parseCanon(latestText);
+    const A = parseCanon(baseText);    // base
+    const B = parseCanon(latestText);  // latest
 
-    const baseMin = A.length ? A[0].ts.slice(0, 8) : (B.length ? B[0].ts.slice(0, 8) : '');
-    const baseMax = A.length ? A[A.length - 1].ts : '';
+    const baseMinTs = A.length ? A[0].ts : (B.length ? B[0].ts : '');
+    const baseMaxTs = A.length ? A[A.length - 1].ts : '';
 
-    const added = baseMax
-      ? B.filter(x => x.ts > baseMax).map(x => x.line)
+    const head = (baseMinTs)
+      ? B.filter(x => x.ts < baseMinTs).map(x => x.line)
+      : [];
+
+    const tail = (baseMaxTs)
+      ? B.filter(x => x.ts > baseMaxTs).map(x => x.line)
       : B.map(x => x.line);
 
-    const mergedLines = [...A.map(x => x.line), ...added];
+    const mergedLines = [...head, ...A.map(x => x.line), ...tail];
 
-    const endDay = mergedLines.length
+    const start8 = mergedLines.length
+      ? mergedLines[0].match(CANON_RE)[1].slice(0, 8)
+      : '';
+
+    const end8 = mergedLines.length
       ? mergedLines[mergedLines.length - 1].match(CANON_RE)[1].slice(0, 8)
-      : baseMin;
+      : start8;
 
     return {
       combined: mergedLines.join('\n'),
-      start8  : baseMin,
-      end8    : endDay
+      start8,
+      end8
     };
-  }
-
-  // ===== 為每一筆「新買／新賣」插入假的 INPOS 行，給 single-trades.js 判方向用 =====
-  function addFakeInpos(text) {
-    const lines = (text || '')
-      .split('\n')
-      .map(s => s.trim())
-      .filter(Boolean);
-
-    const out = [];
-    for (const line of lines) {
-      const m = line.match(CANON_RE);
-      if (!m) continue;
-
-      const ts  = m[1];
-      const act = m[3];
-
-      if (act === '新買' || act === '新賣') {
-        const dir = (act === '新買') ? 1 : -1;
-        out.push(line);
-        out.push(`${ts}.000000 0 0 ${dir} 0 INPOS`);
-      } else {
-        out.push(line);
-      }
-    }
-    return out.join('\n');
   }
 
   // ===== 把合併後內容餵給 single-trades.js =====
@@ -324,9 +308,8 @@
         btnBase.onclick = null;
       }
 
-      // 5) 合併後插入假的 INPOS，並加一行 header，餵給 single-trades.js
-      const mergedWithInpos = addFakeInpos(mergedText);
-      const finalText       = '1001 MERGED\n' + mergedWithInpos;
+      // 5) 直接加一行 header + canonical 3 欄餵給 single-trades.js（不插入假 INPOS）
+      const finalText = '1001 MERGED\n' + mergedText;
 
       setStatus('已載入（合併後）1001 資料，開始分析…');
       await feedToSingleTrades(latest.name, finalText);
