@@ -3,7 +3,7 @@
 
   // ====== 基本常數 ======
   const SUPABASE_URL = "https://byhbmmnacezzgkwfkozs.supabase.co";
-  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ5aGJtbW5hY2V6emdrd2Zrb3pzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg1OTE0NzksImV4cCI6MjA3NDE2NzQ3OX0.VCSye3-fKrQphejdJSWAM6iRzv_7gkl8MLe7NeVszR0";
+  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ5hbW1hY2V6emdrd2Zrb3pzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg1OTE0NzksImV4cCI6MjA3NDE2NzQ3OX0.VCSye3-fKrQphejdJSWAM6iRzv_7gkl8MLe7NeVszR0";
   const BUCKET = "reports";
 
   const PASS_HASH = "0f2b9305e317408510dc9878381e953630ed9fa3d2aadf95f1b8eb47941b18b9";
@@ -252,8 +252,6 @@
     const x = atMidnight(d);
     const day = x.getDate();
     x.setMonth(x.getMonth() + n);
-    // JS 會自動溢出到下個月，這裡保持「同日」語意即可（你的例子 1/4->11/4 是可達）
-    // 若遇到 31 號等月份不存在，JS 會調整到隔月，這屬於一般月回推的合理行為
     x.setDate(day);
     return atMidnight(x);
   }
@@ -285,12 +283,10 @@
     const pref = buildPrefix(vals);
     const lastIdx = days.length - 1;
 
-    // 找到第一個 >= startDate
     let i = 0;
     while (i <= lastIdx && d8ToDate(days[i]) < startDate) i++;
     if (i > lastIdx) return null;
 
-    // 找到最後一個 <= endDate
     let j = lastIdx;
     while (j >= 0 && d8ToDate(days[j]) > endDate) j--;
     if (j < i) return null;
@@ -300,7 +296,6 @@
 
   // ====== 你的定義：週/月/年 回報（結束日固定為「本週星期日」）=====
   function getAnchorWeekEnd() {
-    // 以「今天」所在週為錨點，結束日為該週星期日（可能是未來）
     const today = new Date();
     return sundayOfWeek(today);
   }
@@ -315,16 +310,16 @@
 
   function monthReturnUser(days, vals, nMonths) {
     const end = getAnchorWeekEnd();
-    const base = addMonthsSameDay(end, -nMonths);     // 結束日往回 N 個月「同日」
-    const start = mondayOf(base);                     // 該日所在週的週一
+    const base = addMonthsSameDay(end, -nMonths);
+    const start = mondayOf(base);
     const sum = sumBetween(days, vals, start, end);
     return { ret: (sum == null ? null : sum / 1_000_000), range: `${fmtDate(start)}~${fmtDate(end)}` };
   }
 
   function yearReturnUser(days, vals, nYears) {
     const end = getAnchorWeekEnd();
-    const base = addYearsSameDay(end, -nYears);       // 結束日往回 N 年「同日」
-    const start = mondayOf(base);                     // 該日所在週的週一
+    const base = addYearsSameDay(end, -nYears);
+    const start = mondayOf(base);
     const sum = sumBetween(days, vals, start, end);
     return { ret: (sum == null ? null : sum / 1_000_000), range: `${fmtDate(start)}~${fmtDate(end)}` };
   }
@@ -341,6 +336,20 @@
     el.textContent = (v * 100).toFixed(2) + '%';
     el.classList.add(v > 0 ? 'pos' : (v < 0 ? 'neg' : 'neu'));
   }
+
+  function setAvg(id, v) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.classList.remove('pos', 'neg', 'neu');
+    if (v == null) {
+      el.textContent = '—';
+      el.classList.add('neu');
+      return;
+    }
+    el.textContent = (v * 100).toFixed(2) + '%';
+    el.classList.add(v > 0 ? 'pos' : (v < 0 ? 'neg' : 'neu'));
+  }
+
   function setText(id, text) {
     const el = document.getElementById(id);
     if (el) el.textContent = text || '—';
@@ -361,6 +370,7 @@
     ALL_KEYS.forEach(k => {
       setText(`${k}-range-${key}`, '—');
       setVal(`${k}-${key}`, null);
+      setAvg(`${k}-avg-${key}`, null);
     });
     YEAR_KEYS.forEach(k => {
       const row = document.getElementById(`row-${k}-${key}`);
@@ -594,7 +604,6 @@
 
           const mergedText = merged.canon;
 
-          // period 顯示：優先用檔名起訖（你上傳分段的起訖），否則用交易列首尾
           const rows = parseCanon(mergedText);
           const start8_fallback = rows.length ? rows[0].ts.slice(0, 8) : null;
           const end8_fallback = rows.length ? rows[rows.length - 1].ts.slice(0, 8) : null;
@@ -606,32 +615,35 @@
 
           const { days, vals } = dailySeriesFromMerged(mergedText);
 
-          // 週：wk1~wk4
+          // 週：wk1~wk4（均年化顯示—）
           WEEK_KEYS.forEach((k, idx) => {
             const n = idx + 1;
             const r = weekReturnUser(days, vals, n);
             setText(`${k}-range-${key}`, r.range);
             setVal(`${k}-${key}`, r.ret);
+            setAvg(`${k}-avg-${key}`, null);
           });
 
-          // 月：m1~m6（若元素不存在會略過）
+          // 月：m1~m6（均年化顯示—）
           MONTH_KEYS.forEach((k, idx) => {
-            const n = idx + 1; // m1=1個月, m2=2個月...
+            const n = idx + 1;
             const r = monthReturnUser(days, vals, n);
             setText(`${k}-range-${key}`, r.range);
             setVal(`${k}-${key}`, r.ret);
+            setAvg(`${k}-avg-${key}`, null);
           });
 
-          // 年：y1~y5（有值才顯示 row）
+          // 年：y1~y5（右側新增均年化 = 近N年 / N）
           YEAR_KEYS.forEach((k, idx) => {
             const n = idx + 1;
             const r = yearReturnUser(days, vals, n);
+            const avg = (r.ret == null ? null : (r.ret / n));
 
             const row = document.getElementById(`row-${k}-${key}`);
             if (!row) {
-              // 若你的 HTML 沒有 row-y?-key，就只填值（若存在）
               setText(`${k}-range-${key}`, r.range);
               setVal(`${k}-${key}`, r.ret);
+              setAvg(`${k}-avg-${key}`, avg);
               return;
             }
 
@@ -641,6 +653,7 @@
               row.style.display = 'grid';
               setText(`${k}-range-${key}`, r.range);
               setVal(`${k}-${key}`, r.ret);
+              setAvg(`${k}-avg-${key}`, avg);
             }
           });
         } catch (e) {
