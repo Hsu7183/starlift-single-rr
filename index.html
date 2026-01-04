@@ -90,9 +90,11 @@
     .card-desc{ margin:0; color:#666; font-size:14px; line-height:1.5; text-align:left }
 
     .lines{ margin-top:2px }
+
+    /* 4欄：label / range / return / avgAnnual */
     .line{
       display:grid;
-      grid-template-columns:1.1fr 2.4fr 0.9fr;
+      grid-template-columns:1.05fr 2.15fr 0.90fr 0.90fr;
       align-items:center;
       margin:2px 0;
       font-size:12px;
@@ -117,6 +119,16 @@
     .val.pos{ color:#d32f2f }
     .val.neg{ color:#10b981 }
     .val.neu{ color:#666 }
+
+    /* 均年化欄位：同一套顏色規則 */
+    .avg{
+      text-align:right;
+      font-weight:700;
+      font-size:12px;
+    }
+    .avg.pos{ color:#d32f2f }
+    .avg.neg{ color:#10b981 }
+    .avg.neu{ color:#666 }
 
     .period{
       margin-top:6px;
@@ -207,21 +219,25 @@
               <span class="label">近1週報酬率</span>
               <span id="wk1-range-0807" class="range">—</span>
               <span id="wk1-0807" class="val neu">—</span>
+              <span id="wk1-avg-0807" class="avg neu">—</span>
             </p>
             <p class="line">
               <span class="label">近2週報酬率</span>
               <span id="wk2-range-0807" class="range">—</span>
               <span id="wk2-0807" class="val neu">—</span>
+              <span id="wk2-avg-0807" class="avg neu">—</span>
             </p>
             <p class="line">
               <span class="label">近3週報酬率</span>
               <span id="wk3-range-0807" class="range">—</span>
               <span id="wk3-0807" class="val neu">—</span>
+              <span id="wk3-avg-0807" class="avg neu">—</span>
             </p>
             <p class="line">
               <span class="label">近4週報酬率</span>
               <span id="wk4-range-0807" class="range">—</span>
               <span id="wk4-0807" class="val neu">—</span>
+              <span id="wk4-avg-0807" class="avg neu">—</span>
             </p>
 
             <!-- 月：2~6 月 -->
@@ -229,26 +245,31 @@
               <span class="label">近2月報酬率</span>
               <span id="m2-range-0807" class="range">—</span>
               <span id="m2-0807" class="val neu">—</span>
+              <span id="m2-avg-0807" class="avg neu">—</span>
             </p>
             <p class="line">
               <span class="label">近3月報酬率</span>
               <span id="m3-range-0807" class="range">—</span>
               <span id="m3-0807" class="val neu">—</span>
+              <span id="m3-avg-0807" class="avg neu">—</span>
             </p>
             <p class="line">
               <span class="label">近4月報酬率</span>
               <span id="m4-range-0807" class="range">—</span>
               <span id="m4-0807" class="val neu">—</span>
+              <span id="m4-avg-0807" class="avg neu">—</span>
             </p>
             <p class="line">
               <span class="label">近5月報酬率</span>
               <span id="m5-range-0807" class="range">—</span>
               <span id="m5-0807" class="val neu">—</span>
+              <span id="m5-avg-0807" class="avg neu">—</span>
             </p>
             <p class="line">
               <span class="label">近6月報酬率</span>
               <span id="m6-range-0807" class="range">—</span>
               <span id="m6-0807" class="val neu">—</span>
+              <span id="m6-avg-0807" class="avg neu">—</span>
             </p>
 
             <!-- 年：row-* 方便 JS 控制顯示/隱藏 -->
@@ -256,26 +277,31 @@
               <span class="label">近1年報酬率</span>
               <span id="y1-range-0807" class="range">—</span>
               <span id="y1-0807" class="val neu">—</span>
+              <span id="y1-avg-0807" class="avg neu">—</span>
             </p>
             <p class="line" id="row-y2-0807">
               <span class="label">近2年報酬率</span>
               <span id="y2-range-0807" class="range">—</span>
               <span id="y2-0807" class="val neu">—</span>
+              <span id="y2-avg-0807" class="avg neu">—</span>
             </p>
             <p class="line" id="row-y3-0807">
               <span class="label">近3年報酬率</span>
               <span id="y3-range-0807" class="range">—</span>
               <span id="y3-0807" class="val neu">—</span>
+              <span id="y3-avg-0807" class="avg neu">—</span>
             </p>
             <p class="line" id="row-y4-0807">
               <span class="label">近4年報酬率</span>
               <span id="y4-range-0807" class="range">—</span>
               <span id="y4-0807" class="val neu">—</span>
+              <span id="y4-avg-0807" class="avg neu">—</span>
             </p>
             <p class="line" id="row-y5-0807">
               <span class="label">近5年報酬率</span>
               <span id="y5-range-0807" class="range">—</span>
               <span id="y5-0807" class="val neu">—</span>
+              <span id="y5-avg-0807" class="avg neu">—</span>
             </p>
 
             <p class="period">期間：<span id="period-0807">—</span></p>
@@ -289,73 +315,87 @@
               <span class="label">近1週報酬率</span>
               <span id="wk1-range-1001" class="range">—</span>
               <span id="wk1-1001" class="val neu">—</span>
+              <span id="wk1-avg-1001" class="avg neu">—</span>
             </p>
             <p class="line">
               <span class="label">近2週報酬率</span>
               <span id="wk2-range-1001" class="range">—</span>
               <span id="wk2-1001" class="val neu">—</span>
+              <span id="wk2-avg-1001" class="avg neu">—</span>
             </p>
             <p class="line">
               <span class="label">近3週報酬率</span>
               <span id="wk3-range-1001" class="range">—</span>
               <span id="wk3-1001" class="val neu">—</span>
+              <span id="wk3-avg-1001" class="avg neu">—</span>
             </p>
             <p class="line">
               <span class="label">近4週報酬率</span>
               <span id="wk4-range-1001" class="range">—</span>
               <span id="wk4-1001" class="val neu">—</span>
+              <span id="wk4-avg-1001" class="avg neu">—</span>
             </p>
 
             <p class="line">
               <span class="label">近2月報酬率</span>
               <span id="m2-range-1001" class="range">—</span>
               <span id="m2-1001" class="val neu">—</span>
+              <span id="m2-avg-1001" class="avg neu">—</span>
             </p>
             <p class="line">
               <span class="label">近3月報酬率</span>
               <span id="m3-range-1001" class="range">—</span>
               <span id="m3-1001" class="val neu">—</span>
+              <span id="m3-avg-1001" class="avg neu">—</span>
             </p>
             <p class="line">
               <span class="label">近4月報酬率</span>
               <span id="m4-range-1001" class="range">—</span>
               <span id="m4-1001" class="val neu">—</span>
+              <span id="m4-avg-1001" class="avg neu">—</span>
             </p>
             <p class="line">
               <span class="label">近5月報酬率</span>
               <span id="m5-range-1001" class="range">—</span>
               <span id="m5-1001" class="val neu">—</span>
+              <span id="m5-avg-1001" class="avg neu">—</span>
             </p>
             <p class="line">
               <span class="label">近6月報酬率</span>
               <span id="m6-range-1001" class="range">—</span>
               <span id="m6-1001" class="val neu">—</span>
+              <span id="m6-avg-1001" class="avg neu">—</span>
             </p>
 
             <p class="line" id="row-y1-1001">
               <span class="label">近1年報酬率</span>
               <span id="y1-range-1001" class="range">—</span>
               <span id="y1-1001" class="val neu">—</span>
+              <span id="y1-avg-1001" class="avg neu">—</span>
             </p>
             <p class="line" id="row-y2-1001">
               <span class="label">近2年報酬率</span>
               <span id="y2-range-1001" class="range">—</span>
               <span id="y2-1001" class="val neu">—</span>
+              <span id="y2-avg-1001" class="avg neu">—</span>
             </p>
             <p class="line" id="row-y3-1001">
               <span class="label">近3年報酬率</span>
               <span id="y3-range-1001" class="range">—</span>
               <span id="y3-1001" class="val neu">—</span>
+              <span id="y3-avg-1001" class="avg neu">—</span>
             </p>
             <p class="line" id="row-y4-1001">
               <span class="label">近4年報酬率</span>
               <span id="y4-range-1001" class="range">—</span>
               <span id="y4-1001" class="val neu">—</span>
+              <span id="y4-avg-1001" class="avg neu">—</span>
             </p>
             <p class="line" id="row-y5-1001">
               <span class="label">近5年報酬率</span>
               <span id="y5-range-1001" class="range">—</span>
               <span id="y5-1001" class="val neu">—</span>
+              <span id="y5-avg-1001" class="avg neu">—</span>
             </p>
 
             <p class="period">期間：<span id="period-1001">—</span></p>
@@ -373,73 +413,87 @@
               <span class="label">近1週報酬率</span>
               <span id="wk1-range-00909" class="range">—</span>
               <span id="wk1-00909" class="val neu">—</span>
+              <span id="wk1-avg-00909" class="avg neu">—</span>
             </p>
             <p class="line">
               <span class="label">近2週報酬率</span>
               <span id="wk2-range-00909" class="range">—</span>
               <span id="wk2-00909" class="val neu">—</span>
+              <span id="wk2-avg-00909" class="avg neu">—</span>
             </p>
             <p class="line">
               <span class="label">近3週報酬率</span>
               <span id="wk3-range-00909" class="range">—</span>
               <span id="wk3-00909" class="val neu">—</span>
+              <span id="wk3-avg-00909" class="avg neu">—</span>
             </p>
             <p class="line">
               <span class="label">近4週報酬率</span>
               <span id="wk4-range-00909" class="range">—</span>
               <span id="wk4-00909" class="val neu">—</span>
+              <span id="wk4-avg-00909" class="avg neu">—</span>
             </p>
 
             <p class="line">
               <span class="label">近2月報酬率</span>
               <span id="m2-range-00909" class="range">—</span>
               <span id="m2-00909" class="val neu">—</span>
+              <span id="m2-avg-00909" class="avg neu">—</span>
             </p>
             <p class="line">
               <span class="label">近3月報酬率</span>
               <span id="m3-range-00909" class="range">—</span>
               <span id="m3-00909" class="val neu">—</span>
+              <span id="m3-avg-00909" class="avg neu">—</span>
             </p>
             <p class="line">
               <span class="label">近4月報酬率</span>
               <span id="m4-range-00909" class="range">—</span>
               <span id="m4-00909" class="val neu">—</span>
+              <span id="m4-avg-00909" class="avg neu">—</span>
             </p>
             <p class="line">
               <span class="label">近5月報酬率</span>
               <span id="m5-range-00909" class="range">—</span>
               <span id="m5-00909" class="val neu">—</span>
+              <span id="m5-avg-00909" class="avg neu">—</span>
             </p>
             <p class="line">
               <span class="label">近6月報酬率</span>
               <span id="m6-range-00909" class="range">—</span>
               <span id="m6-00909" class="val neu">—</span>
+              <span id="m6-avg-00909" class="avg neu">—</span>
             </p>
 
             <p class="line" id="row-y1-00909">
               <span class="label">近1年報酬率</span>
               <span id="y1-range-00909" class="range">—</span>
               <span id="y1-00909" class="val neu">—</span>
+              <span id="y1-avg-00909" class="avg neu">—</span>
             </p>
             <p class="line" id="row-y2-00909">
               <span class="label">近2年報酬率</span>
               <span id="y2-range-00909" class="range">—</span>
               <span id="y2-00909" class="val neu">—</span>
+              <span id="y2-avg-00909" class="avg neu">—</span>
             </p>
             <p class="line" id="row-y3-00909">
               <span class="label">近3年報酬率</span>
               <span id="y3-range-00909" class="range">—</span>
               <span id="y3-00909" class="val neu">—</span>
+              <span id="y3-avg-00909" class="avg neu">—</span>
             </p>
             <p class="line" id="row-y4-00909">
               <span class="label">近4年報酬率</span>
               <span id="y4-range-00909" class="range">—</span>
               <span id="y4-00909" class="val neu">—</span>
+              <span id="y4-avg-00909" class="avg neu">—</span>
             </p>
             <p class="line" id="row-y5-00909">
               <span class="label">近5年報酬率</span>
               <span id="y5-range-00909" class="range">—</span>
               <span id="y5-00909" class="val neu">—</span>
+              <span id="y5-avg-00909" class="avg neu">—</span>
             </p>
 
             <p class="period">期間：<span id="period-00909">—</span></p>
