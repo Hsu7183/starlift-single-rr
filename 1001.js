@@ -1,7 +1,8 @@
 // 1001.js — 以「次新檔」為基準合併後，直接餵給 single-trades.js（自動計算）
 // 分析資料 = 基準全段 + 最新檔的新增；畫面只顯示期間＋KPI＋資產曲線
 // ★對齊 0807 基準：滑點預設=2 且首次載入即用2計算；不使用 manifest；基準固定次新檔(唯讀)
-// ★修正：若最新檔包含「比基準更早的歷史段」，會補在最前面（避免 2020~2023 被截掉）
+// ★修正(1)：最新檔若包含「比基準更早的歷史段」，會補在最前面（避免 2020~2023 被截掉）
+// ★修正(2)：輸出前做「配對清洗」，確保 canonical 行永遠是 開倉→平倉 成對，避免 single-trades.js 後段位移
 (function () {
   'use strict';
 
@@ -136,13 +137,13 @@
     if (!text) return rows;
     for (const line of text.split('\n')) {
       const m = line.match(CANON_RE);
-      if (m) rows.push({ ts: m[1], line });
+      if (m) rows.push({ ts: m[1], line, act: m[3] });
     }
     rows.sort((a, b) => a.ts.localeCompare(b.ts));
     return rows;
   }
 
-  // ===== 合併（修正版）=====
+  // ===== 合併（補頭段 + 補尾段）=====
   // combined = (latest 補在基準前面的更早段) + base 全部 + (latest 補在基準後面的新增尾段)
   function mergeByBaseline(baseText, latestText) {
     const A = parseCanon(baseText);    // base
@@ -174,6 +175,47 @@
       start8,
       end8
     };
+  }
+
+  // ===== 配對清洗：確保 canonical 行為「開倉→平倉」成對，避免後段位移 =====
+  function sanitizeCanonPaired(canonText) {
+    const rows = parseCanon(canonText);
+    if (!rows.length) return { canon: '', start8: '', end8: '' };
+
+    const isEntry = (a) => (a === '新買' || a === '新賣');
+    const isExit  = (a) => (a === '平賣' || a === '平買' || a === '強制平倉');
+
+    const out = [];
+    let hasOpen = false;
+
+    for (const r of rows) {
+      const act = r.act;
+
+      if (!hasOpen) {
+        // 沒有 open：只接受開倉，丟掉孤兒平倉
+        if (isEntry(act)) {
+          out.push(r.line);
+          hasOpen = true;
+        }
+        continue;
+      }
+
+      // 有 open：只接受平倉，若又遇到開倉則丟掉（避免連續開倉造成位移）
+      if (isExit(act)) {
+        out.push(r.line);
+        hasOpen = false;
+      } else if (isEntry(act)) {
+        // drop
+      }
+    }
+
+    // 若最後還有 open 沒平倉，直接丟掉最後那筆開倉，確保輸出為偶數成對
+    if (out.length % 2 === 1) out.pop();
+
+    const start8 = out.length ? out[0].match(CANON_RE)[1].slice(0, 8) : '';
+    const end8   = out.length ? out[out.length - 1].match(CANON_RE)[1].slice(0, 8) : start8;
+
+    return { canon: out.join('\n'), start8, end8 };
   }
 
   // ===== 把合併後內容餵給 single-trades.js =====
@@ -296,11 +338,17 @@
         end8   = rows.length ? rows[rows.length - 1].ts.slice(0, 8) : '';
       }
 
+      // 4) 配對清洗（避免後段位移）
+      const cleaned = sanitizeCanonPaired(mergedText);
+      mergedText = cleaned.canon;
+      start8 = cleaned.start8 || start8;
+      end8   = cleaned.end8   || end8;
+
       if (elPeriod) {
         elPeriod.textContent = `期間：${start8 || '—'} 開始到 ${end8 || '—'} 結束`;
       }
 
-      // 4) 「設此為基準」：此頁固定唯讀（不寫入，避免任何額外紅字）
+      // 5) 「設此為基準」：此頁固定唯讀（不寫入，避免任何額外紅字）
       if (btnBase) {
         btnBase.disabled = true;
         btnBase.textContent = '唯讀模式';
@@ -308,7 +356,7 @@
         btnBase.onclick = null;
       }
 
-      // 5) 直接加一行 header + canonical 3 欄餵給 single-trades.js（不插入假 INPOS）
+      // 6) 加 header + canonical 3 欄餵給 single-trades.js
       const finalText = '1001 MERGED\n' + mergedText;
 
       setStatus('已載入（合併後）1001 資料，開始分析…');
