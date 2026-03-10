@@ -1,5 +1,11 @@
 // multi-pro.js
 // 三劍客量化科技機構級多檔分析（期貨版 - 多檔排名 + 頂檔資產曲線）
+// 最終版：
+// 1. 自動判斷 UTF-8 / Big5
+// 2. 嚴格依 action 語義配對（新買/新賣/平賣/平買/強制平倉）
+// 3. 與 single-trades.js 使用相同的核心解析邏輯
+// 4. 避免空單被誤翻成多單
+// 5. 頂檔圖表顯示分數最高那一檔的含滑價累積損益
 
 (function () {
   'use strict';
@@ -26,7 +32,7 @@
     capital: 1000000
   };
 
-  let gResults = [];  // [{ fileName, dateTag, params, score, kpiAct, equitySeries }, ...]
+  let gResults = [];
   let gSort = { key: 'score', dir: 'desc' };
   let gChart = null;
 
@@ -35,16 +41,17 @@
     if (n == null || !isFinite(n)) return '—';
     return Math.round(n).toLocaleString('en-US');
   };
+
   const fmtPct = (p) => {
     if (p == null || !isFinite(p)) return '—';
     return (p * 100).toFixed(2) + '%';
   };
+
   const fmtFloat = (x, d) => {
     if (x == null || !isFinite(x)) return '—';
     return x.toFixed(d);
   };
 
-  // 製作時間壓到「日_時間」→ 20251208_065140 → 08_065140
   function makeCompactTag(name) {
     const m = name.match(/(\d{8})_(\d{6})/);
     if (!m) return name;
@@ -52,7 +59,6 @@
     return `${day}_${m[2]}`;
   }
 
-  // 參數列只保留數值
   function headerToValues(header) {
     if (!header) return '';
     return header.split(',').map(seg => {
@@ -61,7 +67,7 @@
     }).join(',');
   }
 
-  // ===== 時間工具（沿用 single-trades） =====
+  // ===== 時間工具 =====
   function tsToDate(ts) {
     if (!ts) return null;
     const clean = ts.replace(/\D/g, '');
@@ -90,10 +96,40 @@
     return tmp.getUTCFullYear() + '-W' + (weekNo < 10 ? '0' + weekNo : weekNo);
   }
 
-  // ===== INPOS 判斷方向 =====
+  // ===== action 工具 =====
+  function normAction(s) {
+    return (s || '').trim();
+  }
+
+  function dirFromAction(action) {
+    const a = normAction(action);
+    if (a === '新買') return 1;
+    if (a === '新賣') return -1;
+    return null;
+  }
+
+  function isEntryAction(action) {
+    const a = normAction(action);
+    return a === '新買' || a === '新賣';
+  }
+
+  function isExitAction(action) {
+    const a = normAction(action);
+    return a === '平賣' || a === '平買' || a === '強制平倉';
+  }
+
+  function exitDirFromAction(action, openDir) {
+    const a = normAction(action);
+    if (a === '平賣') return 1;
+    if (a === '平買') return -1;
+    if (a === '強制平倉') return openDir;
+    return openDir;
+  }
+
   function getDirFromInpos(lines, startIdx) {
     const maxLookAhead = 300;
     const total = lines.length;
+
     for (let j = startIdx + 1; j < total && j <= startIdx + maxLookAhead; j++) {
       const line = lines[j];
       const ps = line.split(/\s+/);
@@ -103,6 +139,7 @@
         const dir = parseInt(ps[3], 10);
         if (dir === 1 || dir === -1) return dir;
       }
+
       if (ps.length === 3 && ps[ps.length - 1] !== 'INPOS') {
         break;
       }
@@ -110,13 +147,53 @@
     return 1;
   }
 
-  // ===== 解析 TXT（0807 IND / TRD 交易格式） =====
+  // ===== 智慧讀檔：UTF-8 / Big5 =====
+  async function readFileTextSmart(file) {
+    const ab = await file.arrayBuffer();
+
+    let textUtf8 = '';
+    try {
+      textUtf8 = new TextDecoder('utf-8', { fatal: false }).decode(ab);
+    } catch (e) {
+      textUtf8 = '';
+    }
+
+    if (
+      textUtf8.includes('新買') ||
+      textUtf8.includes('新賣') ||
+      textUtf8.includes('平買') ||
+      textUtf8.includes('平賣') ||
+      textUtf8.includes('強制平倉')
+    ) {
+      return textUtf8;
+    }
+
+    try {
+      const textBig5 = new TextDecoder('big5', { fatal: false }).decode(ab);
+      if (
+        textBig5.includes('新買') ||
+        textBig5.includes('新賣') ||
+        textBig5.includes('平買') ||
+        textBig5.includes('平賣') ||
+        textBig5.includes('強制平倉')
+      ) {
+        return textBig5;
+      }
+    } catch (e) {
+      // ignore
+    }
+
+    return textUtf8;
+  }
+
+  // ===== 解析 TXT：與 single-trades.js 同步 =====
   function parseTxt(text) {
     const allLines = text.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
     if (!allLines.length) return { header: null, trades: [] };
 
     const header = allLines[0];
     const lines  = allLines.slice(1);
+
     const trades = [];
     let open = null;
 
@@ -129,47 +206,80 @@
       const px = parseFloat(ps[1]);
       if (!isFinite(px)) continue;
 
-      // INPOS 行忽略
       if (ps[ps.length - 1] === 'INPOS') continue;
+      if (ps.length !== 3) continue;
 
-      // 單純 3 欄（時間 價格 動作）才視為進出場
-      if (ps.length === 3) {
-        if (!open) {
-          const dir = getDirFromInpos(lines, i);
-          open = { ts, px, dir };
-        } else {
-          const dir      = open.dir;
-          const entryPx  = open.px;
-          const exitPx   = px;
-          const points   = dir > 0 ? (exitPx - entryPx) : (entryPx - exitPx);
-          const gross    = points * CFG.pointValue;
-          const fee      = CFG.feePerSide * 2;
-          const taxIn    = Math.round(entryPx * CFG.pointValue * CFG.taxRate);
-          const taxOut   = Math.round(exitPx  * CFG.pointValue * CFG.taxRate);
-          const tax      = taxIn + taxOut;
-          const theoNet  = gross - fee - tax;
-          const entryAct = dir > 0 ? '新買' : '新賣';
-          const exitAct  = dir > 0 ? '平賣' : '平買';
+      const action  = normAction(ps[2]);
+      const isEntry = isEntryAction(action);
+      const isExit  = isExitAction(action);
 
-          trades.push({
-            entry: { ts: open.ts, px: open.px, action: entryAct },
-            exit:  { ts,         px: exitPx,   action: exitAct },
-            dir,
-            points,
-            fee,
-            tax,
-            theoNet
-          });
+      if (!isEntry && !isExit) continue;
 
-          open = null;
-        }
+      if (!open) {
+        if (!isEntry) continue;
+
+        let dir = dirFromAction(action);
+        if (dir == null) dir = getDirFromInpos(lines, i);
+        if (dir !== 1 && dir !== -1) continue;
+
+        open = { ts, px, dir, action };
+        continue;
       }
+
+      if (!isExit) {
+        let dir = dirFromAction(action);
+        if (dir == null) dir = getDirFromInpos(lines, i);
+        if (dir !== 1 && dir !== -1) {
+          open = null;
+          continue;
+        }
+        open = { ts, px, dir, action };
+        continue;
+      }
+
+      const openDir    = open.dir;
+      const entryPx    = open.px;
+      const exitPx     = px;
+      const exitAction = action;
+
+      if (
+        exitAction !== '強制平倉' &&
+        !((openDir > 0 && exitAction === '平賣') ||
+          (openDir < 0 && exitAction === '平買'))
+      ) {
+        continue;
+      }
+
+      const dirForPnl = exitDirFromAction(exitAction, openDir);
+
+      const points = dirForPnl > 0
+        ? (exitPx - entryPx)
+        : (entryPx - exitPx);
+
+      const gross = points * CFG.pointValue;
+      const fee   = CFG.feePerSide * 2;
+      const taxIn = Math.round(entryPx * CFG.pointValue * CFG.taxRate);
+      const taxOut= Math.round(exitPx  * CFG.pointValue * CFG.taxRate);
+      const tax   = taxIn + taxOut;
+      const theoNet = gross - fee - tax;
+
+      trades.push({
+        entry: { ts: open.ts, px: open.px, action: open.action },
+        exit:  { ts, px: exitPx, action: exitAction },
+        dir: openDir,
+        points,
+        fee,
+        tax,
+        theoNet
+      });
+
+      open = null;
     }
 
     return { header, trades };
   }
 
-  // ===== KPI 計算（沿用 single-trades 的 calcKpi）=====
+  // ===== KPI 計算 =====
   function calcKpi(trades, pnls, equity) {
     const n = pnls.length;
     if (!n) return null;
@@ -211,7 +321,6 @@
 
     const sharpeTrade  = stdev > 0 ? (mean / stdev) * Math.sqrt(n) : null;
 
-    // Sortino
     let downsideSq = 0;
     let downsideCnt = 0;
     pnls.forEach(p => {
@@ -223,7 +332,6 @@
     const downsideDev   = downsideCnt > 0 ? Math.sqrt(downsideSq / downsideCnt) : 0;
     const sortinoTrade  = downsideDev > 0 ? (mean / downsideDev) * Math.sqrt(n) : null;
 
-    // 最大回撤
     let peak = 0;
     let maxDd = 0;
     let maxDdStartIdx = 0;
@@ -246,7 +354,6 @@
     const totalReturnPct = CFG.capital > 0 ? totalNet / CFG.capital : null;
     const maxDdPct       = CFG.capital > 0 ? maxDd   / CFG.capital : null;
 
-    // 年化
     const exitDates = trades.map(t => tsToDate(t.exit.ts));
     let cagr = null;
     if (exitDates.length) {
@@ -270,7 +377,6 @@
     const timeToRecoveryTrades =
       maxDdEndIdx > maxDdStartIdx ? (maxDdEndIdx - maxDdStartIdx) : 0;
 
-    // Ulcer index
     const nav = equity.map(v => CFG.capital + v);
     let peakNav = 0;
     let sumDdSq = 0;
@@ -283,7 +389,6 @@
     const ulcerIndex    = nav.length ? Math.sqrt(sumDdSq / nav.length) : null;
     const recoveryFactor= maxDd > 0 ? totalNet / maxDd : null;
 
-    // 日 / 週
     const dayMap = {};
     const weekMap = {};
     pnls.forEach((p, i) => {
@@ -296,10 +401,10 @@
         weekMap[wk] = (weekMap[wk] || 0) + p;
       }
     });
+
     const worstDayPnl  = Object.values(dayMap).reduce((m, v) => (v < m ? v : m), 0);
     const worstWeekPnl = Object.values(weekMap).reduce((m, v) => (v < m ? v : m), 0);
 
-    // VaR / CVaR（95%）
     const sortedPnls = pnls.slice().sort((a, b) => a - b);
     const alpha = 0.95;
     const idx   = Math.floor((1 - alpha) * sortedPnls.length);
@@ -319,7 +424,7 @@
     let kelly = null;
     if (payoff != null && payoff > 0 && winRate > 0 && winRate < 1) {
       const p = winRate;
-      const q = 1 - p;
+      const q = 1 - winRate;
       kelly = p - q / payoff;
     }
 
@@ -336,7 +441,6 @@
       riskOfRuin = Math.min(1, Math.max(0, r));
     }
 
-    // 成本
     let totalFee  = 0;
     let totalTax  = 0;
     let notionalTraded = 0;
@@ -347,6 +451,7 @@
       totalTax  += t.tax;
       notionalTraded += t.entry.px * CFG.pointValue;
     });
+
     const totalSlipCost = slipPerTradeMoney * trades.length;
     const totalCost     = totalFee + totalTax + totalSlipCost;
     const totalGrossAbs = grossProfit + Math.abs(grossLoss);
@@ -366,7 +471,6 @@
     });
     const avgHoldMin = n > 0 ? totalHoldMin / n : null;
 
-    // 穩定度 R²
     let stabilityR2 = null;
     if (nav.length >= 3) {
       const xs = nav.map((_, i) => i + 1);
@@ -432,7 +536,7 @@
     };
   }
 
-  // ===== KPI 評級（沿用單檔版）=====
+  // ===== KPI 評級 =====
   function rateMetric(key, value) {
     if (value == null || !isFinite(value)) return null;
 
@@ -492,33 +596,35 @@
     return { label, cssClass: css };
   }
 
-  // ===== 綜合分數（與單檔版一致）=====
   function computeScore(k) {
     if (!k) return null;
     const metrics = [
-      { key: 'maxdd_pct',   v: k.maxDdPct },
-      { key: 'total_return',v: k.totalReturnPct },
-      { key: 'cagr',        v: k.cagr },
-      { key: 'pf',          v: k.pf },
-      { key: 'winrate',     v: k.winRate },
-      { key: 'sharpe',      v: k.sharpeTrade },
-      { key: 'sortino',     v: k.sortinoTrade },
-      { key: 'calmar',      v: k.calmar },
-      { key: 'risk_ruin',   v: k.riskOfRuin },
-      { key: 'cost_ratio',  v: k.costRatio }
+      { key: 'maxdd_pct',    v: k.maxDdPct },
+      { key: 'total_return', v: k.totalReturnPct },
+      { key: 'cagr',         v: k.cagr },
+      { key: 'pf',           v: k.pf },
+      { key: 'winrate',      v: k.winRate },
+      { key: 'sharpe',       v: k.sharpeTrade },
+      { key: 'sortino',      v: k.sortinoTrade },
+      { key: 'calmar',       v: k.calmar },
+      { key: 'risk_ruin',    v: k.riskOfRuin },
+      { key: 'cost_ratio',   v: k.costRatio }
     ];
+
     let sum = 0;
     let cnt = 0;
+
     metrics.forEach(m => {
       const r = rateMetric(m.key, m.v);
       if (!r) return;
       let pts = 0;
-      if (r.label === 'Strong')               pts = 90;
-      else if (r.label === 'Adequate')        pts = 75;
-      else if (r.label.startsWith('Improve')) pts = 60;
+      if (r.label === 'Strong') pts = 90;
+      else if (r.label === 'Adequate') pts = 75;
+      else pts = 60;
       sum += pts;
       cnt++;
     });
+
     if (!cnt) return null;
     return sum / cnt;
   }
@@ -530,17 +636,7 @@
     return 'score-badge score-improve';
   }
 
-  // ===== 檔案讀取 =====
-  function readFileAsText(file) {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = (e) => resolve(e.target.result || '');
-      reader.onerror = (e) => reject(e);
-      reader.readAsText(file);
-    });
-  }
-
-  // ===== 主流程：多檔計算 =====
+  // ===== 主流程 =====
   async function runAnalysis() {
     const files = Array.prototype.slice.call(fileInput.files || []);
     if (!files.length) {
@@ -551,7 +647,7 @@
     CFG.capital     = Number(capitalInput.value) || 1000000;
     CFG.slipPerSide = Number(slipInput.value) || 0;
 
-    runBtn.disabled  = true;
+    runBtn.disabled = true;
     fileInput.disabled = true;
     statusLine.textContent = `讀取與計算中……（共 ${files.length} 檔）`;
 
@@ -561,11 +657,14 @@
       const f = files[i];
       try {
         // eslint-disable-next-line no-await-in-loop
-        const text = await readFileAsText(f);
+        const text = await readFileTextSmart(f);
         const parsed = parseTxt(text);
         const trades = parsed.trades;
 
-        if (!trades.length) continue;
+        if (!trades.length) {
+          console.warn('[multi-pro] no trades parsed:', f.name);
+          continue;
+        }
 
         let cumTheo = 0;
         let cumAct  = 0;
@@ -596,13 +695,13 @@
         });
 
         const kpiTheo = calcKpi(trades, theoPnls, theoEquity);
-        const kpiAct  = calcKpi(trades, actPnls,  actEquity);
+        const kpiAct  = calcKpi(trades, actPnls, actEquity);
         const score   = computeScore(kpiAct);
 
         gResults.push({
           fileName: f.name,
-          dateTag:  makeCompactTag(f.name),           // ✅ 短格式
-          params:   headerToValues(parsed.header),    // ✅ 只留數值
+          dateTag:  makeCompactTag(f.name),
+          params:   headerToValues(parsed.header),
           score,
           kpi: kpiAct,
           kpiTheo,
@@ -611,11 +710,10 @@
 
         statusLine.textContent = `計算中…… ${i + 1} / ${files.length}`;
       } catch (e) {
-        console.error('讀取檔案錯誤：', f.name, e);
+        console.error('[multi-pro] 讀取檔案錯誤：', f.name, e);
       }
     }
 
-    // 預設以 Score 由高到低排序
     gSort = { key: 'score', dir: 'desc' };
     sortAndRender();
 
@@ -624,7 +722,7 @@
     fileInput.disabled = false;
   }
 
-  // ===== 表格渲染 =====
+  // ===== 表格 =====
   function renderTable() {
     tbody.innerHTML = '';
 
@@ -686,7 +784,6 @@
       tbody.appendChild(tr);
     });
 
-    // 標示目前排序欄
     const ths = table.querySelectorAll('th.sortable');
     ths.forEach(th => {
       th.removeAttribute('data-sort-dir');
@@ -697,7 +794,7 @@
     });
   }
 
-  // ===== 圖表：顯示分數最高那一檔的資產曲線 =====
+  // ===== 圖表 =====
   function renderChart() {
     if (!scoreChartEl || !window.Chart) return;
 
@@ -755,7 +852,7 @@
     });
   }
 
-  // ===== 排序 + 渲染 =====
+  // ===== 排序 =====
   function sortAndRender() {
     const key = gSort.key;
     const dir = gSort.dir === 'asc' ? 1 : -1;
@@ -778,23 +875,23 @@
         const kA = a.kpi || {};
         const kB = b.kpi || {};
         switch (key) {
-          case 'cagr':        va = kA.cagr;           vb = kB.cagr; break;
-          case 'totalReturn': va = kA.totalReturnPct; vb = kB.totalReturnPct; break;
-          case 'maxDdPct':    va = kA.maxDdPct;       vb = kB.maxDdPct; break;
-          case 'pf':          va = kA.pf;             vb = kB.pf; break;
-          case 'winRate':     va = kA.winRate;        vb = kB.winRate; break;
-          case 'sharpe':      va = kA.sharpeTrade;    vb = kB.sharpeTrade; break;
-          case 'sortino':     va = kA.sortinoTrade;   vb = kB.sortinoTrade; break;
-          case 'calmar':      va = kA.calmar;         vb = kB.calmar; break;
-          case 'riskOfRuin':  va = kA.riskOfRuin;     vb = kB.riskOfRuin; break;
-          case 'costRatio':   va = kA.costRatio;      vb = kB.costRatio; break;
-          case 'nTrades':     va = kA.nTrades;        vb = kB.nTrades; break;
-          case 'avgTrade':    va = kA.avg;            vb = kB.avg; break;
-          case 'worstDay':    va = kA.worstDayPnl;    vb = kB.worstDayPnl; break;
-          case 'worstWeek':   va = kA.worstWeekPnl;   vb = kB.worstWeekPnl; break;
-          case 'ulcer':       va = kA.ulcerIndex;     vb = kB.ulcerIndex; break;
+          case 'cagr':           va = kA.cagr;           vb = kB.cagr; break;
+          case 'totalReturn':    va = kA.totalReturnPct; vb = kB.totalReturnPct; break;
+          case 'maxDdPct':       va = kA.maxDdPct;       vb = kB.maxDdPct; break;
+          case 'pf':             va = kA.pf;             vb = kB.pf; break;
+          case 'winRate':        va = kA.winRate;        vb = kB.winRate; break;
+          case 'sharpe':         va = kA.sharpeTrade;    vb = kB.sharpeTrade; break;
+          case 'sortino':        va = kA.sortinoTrade;   vb = kB.sortinoTrade; break;
+          case 'calmar':         va = kA.calmar;         vb = kB.calmar; break;
+          case 'riskOfRuin':     va = kA.riskOfRuin;     vb = kB.riskOfRuin; break;
+          case 'costRatio':      va = kA.costRatio;      vb = kB.costRatio; break;
+          case 'nTrades':        va = kA.nTrades;        vb = kB.nTrades; break;
+          case 'avgTrade':       va = kA.avg;            vb = kB.avg; break;
+          case 'worstDay':       va = kA.worstDayPnl;    vb = kB.worstDayPnl; break;
+          case 'worstWeek':      va = kA.worstWeekPnl;   vb = kB.worstWeekPnl; break;
+          case 'ulcer':          va = kA.ulcerIndex;     vb = kB.ulcerIndex; break;
           case 'recoveryFactor': va = kA.recoveryFactor; vb = kB.recoveryFactor; break;
-          case 'turnover':    va = kA.turnover;       vb = kB.turnover; break;
+          case 'turnover':       va = kA.turnover;       vb = kB.turnover; break;
           default: va = 0; vb = 0;
         }
       }
@@ -811,20 +908,21 @@
     renderChart();
   }
 
-  // ===== 事件綁定 =====
+  // ===== 事件 =====
   fileInput.addEventListener('change', () => {
     if (fileInput.files && fileInput.files.length > 0) {
       runBtn.disabled = false;
       statusLine.textContent = `已選擇 ${fileInput.files.length} 檔 TXT，可按「計算」。`;
     } else {
       runBtn.disabled = true;
-      statusLine.textContent = '說明：一次可選擇多個 0807/期貨 TXT（含 INPOS）。';
+      statusLine.textContent = '說明：一次可選擇多個期貨 TXT（含 INPOS），將依單檔分析的 KPI 與分數邏輯計算。';
     }
   });
 
   capitalInput.addEventListener('change', () => {
     CFG.capital = Number(capitalInput.value) || 1000000;
   });
+
   slipInput.addEventListener('change', () => {
     CFG.slipPerSide = Number(slipInput.value) || 0;
   });
@@ -833,7 +931,6 @@
     runAnalysis();
   });
 
-  // 表頭排序
   const ths = table.querySelectorAll('th.sortable');
   ths.forEach(th => {
     th.addEventListener('click', () => {
