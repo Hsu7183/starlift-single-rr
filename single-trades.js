@@ -3,9 +3,10 @@
 // 最終版：
 // 1. 嚴格依 action 語義配對（新買/新賣/平賣/平買/強制平倉）
 // 2. 避免新賣被誤翻成新買
-// 3. 本機選檔可自動計算
-// 4. 雲端檔可由 single-trades-cloud.js 呼叫自動計算
-// 5. 雲端失敗不影響本機分析
+// 3. 自動判斷 UTF-8 / Big5 編碼
+// 4. 本機選檔可自動計算
+// 5. 雲端檔可由 single-trades-cloud.js 呼叫自動計算
+// 6. 雲端失敗不影響本機分析
 
 (function () {
   'use strict';
@@ -1096,34 +1097,70 @@
     renderWeeklyPnlChart(weekDatesArr, weekPnlsArr);
   }
 
-  function loadAndRenderFile(file) {
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = function (e) {
-      try {
-        const text = e.target.result || '';
-        const parsed = parseTxt(text);
-        gParsed = parsed;
-        renderTrades(parsed);
-      } catch (err) {
-        console.error('[single-trades] parse/render failed:', err);
-        alert('檔案解析失敗：' + (err && err.message ? err.message : err));
+  async function readFileTextSmart(file) {
+    const ab = await file.arrayBuffer();
+
+    let textUtf8 = '';
+    try {
+      textUtf8 = new TextDecoder('utf-8', { fatal: false }).decode(ab);
+    } catch (e) {
+      textUtf8 = '';
+    }
+
+    if (
+      textUtf8.includes('新買') ||
+      textUtf8.includes('新賣') ||
+      textUtf8.includes('平買') ||
+      textUtf8.includes('平賣') ||
+      textUtf8.includes('強制平倉')
+    ) {
+      return textUtf8;
+    }
+
+    try {
+      const textBig5 = new TextDecoder('big5', { fatal: false }).decode(ab);
+      if (
+        textBig5.includes('新買') ||
+        textBig5.includes('新賣') ||
+        textBig5.includes('平買') ||
+        textBig5.includes('平賣') ||
+        textBig5.includes('強制平倉')
+      ) {
+        return textBig5;
       }
-    };
-    reader.onerror = function () {
-      alert('檔案讀取失敗');
-    };
-    reader.readAsText(file);
+    } catch (e) {
+      // ignore
+    }
+
+    return textUtf8;
+  }
+
+  async function loadAndRenderFile(file) {
+    if (!file) return;
+
+    try {
+      const text = await readFileTextSmart(file);
+      const parsed = parseTxt(text);
+      gParsed = parsed;
+      renderTrades(parsed);
+
+      if (!parsed || !parsed.trades || !parsed.trades.length) {
+        console.warn('[single-trades] no trades parsed; possible encoding or format mismatch');
+      }
+    } catch (err) {
+      console.error('[single-trades] parse/render failed:', err);
+      alert('檔案解析失敗：' + (err && err.message ? err.message : err));
+    }
   }
 
   window.__singleTrades_setFile = function (f) {
     gFile = f || null;
   };
 
-  window.__singleTrades_runFile = function (f) {
+  window.__singleTrades_runFile = async function (f) {
     if (f) gFile = f;
     if (!gFile) return false;
-    loadAndRenderFile(gFile);
+    await loadAndRenderFile(gFile);
     return true;
   };
 
@@ -1133,10 +1170,10 @@
   const runBtn = $('#runBtn');
 
   if (fileInput) {
-    fileInput.addEventListener('change', function (ev) {
+    fileInput.addEventListener('change', async function (ev) {
       const file = ev.target.files && ev.target.files[0];
       gFile = file || null;
-      if (gFile) loadAndRenderFile(gFile);
+      if (gFile) await loadAndRenderFile(gFile);
     });
   }
 
@@ -1159,12 +1196,12 @@
   }
 
   if (runBtn) {
-    runBtn.addEventListener('click', function () {
+    runBtn.addEventListener('click', async function () {
       if (!gFile) {
         alert('請先選擇 TXT 檔案');
         return;
       }
-      loadAndRenderFile(gFile);
+      await loadAndRenderFile(gFile);
     });
   }
 
