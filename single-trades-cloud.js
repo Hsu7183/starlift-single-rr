@@ -1,6 +1,9 @@
 // single-trades-cloud.js
-// 從 Supabase / reports 讀檔 → 塞進 #fileInput，並設定 single-trades.js 的 gFile
-// 修正版：雲端失敗只降級，不中斷本機 TXT 分析
+// 從 Supabase / reports 讀檔 → 塞進 #fileInput，並交給 single-trades.js 分析
+// 最終版：
+// 1. 雲端失敗只降級，不中斷本機 TXT 分析
+// 2. 雲端選檔後自動分析
+// 3. Supabase list / signedUrl / fetch 都有完整錯誤保護
 
 (function () {
   'use strict';
@@ -13,7 +16,6 @@
 
   const fileInput   = $('#fileInput');
   const cloudSelect = $('#cloudSelect');
-  const runBtn      = $('#runBtn');
 
   if (!fileInput || !cloudSelect) return;
 
@@ -50,7 +52,6 @@
   }
 
   function isFolderItem(it) {
-    // Supabase list 回傳資料夾通常無 metadata / id
     return !!it && (it.id === null && !it.metadata);
   }
 
@@ -59,7 +60,6 @@
   }
 
   async function listRootFilesSafe() {
-    // 某些 storage 設定下 list('') 會 400，所以這裡做完整容錯
     const attempts = [
       async () => sb.storage.from(BUCKET).list('', {
         limit: 1000,
@@ -85,7 +85,7 @@
       }
     }
 
-    return null; // 明確表示雲端清單失敗
+    return null;
   }
 
   async function loadCloudList() {
@@ -130,7 +130,6 @@
     }
   }
 
-  // 背景載入，不讓失敗中斷頁面
   loadCloudList().catch(err => {
     console.warn('[single-trades-cloud] background load failed:', err);
     setCloudText('（雲端讀取錯誤）');
@@ -139,18 +138,14 @@
   async function getUrl(path) {
     if (!path) return '';
 
-    // 1) 先試 signed URL
     try {
       const { data, error } = await sb.storage.from(BUCKET).createSignedUrl(path, 3600);
       if (!error && data && data.signedUrl) return data.signedUrl;
-      if (error) {
-        console.warn('[single-trades-cloud] createSignedUrl failed:', error);
-      }
+      if (error) console.warn('[single-trades-cloud] createSignedUrl failed:', error);
     } catch (e) {
       console.warn('[single-trades-cloud] createSignedUrl exception:', e);
     }
 
-    // 2) 再退回 public URL
     try {
       const { data } = sb.storage.from(BUCKET).getPublicUrl(path);
       if (data && data.publicUrl) return data.publicUrl;
@@ -182,30 +177,24 @@
 
       const ab = await r.arrayBuffer();
       const fileName = path.split('/').pop() || 'cloud.txt';
-
       const f = new File(
         [new Uint8Array(ab)],
         fileName,
         { type: 'application/octet-stream' }
       );
 
-      // 1) 塞進 #fileInput，讓瀏覽器顯示檔名
       const dt = new DataTransfer();
       dt.items.add(f);
       fileInput.files = dt.files;
 
-      // 2) 通知 single-trades.js：目前分析檔案改成這個
       if (window.__singleTrades_setFile) {
         window.__singleTrades_setFile(f);
       }
 
-      // 3) 若 single-trades.js 有綁 change，也讓它同步收到
       fileInput.dispatchEvent(new Event('change', { bubbles: true }));
 
-      // 保留手動按「計算」流程
-      if (runBtn) {
-        // 若未來要改成選完自動算，可打開：
-        // runBtn.click();
+      if (window.__singleTrades_runFile) {
+        window.__singleTrades_runFile(f);
       }
     } catch (e) {
       console.error('[single-trades-cloud] download failed:', e);
