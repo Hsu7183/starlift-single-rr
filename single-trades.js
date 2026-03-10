@@ -1,6 +1,7 @@
 // single-trades.js
 // 三劍客量化科技機構級單檔分析：KPI + 每週資產曲線 + 交易明細
 // - 修正：優先用三欄 action（新買/新賣/平賣/平買/強制平倉）判斷方向
+// - 嚴格依 action 語義配對，不再用 open/null 硬配對
 // - 若 action 無法判斷，才 fallback 用 INPOS 推斷方向
 // - 理論與含滑價分開計算
 // - 主圖：資產曲線（週聚合）
@@ -151,7 +152,7 @@
     return 1; // 保留原預設：找不到仍當多單，但僅在 action 無法判斷時才會用到
   }
 
-  // ===== 解析 TXT =====
+  // ===== 解析 TXT（修正版：嚴格依 action 語義配對，不再用 open/null 硬配對）=====
   function parseTxt(text) {
     const allLines = text.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
     if (!allLines.length) return { header: null, trades: [] };
@@ -174,64 +175,89 @@
       // INPOS 行直接跳過
       if (ps[ps.length - 1] === 'INPOS') continue;
 
-      // canonical 行：ts px action
-      if (ps.length === 3) {
-        const action = normAction(ps[2]);
+      // 只處理 canonical 行：ts px action
+      if (ps.length !== 3) continue;
 
-        if (!open) {
-          // ===== 開倉事件 =====
-          // 1) 優先由 action 判斷方向（修正點）
-          let dir = dirFromAction(action);
+      const action  = normAction(ps[2]);
+      const isEntry = isEntryAction(action);
+      const isExit  = isExitAction(action);
 
-          // 2) 若 action 無法判斷（例如只有「新」之類怪字），再用 INPOS fallback
-          if (dir == null) dir = getDirFromInpos(lines, i);
+      // 非法 action 直接略過
+      if (!isEntry && !isExit) continue;
 
-          // 3) entry action 顯示：以原 action 為主；若 action 無法判斷，才依 dir 生成
-          const entryAction = isEntryAction(action)
-            ? action
-            : (dir > 0 ? '新買' : '新賣');
-
-          open = { ts, px, dir, action: entryAction };
-        } else {
-          // ===== 平倉事件 =====
-          const openDir = open.dir;
-
-          // exit 方向：若 action 可判斷（平賣/平買/強制平倉），用它；否則沿用 openDir
-          const dirForPnl = exitDirFromAction(action, openDir);
-
-          const entryPx  = open.px;
-          const exitPx   = px;
-
-          const points = dirForPnl > 0
-            ? (exitPx - entryPx)
-            : (entryPx - exitPx);
-
-          const gross = points * CFG.pointValue;
-          const fee   = CFG.feePerSide * 2;
-          const taxIn = Math.round(entryPx * CFG.pointValue * CFG.taxRate);
-          const taxOut= Math.round(exitPx  * CFG.pointValue * CFG.taxRate);
-          const tax   = taxIn + taxOut;
-
-          const theoNet = gross - fee - tax;
-
-          // exit action 顯示：以原 action 為主；若 action 不合規，才依 openDir 生成
-          const exitAction = isExitAction(action)
-            ? action
-            : (openDir > 0 ? '平賣' : '平買');
-
-          trades.push({
-            entry: { ts: open.ts, px: open.px, action: open.action },
-            exit:  { ts,         px: exitPx,   action: exitAction },
-            dir: openDir,          // 開倉方向（用於多空分流統計）
-            points,
-            fee,
-            tax,
-            theoNet
-          });
-
-          open = null;
+      // ===== 無持倉：只接受真正的開倉 =====
+      if (!open) {
+        if (!isEntry) {
+          // 平賣 / 平買 / 強制平倉 出現在無持倉狀態，忽略
+          continue;
         }
+
+        let dir = dirFromAction(action);
+
+        // 理論上新買/新賣一定能判斷；這裡保險保留 fallback
+        if (dir == null) dir = getDirFromInpos(lines, i);
+        if (dir !== 1 && dir !== -1) continue;
+
+        open = { ts, px, dir, action };
+        continue;
       }
+
+      // ===== 有持倉：只接受真正的平倉 =====
+      if (!isExit) {
+        // 若持倉中又遇到新買/新賣，代表資料錯位或前一筆 exit 遺失
+        // 採保守策略：丟棄舊 open，改以新的 entry 重建，避免後面整串翻掉
+        let dir = dirFromAction(action);
+        if (dir == null) dir = getDirFromInpos(lines, i);
+        if (dir !== 1 && dir !== -1) {
+          open = null;
+          continue;
+        }
+
+        open = { ts, px, dir, action };
+        continue;
+      }
+
+      // ===== 正常平倉配對 =====
+      const openDir    = open.dir;
+      const entryPx    = open.px;
+      const exitPx     = px;
+      const exitAction = action;
+
+      // 檢查平倉動作是否與開倉方向一致
+      // 多單應平賣；空單應平買；強制平倉可接受任一方向
+      if (
+        exitAction !== '強制平倉' &&
+        !((openDir > 0 && exitAction === '平賣') ||
+          (openDir < 0 && exitAction === '平買'))
+      ) {
+        // 配對不一致，這筆 exit 略過，保留 open 等下一筆合法 exit
+        continue;
+      }
+
+      const dirForPnl = exitDirFromAction(exitAction, openDir);
+
+      const points = dirForPnl > 0
+        ? (exitPx - entryPx)
+        : (entryPx - exitPx);
+
+      const gross = points * CFG.pointValue;
+      const fee   = CFG.feePerSide * 2;
+      const taxIn = Math.round(entryPx * CFG.pointValue * CFG.taxRate);
+      const taxOut= Math.round(exitPx  * CFG.pointValue * CFG.taxRate);
+      const tax   = taxIn + taxOut;
+      const theoNet = gross - fee - tax;
+
+      trades.push({
+        entry: { ts: open.ts, px: open.px, action: open.action },
+        exit:  { ts, px: exitPx, action: exitAction },
+        dir: openDir,
+        points,
+        fee,
+        tax,
+        theoNet
+      });
+
+      open = null;
     }
 
     return { header, trades };
