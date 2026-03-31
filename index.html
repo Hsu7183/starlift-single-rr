@@ -8,10 +8,10 @@
   <!-- CSP + 反嵌入 -->
   <meta http-equiv="Content-Security-Policy"
     content="default-src 'self';
-             script-src 'self' https://unpkg.com https://byhbmmnacezzgkwfkozs.supabase.co 'unsafe-inline';
+             script-src 'self' https://unpkg.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://byhbmmnacezzgkwfkozs.supabase.co 'unsafe-inline';
              style-src 'self' 'unsafe-inline';
              img-src 'self' data: https://byhbmmnacezzgkwfkozs.supabase.co;
-             connect-src 'self' https://byhbmmnacezzgkwfkozs.supabase.co https://unpkg.com;
+             connect-src 'self' https://byhbmmnacezzgkwfkozs.supabase.co https://unpkg.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com;
              frame-ancestors 'none';
              base-uri 'none';
              form-action 'self'">
@@ -91,7 +91,6 @@
 
     .lines{ margin-top:2px }
 
-    /* 4欄：label / range / return / avgAnnual */
     .line{
       display:grid;
       grid-template-columns:1.05fr 2.15fr 0.90fr 0.90fr;
@@ -120,7 +119,6 @@
     .val.neg{ color:#10b981 }
     .val.neu{ color:#666 }
 
-    /* 均年化欄位：同一套顏色規則 */
     .avg{
       text-align:right;
       font-weight:700;
@@ -186,6 +184,10 @@
       text-align:center;
       padding:24px;
     }
+
+    @media (max-width: 980px){
+      .strategy-grid, .nav { grid-template-columns:1fr; }
+    }
   </style>
 </head>
 <body translate="no">
@@ -214,7 +216,6 @@
         <a class="card" href="0807.html">
           <p class="card-title red">台指近-0807版本</p>
           <div class="lines">
-            <!-- 4 週 -->
             <p class="line">
               <span class="label">近1週報酬率</span>
               <span id="wk1-range-0807" class="range">—</span>
@@ -240,7 +241,6 @@
               <span id="wk4-avg-0807" class="avg neu">—</span>
             </p>
 
-            <!-- 月：2~6 月 -->
             <p class="line">
               <span class="label">近2月報酬率</span>
               <span id="m2-range-0807" class="range">—</span>
@@ -272,7 +272,6 @@
               <span id="m6-avg-0807" class="avg neu">—</span>
             </p>
 
-            <!-- 年：row-* 方便 JS 控制顯示/隱藏 -->
             <p class="line" id="row-y1-0807">
               <span class="label">近1年報酬率</span>
               <span id="y1-range-0807" class="range">—</span>
@@ -504,7 +503,6 @@
       <!-- 3) 盤整型 -->
       <div class="strategy-col">
         <p class="subcat">盤整型</p>
-        <!-- 預留 -->
       </div>
     </div>
 
@@ -521,6 +519,11 @@
 
       <a class="card" href="multi-pro.html">
         <p class="card-title blue big">期貨最佳化參數研究</p>
+        <p class="card-desc"></p>
+      </a>
+
+      <a class="card" href="xq-trade-to-txt.html">
+        <p class="card-title blue big">XQ交易明細轉TXT</p>
         <p class="card-desc"></p>
       </a>
     </div>
@@ -545,7 +548,6 @@
     </div>
   </div>
 
-  <!-- 外部 JS -->
   <script src="index.js?v=rr-v1"></script>
 </body>
 </html>
