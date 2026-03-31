@@ -93,18 +93,14 @@
       gap:16px;
     }
 
-    .grid1{
-      display:grid;
-      grid-template-columns:1fr;
-      gap:16px;
-    }
-
     .filebox{
       border:1px dashed #cbd5e1;
       border-radius:14px;
       padding:16px;
       background:#fafcff;
-      min-height:160px;
+      min-height:210px;
+      display:flex;
+      flex-direction:column;
     }
 
     .block-title{
@@ -128,6 +124,7 @@
       word-break:break-all;
       min-height:20px;
       line-height:1.6;
+      white-space:pre-wrap;
     }
 
     .action-row{
@@ -223,23 +220,13 @@
       font-size:12px;
       color:#64748b;
       line-height:1.7;
-    }
-
-    .badge{
-      display:inline-block;
-      padding:4px 10px;
-      border-radius:999px;
-      background:#eef2ff;
-      color:#3730a3;
-      font-size:12px;
-      font-weight:800;
-      margin-right:8px;
-      margin-bottom:6px;
+      white-space:pre-wrap;
     }
 
     @media (max-width: 1100px){
       .grid2,.grid3{ grid-template-columns:1fr; }
       .title{ font-size:28px; }
+      .filebox{ min-height:auto; }
     }
   </style>
 </head>
@@ -257,7 +244,8 @@
     <div class="card">
       <h2 class="section-title blue">第一層：轉成指標TXT</h2>
 
-      <div class="grid2">
+      <!-- 三欄並排 -->
+      <div class="grid3">
         <div class="filebox">
           <p class="block-title">檔案1：指標輸出TXT（header來源）</p>
           <p class="hint">
@@ -281,9 +269,7 @@
             <button id="btnDownloadDetail" class="btn green">下載單檔TXT</button>
           </div>
         </div>
-      </div>
 
-      <div class="grid1" style="margin-top:16px;">
         <div class="filebox">
           <p class="block-title">批量檔案2：一次多檔交易明細</p>
           <p class="hint">
