@@ -1,8 +1,9 @@
 (function () {
   'use strict';
 
+  // ===== 與 upload.html 完全一致的 Supabase 設定 =====
   const SUPABASE_URL = "https://byhbmmnacezzgkwfkozs.supabase.co";
-  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYm1hY2V6emdrd2Zrb3pzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg1OTE0NzksImV4cCI6MjA3NDE2NzQ3OX0.VCSye3-fKrQphejdJSWAM6iRzv_7gkl8MLe7NeVszR0";
+  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ5aGJtbW5hY2V6emdrd2Zrb3pzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg1OTE0NzksImV4cCI6MjA3NDE2NzQ3OX0.VCSye3-fKrQphejdJSWAM6iRzv_7gkl8MLe7NeVszR0";
   const BUCKET = "reports";
 
   const PASS_HASH = "0f2b9305e317408510dc9878381e953630ed9fa3d2aadf95f1b8eb47941b18b9";
@@ -74,21 +75,23 @@
       clearTimeout(idleTimer);
       idleTimer = setTimeout(kick, IDLE_MS);
     };
-    ['click', 'keydown', 'mousemove', 'touchstart', 'scroll']
-      .forEach(ev => document.addEventListener(ev, bump, { passive: true }));
+    ['click', 'keydown', 'mousemove', 'touchstart', 'scroll'].forEach(ev => {
+      document.addEventListener(ev, bump, { passive: true });
+    });
     bump();
   }
 
   function enableDevtoolsWatchAfterLogin() {
     let suspect = 0;
-
     function trig() {
       if (++suspect >= 3) shield.style.display = 'flex';
     }
 
     setInterval(() => {
-      if (Math.abs(window.outerWidth - window.innerWidth) > 250 ||
-          Math.abs(window.outerHeight - window.innerHeight) > 250) {
+      if (
+        Math.abs(window.outerWidth - window.innerWidth) > 250 ||
+        Math.abs(window.outerHeight - window.innerHeight) > 250
+      ) {
         trig();
       } else {
         suspect = 0;
@@ -188,10 +191,15 @@
 
   function normalizeText(raw) {
     let s = raw.replace(/\ufeff/gi, '').replace(/\u200b|\u200c|\u200d/gi, '');
-    s = s.replace(/[\x00-\x09\x0B-\x1F\x7F]/g, '')
-         .replace(/\r\n?/g, '\n')
-         .replace(/\u3000/g, ' ');
-    return s.split('\n').map(l => l.replace(/\s+/g, ' ').trim()).filter(Boolean).join('\n');
+    s = s
+      .replace(/[\x00-\x09\x0B-\x1F\x7F]/g, '')
+      .replace(/\r\n?/g, '\n')
+      .replace(/\u3000/g, ' ');
+    return s
+      .split('\n')
+      .map(l => l.replace(/\s+/g, ' ').trim())
+      .filter(Boolean)
+      .join('\n');
   }
 
   function padTime6(t) {
@@ -231,11 +239,9 @@
     return { canon: out.join('\n'), ok };
   }
 
-  async function fetchSmart(url) {
-    const res = await fetch(url, { cache: 'no-store' });
-    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  async function blobToCanon(blob) {
+    const buf = await blob.arrayBuffer();
 
-    const buf = await res.arrayBuffer();
     for (const enc of ['utf-8', 'big5', 'utf-16le', 'utf-16be']) {
       try {
         const td = new TextDecoder(enc);
@@ -265,29 +271,16 @@
   }
 
   function dailySeriesFromMerged(mergedTxt) {
-    if (!window.SHARED) {
-      throw new Error('window.SHARED 未載入');
-    }
-    if (typeof window.SHARED.parseTXT !== 'function') {
-      throw new Error('SHARED.parseTXT 不存在');
-    }
-    if (typeof window.SHARED.buildReport !== 'function') {
-      throw new Error('SHARED.buildReport 不存在');
-    }
+    if (!window.SHARED) throw new Error('window.SHARED 未載入');
+    if (typeof window.SHARED.parseTXT !== 'function') throw new Error('SHARED.parseTXT 不存在');
+    if (typeof window.SHARED.buildReport !== 'function') throw new Error('SHARED.buildReport 不存在');
 
     const parsed = window.SHARED.parseTXT(mergedTxt);
-    if (!parsed || !Array.isArray(parsed.rows)) {
-      throw new Error('parseTXT 結果異常');
-    }
+    if (!parsed || !Array.isArray(parsed.rows)) throw new Error('parseTXT 結果異常');
 
     const report = window.SHARED.buildReport(parsed.rows);
-    if (!report || !Array.isArray(report.trades)) {
-      throw new Error('buildReport 結果異常');
-    }
-
-    if (!report.trades.length) {
-      throw new Error('buildReport 沒有產生 trades');
-    }
+    if (!report || !Array.isArray(report.trades)) throw new Error('buildReport 結果異常');
+    if (!report.trades.length) throw new Error('buildReport 沒有產生 trades');
 
     const m = new Map();
     for (const t of report.trades) {
@@ -298,10 +291,7 @@
 
     const days = [...m.keys()].sort();
     const vals = days.map(d => m.get(d));
-
-    if (!days.length) {
-      throw new Error('無有效日損益資料');
-    }
+    if (!days.length) throw new Error('無有效日損益資料');
 
     return { days, vals };
   }
@@ -629,7 +619,7 @@
   function shortErrMsg(e) {
     if (!e) return '未知錯誤';
     const s = String(e && e.message ? e.message : e);
-    return s.length > 40 ? s.slice(0, 40) + '…' : s;
+    return s.length > 70 ? s.slice(0, 70) + '…' : s;
   }
 
   async function loadDepsAndRun() {
@@ -670,8 +660,6 @@
       const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
         global: { fetch: (u, o = {}) => fetch(u, { ...o, cache: 'no-store' }) }
       });
-
-      const pubUrl = (path) => sb.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
 
       async function listDir(prefix) {
         const p = (prefix && !prefix.endsWith('/')) ? prefix + '/' : (prefix || '');
@@ -718,6 +706,13 @@
         return xs[0];
       }
 
+      async function downloadCanon(fullPath) {
+        const { data, error } = await sb.storage.from(BUCKET).download(fullPath);
+        if (error) throw error;
+        if (!data) throw new Error('download 無資料');
+        return await blobToCanon(data);
+      }
+
       async function resolveMergedForKey(key) {
         const files = await listAllFilesByRegex(WANT[key]);
         console.log('resolveMergedForKey', key, files.map(x => x.fullPath));
@@ -729,7 +724,7 @@
         if (!chainInfo) {
           const latest = pickLatestByUpdate(files);
           if (!latest) return null;
-          const canonObj = await fetchSmart(pubUrl(latest.fullPath));
+          const canonObj = await downloadCanon(latest.fullPath);
           return {
             canon: canonObj.canon,
             periodStart: null,
@@ -740,7 +735,7 @@
 
         const canonTexts = [];
         for (const f of chainInfo.chain) {
-          const { canon } = await fetchSmart(pubUrl(f.fullPath));
+          const { canon } = await downloadCanon(f.fullPath);
           canonTexts.push(canon);
         }
 
@@ -778,10 +773,7 @@
 
           const mergedText = merged.canon;
           const rows = parseCanon(mergedText);
-
-          if (!rows.length) {
-            throw new Error('canonical 交易列為空');
-          }
+          if (!rows.length) throw new Error('canonical 交易列為空');
 
           const start8_fallback = rows[0].ts.slice(0, 8);
           const end8_fallback = rows[rows.length - 1].ts.slice(0, 8);
