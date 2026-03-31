@@ -375,12 +375,7 @@
     const start = new Date(mondayOf(end).getTime());
     start.setDate(start.getDate() - (nWeeks - 1) * 7);
     const sum = sumBetween(days, vals, start, end);
-    return {
-      ret: (sum == null ? null : sum / 1_000_000),
-      range: `${fmtDate(start)}~${fmtDate(end)}`,
-      start,
-      end
-    };
+    return { ret: (sum == null ? null : sum / 1_000_000), range: `${fmtDate(start)}~${fmtDate(end)}` };
   }
 
   function monthReturnUser(days, vals, nMonths) {
@@ -388,12 +383,7 @@
     const base = addMonthsSameDay(end, -nMonths);
     const start = mondayOf(base);
     const sum = sumBetween(days, vals, start, end);
-    return {
-      ret: (sum == null ? null : sum / 1_000_000),
-      range: `${fmtDate(start)}~${fmtDate(end)}`,
-      start,
-      end
-    };
+    return { ret: (sum == null ? null : sum / 1_000_000), range: `${fmtDate(start)}~${fmtDate(end)}` };
   }
 
   function yearReturnUser(days, vals, nYears) {
@@ -401,18 +391,12 @@
     const base = addYearsSameDay(end, -nYears);
     const start = mondayOf(base);
     const sum = sumBetween(days, vals, start, end);
-    return {
-      ret: (sum == null ? null : sum / 1_000_000),
-      range: `${fmtDate(start)}~${fmtDate(end)}`,
-      start,
-      end
-    };
+    return { ret: (sum == null ? null : sum / 1_000_000), range: `${fmtDate(start)}~${fmtDate(end)}` };
   }
 
   function setVal(id, v) {
     const el = document.getElementById(id);
     if (!el) return;
-
     el.classList.remove('pos', 'neg', 'neu');
 
     if (v == null) {
@@ -428,7 +412,6 @@
   function setAvg(id, v) {
     const el = document.getElementById(id);
     if (!el) return;
-
     el.classList.remove('pos', 'neg', 'neu');
 
     if (v == null) {
@@ -469,12 +452,8 @@
   }
 
   function resetAll(key) {
-    const weekKeys = ['wk1', 'wk2', 'wk3', 'wk4'];
-    const monthKeys = ['m2', 'm3', 'm4', 'm5', 'm6'];
-    const yearKeys = ['y1', 'y2', 'y3', 'y4', 'y5', 'y6'];
-    const all = weekKeys.concat(monthKeys).concat(yearKeys);
-
-    all.forEach(k => {
+    const keys = ['wk1','wk2','wk3','wk4','m2','m3','m4','m5','m6','y1','y2','y3','y4','y5','y6'];
+    keys.forEach(k => {
       setText(`${k}-range-${key}`, '—');
       setVal(`${k}-${key}`, null);
       setAvg(`${k}-avg-${key}`, null);
@@ -494,11 +473,9 @@
   function extractRangeFromPath(p) {
     const m = String(p || '').match(RANGE_RE);
     if (!m) return null;
-
     const a = +m[1];
     const b = +m[2];
     if (!Number.isFinite(a) || !Number.isFinite(b) || a <= 0 || b <= 0) return null;
-
     return { start: a, end: b };
   }
 
@@ -595,7 +572,7 @@
       await loadScript('https://unpkg.com/@supabase/supabase-js@2');
       await loadScript('shared.js?v=txfee45tax2');
     } catch (e) {
-      ['0807', '1001', '1001pp', '0313'].forEach(k => {
+      ['0807','1001','1001pp','0313'].forEach(k => {
         setCardStatus(k, '錯誤：' + shortErrMsg(e), '#b91c1c');
       });
       return;
@@ -696,8 +673,7 @@
 
       const firstDate = d8ToDate(days[0]);
       const lastDate = d8ToDate(days[days.length - 1]);
-      const totalSpanMs = lastDate - firstDate;
-      const totalSpanDays = totalSpanMs / (1000 * 60 * 60 * 24);
+      const totalSpanDays = (lastDate - firstDate) / (1000 * 60 * 60 * 24);
 
       setRowVisible(key, 'wk1', totalSpanDays >= 7);
       setRowVisible(key, 'wk2', totalSpanDays >= 14);
@@ -745,29 +721,11 @@
         const { days, vals } = dailySeriesFromMerged(mergedText);
         applyVisibleRows(key, days);
 
-        const weekDefs = [
-          ['wk1', 1],
-          ['wk2', 2],
-          ['wk3', 3],
-          ['wk4', 4]
-        ];
-        const monthDefs = [
-          ['m2', 2],
-          ['m3', 3],
-          ['m4', 4],
-          ['m5', 5],
-          ['m6', 6]
-        ];
-        const yearDefs = [
-          ['y1', 1],
-          ['y2', 2],
-          ['y3', 3],
-          ['y4', 4],
-          ['y5', 5],
-          ['y6', 6]
-        ];
+        const weekDefs = [['wk1',1],['wk2',2],['wk3',3],['wk4',4]];
+        const monthDefs = [['m2',2],['m3',3],['m4',4],['m5',5],['m6',6]];
+        const yearDefs = [['y1',1],['y2',2],['y3',3],['y4',4],['y5',5],['y6',6]];
 
-        weekDefs.forEach(([k, n]) => {
+        weekDefs.forEach(([k,n]) => {
           const r = weekReturnUser(days, vals, n);
           if (r.ret == null) {
             setRowVisible(key, k, false);
@@ -778,7 +736,7 @@
           setAvg(`${k}-avg-${key}`, null);
         });
 
-        monthDefs.forEach(([k, n]) => {
+        monthDefs.forEach(([k,n]) => {
           const r = monthReturnUser(days, vals, n);
           if (r.ret == null) {
             setRowVisible(key, k, false);
@@ -789,7 +747,7 @@
           setAvg(`${k}-avg-${key}`, null);
         });
 
-        yearDefs.forEach(([k, n]) => {
+        yearDefs.forEach(([k,n]) => {
           const r = yearReturnUser(days, vals, n);
           if (r.ret == null) {
             setRowVisible(key, k, false);
@@ -810,8 +768,7 @@
       }
     }
 
-    const keys = ['0807', '1001', '1001pp', '0313'];
-    for (const key of keys) {
+    for (const key of ['0807','1001','1001pp','0313']) {
       await fillCard(key);
     }
   }
