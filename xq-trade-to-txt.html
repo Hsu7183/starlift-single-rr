@@ -78,11 +78,11 @@
       word-break:break-all;
       min-height:20px;
     }
-    .row{
+    .action-row{
       display:flex;
       gap:10px;
-      align-items:center;
       flex-wrap:wrap;
+      margin-top:12px;
     }
     .btn{
       background:#0d6efd;
@@ -96,7 +96,6 @@
     .btn.gray{ background:#6c757d; }
     .btn.green{ background:#198754; }
     .btn.orange{ background:#fd7e14; }
-    .btn.red{ background:#dc3545; }
     .btn.dark{ background:#111827; }
 
     .mono{
@@ -107,11 +106,11 @@
       border:1px solid #e5e7eb;
       border-radius:10px;
       padding:12px;
-      min-height:220px;
-      max-height:520px;
+      min-height:240px;
+      max-height:560px;
       overflow:auto;
       font-size:12px;
-      line-height:1.55;
+      line-height:1.6;
     }
     .summary{
       font-size:14px;
@@ -119,27 +118,9 @@
       white-space:pre-wrap;
       word-break:break-word;
     }
-    .pill{
-      display:inline-block;
-      padding:4px 8px;
-      border-radius:999px;
-      font-size:12px;
-      font-weight:700;
-      background:#eef2ff;
-      color:#334155;
-      margin-right:6px;
-      margin-bottom:6px;
-    }
     .ok{ color:#198754; font-weight:700; }
     .bad{ color:#dc3545; font-weight:700; }
     .neu{ color:#6c757d; font-weight:700; }
-
-    .action-row{
-      display:flex;
-      gap:10px;
-      flex-wrap:wrap;
-      margin-top:12px;
-    }
 
     table{
       width:100%;
@@ -164,14 +145,8 @@
       border:1px solid #e5e7eb;
       border-radius:10px;
       overflow:auto;
-      max-height:700px;
+      max-height:720px;
       background:#fff;
-    }
-
-    .download-box{
-      margin-top:10px;
-      font-size:13px;
-      color:#444;
     }
 
     @media (max-width: 1100px){
@@ -187,16 +162,15 @@
       第二層：再用「TXT 對 TXT」逐筆比對同區間內的時間、點位、動作是否相符。
     </p>
 
-    <!-- 第一層：轉換 -->
     <div class="card">
       <h2 class="section-title blue">第一層：先轉成指標TXT</h2>
 
       <div class="grid3">
         <div class="filebox">
-          <p class="block-title">基準參數來源：檔案1 指標輸出TXT</p>
+          <p class="block-title">檔案1：指標輸出TXT（header來源）</p>
           <p class="hint">
-            用途：只取第一行參數列，讓檔案2 / 檔案3 轉出時，能沿用同一種 header。<br>
-            若未載入，仍可轉換，只是輸出不會有 header。
+            用途：取第一行參數列，讓檔案2 / 檔案3 轉出時，沿用相同 header。<br>
+            同時下方也會完整顯示你載入的原始 TXT。
           </p>
           <input id="fileHeaderSource" type="file" accept=".txt,.csv,text/plain" />
           <div id="nameHeaderSource" class="fname">尚未載入</div>
@@ -204,7 +178,7 @@
 
         <div class="filebox">
           <p class="block-title">檔案2：交易輸出交易明細</p>
-          <p class="hint">支援 csv / txt</p>
+          <p class="hint">支援 csv / txt，含你這種 Tab 分隔欄位格式。</p>
           <input id="fileTradeDetail" type="file" accept=".csv,.txt" />
           <div id="nameTradeDetail" class="fname">尚未載入</div>
           <div class="action-row">
@@ -225,7 +199,11 @@
         </div>
       </div>
 
-      <div class="grid2" style="margin-top:16px;">
+      <div class="grid3" style="margin-top:16px;">
+        <div>
+          <p class="block-title">檔案1 原始TXT預覽</p>
+          <div id="headerSourcePreview" class="mono"></div>
+        </div>
         <div>
           <p class="block-title">檔案2 轉換結果</p>
           <div id="detailPreview" class="mono"></div>
@@ -237,7 +215,6 @@
       </div>
     </div>
 
-    <!-- 第二層：比對 -->
     <div class="card">
       <h2 class="section-title green">第二層：TXT 對 TXT 逐筆比對</h2>
 
@@ -250,13 +227,15 @@
         </div>
 
         <div class="filebox">
-          <p class="block-title">右欄：測試TXT（可直接用轉換結果）</p>
-          <p class="hint">可載入外部 TXT，也可按下方按鈕直接套用「檔案2轉出TXT / 檔案3轉出TXT」</p>
+          <p class="block-title">右欄：測試TXT</p>
+          <p class="hint">
+            可直接載入一個 TXT，或按按鈕直接套用「檔案2轉出TXT / 檔案3轉出TXT」。
+          </p>
           <input id="fileCompareTarget" type="file" accept=".txt,.csv,text/plain" />
           <div id="nameCompareTarget" class="fname">尚未載入</div>
           <div class="action-row">
-            <button id="btnUseDetailAsTarget" class="btn dark">使用 檔案2轉出TXT 當右欄</button>
-            <button id="btnUseAllAsTarget" class="btn dark">使用 檔案3轉出TXT 當右欄</button>
+            <button id="btnUseDetailAsTarget" class="btn dark">使用 檔案2轉出TXT</button>
+            <button id="btnUseAllAsTarget" class="btn dark">使用 檔案3轉出TXT</button>
           </div>
         </div>
 
@@ -311,6 +290,6 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
-  <script src="xq-trade-to-txt.js?v=1150331-v2"></script>
+  <script src="xq-trade-to-txt.js?v=1150331-v3"></script>
 </body>
 </html>
