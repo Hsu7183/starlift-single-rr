@@ -1,9 +1,8 @@
 (function () {
   'use strict';
 
-  // ===== 與 upload.html 完全一致的 Supabase 設定 =====
   const SUPABASE_URL = "https://byhbmmnacezzgkwfkozs.supabase.co";
-  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ5aGJtbW5hY2V6emdrd2Zrb3pzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg1OTE0NzksImV4cCI6MjA3NDE2NzQ3OX0.VCSye3-fKrQphejdJSWAM6iRzv_7gkl8MLe7NeVszR0";
+  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYm1hY2V6emdrd2Zrb3pzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg1OTE0NzksImV4cCI6MjA3NDE2NzQ3OX0.VCSye3-fKrQphejdJSWAM6iRzv_7gkl8MLe7NeVszR0";
   const BUCKET = "reports";
 
   const PASS_HASH = "0f2b9305e317408510dc9878381e953630ed9fa3d2aadf95f1b8eb47941b18b9";
@@ -83,6 +82,7 @@
 
   function enableDevtoolsWatchAfterLogin() {
     let suspect = 0;
+
     function trig() {
       if (++suspect >= 3) shield.style.display = 'flex';
     }
@@ -377,7 +377,9 @@
     const sum = sumBetween(days, vals, start, end);
     return {
       ret: (sum == null ? null : sum / 1_000_000),
-      range: `${fmtDate(start)}~${fmtDate(end)}`
+      range: `${fmtDate(start)}~${fmtDate(end)}`,
+      start,
+      end
     };
   }
 
@@ -388,7 +390,9 @@
     const sum = sumBetween(days, vals, start, end);
     return {
       ret: (sum == null ? null : sum / 1_000_000),
-      range: `${fmtDate(start)}~${fmtDate(end)}`
+      range: `${fmtDate(start)}~${fmtDate(end)}`,
+      start,
+      end
     };
   }
 
@@ -399,7 +403,9 @@
     const sum = sumBetween(days, vals, start, end);
     return {
       ret: (sum == null ? null : sum / 1_000_000),
-      range: `${fmtDate(start)}~${fmtDate(end)}`
+      range: `${fmtDate(start)}~${fmtDate(end)}`,
+      start,
+      end
     };
   }
 
@@ -440,21 +446,39 @@
     if (el) el.textContent = text || '—';
   }
 
-  const WEEK_KEYS = ['wk1', 'wk2', 'wk3', 'wk4'];
-  const MONTH_KEYS = ['m2', 'm3', 'm4', 'm5', 'm6'];
-  const YEAR_KEYS = ['y1', 'y2', 'y3', 'y4', 'y5', 'y6'];
-  const ALL_KEYS = WEEK_KEYS.concat(MONTH_KEYS).concat(YEAR_KEYS);
+  function setCardStatus(key, text, color) {
+    const el = document.getElementById(`status-${key}`);
+    if (!el) return;
+    el.textContent = text || '';
+    el.style.color = color || '#6b7280';
+  }
+
+  function setPeriodText(key, start8, end8) {
+    const el = document.getElementById(`period-${key}`);
+    if (!el) return;
+    if (!start8 || !end8) {
+      el.textContent = '—';
+      return;
+    }
+    el.textContent = `${start8} - ${end8}`;
+  }
+
+  function setRowVisible(key, rowKey, visible) {
+    const row = document.getElementById(`row-${rowKey}-${key}`);
+    if (row) row.style.display = visible ? 'grid' : 'none';
+  }
 
   function resetAll(key) {
-    ALL_KEYS.forEach(k => {
+    const weekKeys = ['wk1', 'wk2', 'wk3', 'wk4'];
+    const monthKeys = ['m2', 'm3', 'm4', 'm5', 'm6'];
+    const yearKeys = ['y1', 'y2', 'y3', 'y4', 'y5', 'y6'];
+    const all = weekKeys.concat(monthKeys).concat(yearKeys);
+
+    all.forEach(k => {
       setText(`${k}-range-${key}`, '—');
       setVal(`${k}-${key}`, null);
       setAvg(`${k}-avg-${key}`, null);
-    });
-
-    YEAR_KEYS.forEach(k => {
-      const row = document.getElementById(`row-${k}-${key}`);
-      if (row) row.style.display = 'none';
+      setRowVisible(key, k, true);
     });
   }
 
@@ -560,293 +584,235 @@
     return rows.map(r => r.line).join('\n');
   }
 
-  function ensureStatusUI() {
-    let box = document.getElementById('homeLoadStatus');
-    if (!box) {
-      box = document.createElement('div');
-      box.id = 'homeLoadStatus';
-      box.style.maxWidth = '1100px';
-      box.style.margin = '0 auto 12px';
-      box.style.fontSize = '13px';
-      box.style.color = '#666';
-      box.innerHTML = `
-        <div id="homeLoadText">首頁資料載入中...</div>
-        <div style="margin-top:4px;background:#e5e7eb;border-radius:999px;height:8px;overflow:hidden;">
-          <div id="homeLoadBar" style="width:0%;height:8px;background:#0d6efd;transition:width .25s;"></div>
-        </div>
-      `;
-      const title = document.querySelector('.section-title-red');
-      if (title && title.parentNode) {
-        title.parentNode.insertBefore(box, title.nextSibling);
-      }
-    }
-  }
-
-  function updateHomeProgress(done, total, label) {
-    ensureStatusUI();
-    const pct = total > 0 ? Math.round((done / total) * 100) : 0;
-    const txt = document.getElementById('homeLoadText');
-    const bar = document.getElementById('homeLoadBar');
-    if (txt) txt.textContent = `${label}（${done}/${total}，${pct}%）`;
-    if (bar) bar.style.width = `${pct}%`;
-  }
-
-  function ensureCardStatus(key) {
-    let el = document.getElementById(`status-${key}`);
-    if (el) return el;
-
-    const period = document.getElementById(`period-${key}`);
-    if (!period || !period.parentNode) return null;
-
-    el = document.createElement('div');
-    el.id = `status-${key}`;
-    el.style.marginTop = '4px';
-    el.style.fontSize = '12px';
-    el.style.textAlign = 'center';
-    el.style.color = '#666';
-    el.textContent = '讀取中...';
-    period.parentNode.appendChild(el);
-    return el;
-  }
-
-  function setCardStatus(key, text, color) {
-    const el = ensureCardStatus(key);
-    if (!el) return;
-    el.textContent = text;
-    el.style.color = color || '#666';
-  }
-
   function shortErrMsg(e) {
     if (!e) return '未知錯誤';
     const s = String(e && e.message ? e.message : e);
-    return s.length > 70 ? s.slice(0, 70) + '…' : s;
+    return s.length > 80 ? s.slice(0, 80) + '…' : s;
   }
 
   async function loadDepsAndRun() {
-    ensureStatusUI();
-    updateHomeProgress(0, 4, '首頁資料載入中...');
-
     try {
       await loadScript('https://unpkg.com/@supabase/supabase-js@2');
-    } catch (e) {
-      updateHomeProgress(4, 4, '首頁資料載入失敗');
-      ['0807', '1001', '1001pp', '0313'].forEach(k => {
-        setCardStatus(k, '錯誤：supabase-js 載入失敗', '#b91c1c');
-      });
-      console.error(e);
-      return;
-    }
-
-    try {
       await loadScript('shared.js?v=txfee45tax2');
     } catch (e) {
-      updateHomeProgress(4, 4, '首頁資料載入失敗');
-      ['0807', '1001', '1001pp', '0313'].forEach(k => {
-        setCardStatus(k, '錯誤：shared.js 載入失敗', '#b91c1c');
-      });
-      console.error(e);
-      return;
-    }
-
-    if (!window.SHARED) {
-      updateHomeProgress(4, 4, '首頁資料載入失敗');
-      ['0807', '1001', '1001pp', '0313'].forEach(k => {
-        setCardStatus(k, '錯誤：window.SHARED 不存在', '#b91c1c');
-      });
-      return;
-    }
-
-    (async function () {
-      const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-        global: { fetch: (u, o = {}) => fetch(u, { ...o, cache: 'no-store' }) }
-      });
-
-      async function listDir(prefix) {
-        const p = (prefix && !prefix.endsWith('/')) ? prefix + '/' : (prefix || '');
-        const { data, error } = await sb.storage.from(BUCKET).list(p, {
-          limit: 1000,
-          sortBy: { column: 'name', order: 'asc' }
-        });
-        if (error) throw error;
-        return (data || []).map(it => ({ ...it, fullPath: p + it.name }));
-      }
-
-      async function listDeepN(prefix, depth, maxDepth, out) {
-        if (depth > maxDepth) return;
-        const entries = await listDir(prefix);
-        for (const it of entries) {
-          if (!it.id && !it.metadata) {
-            await listDeepN(it.fullPath, depth + 1, maxDepth, out);
-          } else {
-            out.push(it);
-          }
-        }
-      }
-
-      async function listAllFilesByRegex(keyRegex) {
-        const all = [];
-        await listDeepN('', 0, 8, all);
-        return all.filter(it => {
-          if (!it.metadata) return false;
-          const n = (it.name || '');
-          const p = (it.fullPath || '');
-          return keyRegex.test(p) || keyRegex.test(n);
-        });
-      }
-
-      function pickLatestByUpdate(files) {
-        if (!files.length) return null;
-        const xs = files.slice();
-        xs.sort((a, b) => {
-          const ta = Date.parse(a.updated_at || 0) || 0;
-          const tb = Date.parse(b.updated_at || 0) || 0;
-          if (ta !== tb) return tb - ta;
-          return (b.metadata?.size || 0) - (a.metadata?.size || 0);
-        });
-        return xs[0];
-      }
-
-      async function downloadCanon(fullPath) {
-        const { data, error } = await sb.storage.from(BUCKET).download(fullPath);
-        if (error) throw error;
-        if (!data) throw new Error('download 無資料');
-        return await blobToCanon(data);
-      }
-
-      async function resolveMergedForKey(key) {
-        const files = await listAllFilesByRegex(WANT[key]);
-        console.log('resolveMergedForKey', key, files.map(x => x.fullPath));
-
-        if (!files.length) return null;
-
-        const chainInfo = chooseChainByRange(files);
-
-        if (!chainInfo) {
-          const latest = pickLatestByUpdate(files);
-          if (!latest) return null;
-          const canonObj = await downloadCanon(latest.fullPath);
-          return {
-            canon: canonObj.canon,
-            periodStart: null,
-            periodEnd: null,
-            fileCount: 1
-          };
-        }
-
-        const canonTexts = [];
-        for (const f of chainInfo.chain) {
-          const { canon } = await downloadCanon(f.fullPath);
-          canonTexts.push(canon);
-        }
-
-        const mergedCanon = mergeCanonTexts(canonTexts);
-
-        return {
-          canon: mergedCanon,
-          periodStart: String(chainInfo.start),
-          periodEnd: String(chainInfo.end),
-          fileCount: chainInfo.chain.length
-        };
-      }
-
-      function setPeriodText(key, start8, end8) {
-        const el = document.getElementById(`period-${key}`);
-        if (!el) return;
-        if (!start8 || !end8) {
-          el.textContent = '—';
-          return;
-        }
-        el.textContent = `${start8} - ${end8}`;
-      }
-
-      async function fillCard(key) {
-        setCardStatus(key, '讀取中...', '#666');
-
-        try {
-          const merged = await resolveMergedForKey(key);
-          if (!merged || !merged.canon) {
-            resetAll(key);
-            setPeriodText(key, null, null);
-            setCardStatus(key, '無資料', '#b45309');
-            return;
-          }
-
-          const mergedText = merged.canon;
-          const rows = parseCanon(mergedText);
-          if (!rows.length) throw new Error('canonical 交易列為空');
-
-          const start8_fallback = rows[0].ts.slice(0, 8);
-          const end8_fallback = rows[rows.length - 1].ts.slice(0, 8);
-
-          const start8 = merged.periodStart || start8_fallback;
-          const end8 = merged.periodEnd || end8_fallback;
-
-          setPeriodText(key, start8, end8);
-
-          const { days, vals } = dailySeriesFromMerged(mergedText);
-
-          WEEK_KEYS.forEach((k, idx) => {
-            const n = idx + 1;
-            const r = weekReturnUser(days, vals, n);
-            setText(`${k}-range-${key}`, r.range);
-            setVal(`${k}-${key}`, r.ret);
-            setAvg(`${k}-avg-${key}`, null);
-          });
-
-          MONTH_KEYS.forEach((k) => {
-            const n = Number(k.replace('m', ''));
-            const r = monthReturnUser(days, vals, n);
-            setText(`${k}-range-${key}`, r.range);
-            setVal(`${k}-${key}`, r.ret);
-            setAvg(`${k}-avg-${key}`, null);
-          });
-
-          YEAR_KEYS.forEach((k) => {
-            const n = Number(k.replace('y', ''));
-            const r = yearReturnUser(days, vals, n);
-            const avg = (r.ret == null ? null : (r.ret / n));
-
-            const row = document.getElementById(`row-${k}-${key}`);
-            if (!row) {
-              setText(`${k}-range-${key}`, r.range);
-              setVal(`${k}-${key}`, r.ret);
-              setAvg(`${k}-avg-${key}`, avg);
-              return;
-            }
-
-            if (r.ret == null) {
-              row.style.display = 'none';
-            } else {
-              row.style.display = 'grid';
-              setText(`${k}-range-${key}`, r.range);
-              setVal(`${k}-${key}`, r.ret);
-              setAvg(`${k}-avg-${key}`, avg);
-            }
-          });
-
-          setCardStatus(key, `已完成（抓到 ${merged.fileCount || 0} 檔）`, '#15803d');
-        } catch (e) {
-          console.error('fillCard error', key, e);
-          resetAll(key);
-          setPeriodText(key, null, null);
-          setCardStatus(key, '錯誤：' + shortErrMsg(e), '#b91c1c');
-        }
-      }
-
-      const keys = ['0807', '1001', '1001pp', '0313'];
-      let done = 0;
-
-      for (const key of keys) {
-        await fillCard(key);
-        done += 1;
-        updateHomeProgress(done, keys.length, done === keys.length ? '首頁資料載入完成' : '首頁資料載入中...');
-      }
-    })().catch(e => {
-      console.error('loadDepsAndRun inner error', e);
-      updateHomeProgress(4, 4, '首頁資料載入失敗');
       ['0807', '1001', '1001pp', '0313'].forEach(k => {
         setCardStatus(k, '錯誤：' + shortErrMsg(e), '#b91c1c');
       });
+      return;
+    }
+
+    const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      global: { fetch: (u, o = {}) => fetch(u, { ...o, cache: 'no-store' }) }
     });
+
+    async function listDir(prefix) {
+      const p = (prefix && !prefix.endsWith('/')) ? prefix + '/' : (prefix || '');
+      const { data, error } = await sb.storage.from(BUCKET).list(p, {
+        limit: 1000,
+        sortBy: { column: 'name', order: 'asc' }
+      });
+      if (error) throw error;
+      return (data || []).map(it => ({ ...it, fullPath: p + it.name }));
+    }
+
+    async function listDeepN(prefix, depth, maxDepth, out) {
+      if (depth > maxDepth) return;
+      const entries = await listDir(prefix);
+      for (const it of entries) {
+        if (!it.id && !it.metadata) {
+          await listDeepN(it.fullPath, depth + 1, maxDepth, out);
+        } else {
+          out.push(it);
+        }
+      }
+    }
+
+    async function listAllFilesByRegex(keyRegex) {
+      const all = [];
+      await listDeepN('', 0, 8, all);
+      return all.filter(it => {
+        if (!it.metadata) return false;
+        const n = (it.name || '');
+        const p = (it.fullPath || '');
+        return keyRegex.test(p) || keyRegex.test(n);
+      });
+    }
+
+    function pickLatestByUpdate(files) {
+      if (!files.length) return null;
+      const xs = files.slice();
+      xs.sort((a, b) => {
+        const ta = Date.parse(a.updated_at || 0) || 0;
+        const tb = Date.parse(b.updated_at || 0) || 0;
+        if (ta !== tb) return tb - ta;
+        return (b.metadata?.size || 0) - (a.metadata?.size || 0);
+      });
+      return xs[0];
+    }
+
+    async function downloadCanon(fullPath) {
+      const { data, error } = await sb.storage.from(BUCKET).download(fullPath);
+      if (error) throw error;
+      if (!data) throw new Error('download 無資料');
+      return await blobToCanon(data);
+    }
+
+    async function resolveMergedForKey(key) {
+      const files = await listAllFilesByRegex(WANT[key]);
+      if (!files.length) return null;
+
+      const chainInfo = chooseChainByRange(files);
+
+      if (!chainInfo) {
+        const latest = pickLatestByUpdate(files);
+        if (!latest) return null;
+        const canonObj = await downloadCanon(latest.fullPath);
+        return {
+          canon: canonObj.canon,
+          periodStart: null,
+          periodEnd: null,
+          fileCount: 1
+        };
+      }
+
+      const canonTexts = [];
+      for (const f of chainInfo.chain) {
+        const { canon } = await downloadCanon(f.fullPath);
+        canonTexts.push(canon);
+      }
+
+      const mergedCanon = mergeCanonTexts(canonTexts);
+
+      return {
+        canon: mergedCanon,
+        periodStart: String(chainInfo.start),
+        periodEnd: String(chainInfo.end),
+        fileCount: chainInfo.chain.length
+      };
+    }
+
+    function applyVisibleRows(key, days) {
+      if (!days || !days.length) return;
+
+      const firstDate = d8ToDate(days[0]);
+      const lastDate = d8ToDate(days[days.length - 1]);
+      const totalSpanMs = lastDate - firstDate;
+      const totalSpanDays = totalSpanMs / (1000 * 60 * 60 * 24);
+
+      setRowVisible(key, 'wk1', totalSpanDays >= 7);
+      setRowVisible(key, 'wk2', totalSpanDays >= 14);
+      setRowVisible(key, 'wk3', totalSpanDays >= 21);
+      setRowVisible(key, 'wk4', totalSpanDays >= 28);
+
+      setRowVisible(key, 'm2', totalSpanDays >= 60);
+      setRowVisible(key, 'm3', totalSpanDays >= 90);
+      setRowVisible(key, 'm4', totalSpanDays >= 120);
+      setRowVisible(key, 'm5', totalSpanDays >= 150);
+      setRowVisible(key, 'm6', totalSpanDays >= 180);
+
+      setRowVisible(key, 'y1', totalSpanDays >= 365);
+      setRowVisible(key, 'y2', totalSpanDays >= 365 * 2);
+      setRowVisible(key, 'y3', totalSpanDays >= 365 * 3);
+      setRowVisible(key, 'y4', totalSpanDays >= 365 * 4);
+      setRowVisible(key, 'y5', totalSpanDays >= 365 * 5);
+      setRowVisible(key, 'y6', totalSpanDays >= 365 * 6);
+    }
+
+    async function fillCard(key) {
+      setCardStatus(key, '讀取中...', '#6b7280');
+
+      try {
+        const merged = await resolveMergedForKey(key);
+        if (!merged || !merged.canon) {
+          resetAll(key);
+          setPeriodText(key, null, null);
+          setCardStatus(key, '無資料', '#b45309');
+          return;
+        }
+
+        const mergedText = merged.canon;
+        const rows = parseCanon(mergedText);
+        if (!rows.length) throw new Error('canonical 交易列為空');
+
+        const start8_fallback = rows[0].ts.slice(0, 8);
+        const end8_fallback = rows[rows.length - 1].ts.slice(0, 8);
+
+        const start8 = merged.periodStart || start8_fallback;
+        const end8 = merged.periodEnd || end8_fallback;
+
+        setPeriodText(key, start8, end8);
+
+        const { days, vals } = dailySeriesFromMerged(mergedText);
+        applyVisibleRows(key, days);
+
+        const weekDefs = [
+          ['wk1', 1],
+          ['wk2', 2],
+          ['wk3', 3],
+          ['wk4', 4]
+        ];
+        const monthDefs = [
+          ['m2', 2],
+          ['m3', 3],
+          ['m4', 4],
+          ['m5', 5],
+          ['m6', 6]
+        ];
+        const yearDefs = [
+          ['y1', 1],
+          ['y2', 2],
+          ['y3', 3],
+          ['y4', 4],
+          ['y5', 5],
+          ['y6', 6]
+        ];
+
+        weekDefs.forEach(([k, n]) => {
+          const r = weekReturnUser(days, vals, n);
+          if (r.ret == null) {
+            setRowVisible(key, k, false);
+            return;
+          }
+          setText(`${k}-range-${key}`, r.range);
+          setVal(`${k}-${key}`, r.ret);
+          setAvg(`${k}-avg-${key}`, null);
+        });
+
+        monthDefs.forEach(([k, n]) => {
+          const r = monthReturnUser(days, vals, n);
+          if (r.ret == null) {
+            setRowVisible(key, k, false);
+            return;
+          }
+          setText(`${k}-range-${key}`, r.range);
+          setVal(`${k}-${key}`, r.ret);
+          setAvg(`${k}-avg-${key}`, null);
+        });
+
+        yearDefs.forEach(([k, n]) => {
+          const r = yearReturnUser(days, vals, n);
+          if (r.ret == null) {
+            setRowVisible(key, k, false);
+            return;
+          }
+          const avg = r.ret / n;
+          setText(`${k}-range-${key}`, r.range);
+          setVal(`${k}-${key}`, r.ret);
+          setAvg(`${k}-avg-${key}`, avg);
+        });
+
+        setCardStatus(key, '已完成', '#15803d');
+      } catch (e) {
+        console.error('fillCard error', key, e);
+        resetAll(key);
+        setPeriodText(key, null, null);
+        setCardStatus(key, '錯誤：' + shortErrMsg(e), '#b91c1c');
+      }
+    }
+
+    const keys = ['0807', '1001', '1001pp', '0313'];
+    for (const key of keys) {
+      await fillCard(key);
+    }
   }
 })();
