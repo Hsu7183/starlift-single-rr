@@ -13,19 +13,19 @@
       color:#222;
     }
     .wrap{
-      max-width:1400px;
+      max-width:1500px;
       margin:0 auto;
     }
     .title{
       font-size:28px;
       font-weight:800;
       color:#0d6efd;
-      margin:0 0 18px;
+      margin:0 0 16px;
     }
     .sub{
       color:#666;
-      margin:0 0 18px;
-      line-height:1.6;
+      line-height:1.7;
+      margin:0 0 16px;
     }
     .card{
       background:#fff;
@@ -35,6 +35,15 @@
       padding:18px;
       margin-bottom:18px;
     }
+    .section-title{
+      font-size:22px;
+      font-weight:800;
+      margin:0 0 12px;
+      color:#111;
+    }
+    .section-title.blue{ color:#0d6efd; }
+    .section-title.green{ color:#198754; }
+
     .grid3{
       display:grid;
       grid-template-columns:repeat(3,1fr);
@@ -45,22 +54,29 @@
       grid-template-columns:1fr 1fr;
       gap:16px;
     }
-    .block-title{
-      font-size:18px;
-      font-weight:800;
-      margin:0 0 10px;
-    }
-    .hint{
-      font-size:13px;
-      color:#666;
-      line-height:1.6;
-      margin:0 0 10px;
-    }
     .filebox{
       border:1px dashed #cbd5e1;
       border-radius:12px;
       padding:14px;
       background:#fafafa;
+    }
+    .block-title{
+      font-size:18px;
+      font-weight:800;
+      margin:0 0 8px;
+    }
+    .hint{
+      font-size:13px;
+      color:#666;
+      line-height:1.6;
+      margin:0 0 8px;
+    }
+    .fname{
+      font-size:13px;
+      color:#333;
+      margin-top:8px;
+      word-break:break-all;
+      min-height:20px;
     }
     .row{
       display:flex;
@@ -81,13 +97,8 @@
     .btn.green{ background:#198754; }
     .btn.orange{ background:#fd7e14; }
     .btn.red{ background:#dc3545; }
+    .btn.dark{ background:#111827; }
 
-    .fname{
-      font-size:13px;
-      color:#333;
-      word-break:break-all;
-      margin-top:8px;
-    }
     .mono{
       font-family:Consolas,Menlo,Monaco,monospace;
       white-space:pre-wrap;
@@ -96,8 +107,8 @@
       border:1px solid #e5e7eb;
       border-radius:10px;
       padding:12px;
-      min-height:180px;
-      max-height:420px;
+      min-height:220px;
+      max-height:520px;
       overflow:auto;
       font-size:12px;
       line-height:1.55;
@@ -108,6 +119,28 @@
       white-space:pre-wrap;
       word-break:break-word;
     }
+    .pill{
+      display:inline-block;
+      padding:4px 8px;
+      border-radius:999px;
+      font-size:12px;
+      font-weight:700;
+      background:#eef2ff;
+      color:#334155;
+      margin-right:6px;
+      margin-bottom:6px;
+    }
+    .ok{ color:#198754; font-weight:700; }
+    .bad{ color:#dc3545; font-weight:700; }
+    .neu{ color:#6c757d; font-weight:700; }
+
+    .action-row{
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+      margin-top:12px;
+    }
+
     table{
       width:100%;
       border-collapse:collapse;
@@ -131,28 +164,16 @@
       border:1px solid #e5e7eb;
       border-radius:10px;
       overflow:auto;
-      max-height:650px;
+      max-height:700px;
       background:#fff;
     }
-    .ok{ color:#198754; font-weight:700; }
-    .bad{ color:#dc3545; font-weight:700; }
-    .neu{ color:#6c757d; font-weight:700; }
-    .pill{
-      display:inline-block;
-      padding:3px 8px;
-      border-radius:999px;
-      font-size:12px;
-      font-weight:700;
-      background:#eef2ff;
-      color:#334155;
-      margin-right:6px;
-    }
-    .top-actions{
-      display:flex;
-      gap:10px;
-      flex-wrap:wrap;
+
+    .download-box{
       margin-top:10px;
+      font-size:13px;
+      color:#444;
     }
+
     @media (max-width: 1100px){
       .grid3,.grid2{ grid-template-columns:1fr; }
     }
@@ -162,41 +183,91 @@
   <div class="wrap">
     <h1 class="title">XQ交易明細轉TXT</h1>
     <p class="sub">
-      功能：
-      1. 載入「指標輸出TXT」作為基準格式。<br>
-      2. 載入「交易輸出交易明細(csv)」或「交易輸出全部資料(xlsx/csv)」，轉成同樣的 TXT 交易列格式。<br>
-      3. 在下方逐筆比對同區間內的時間、點位、動作是否一致，並輸出摘要。
+      第一層：先把不同來源資料轉成統一的「指標TXT格式」。<br>
+      第二層：再用「TXT 對 TXT」逐筆比對同區間內的時間、點位、動作是否相符。
     </p>
 
+    <!-- 第一層：轉換 -->
     <div class="card">
+      <h2 class="section-title blue">第一層：先轉成指標TXT</h2>
+
       <div class="grid3">
         <div class="filebox">
-          <p class="block-title">檔案1：指標輸出TXT</p>
-          <p class="hint">格式：第一行參數列，下面每行為 YYYYMMDDhhmmss 價格 動作</p>
-          <input id="fileBaseTxt" type="file" accept=".txt,.csv,text/plain" />
-          <div id="nameBaseTxt" class="fname">尚未載入</div>
+          <p class="block-title">基準參數來源：檔案1 指標輸出TXT</p>
+          <p class="hint">
+            用途：只取第一行參數列，讓檔案2 / 檔案3 轉出時，能沿用同一種 header。<br>
+            若未載入，仍可轉換，只是輸出不會有 header。
+          </p>
+          <input id="fileHeaderSource" type="file" accept=".txt,.csv,text/plain" />
+          <div id="nameHeaderSource" class="fname">尚未載入</div>
         </div>
 
         <div class="filebox">
           <p class="block-title">檔案2：交易輸出交易明細</p>
-          <p class="hint">建議載入 csv</p>
+          <p class="hint">支援 csv / txt</p>
           <input id="fileTradeDetail" type="file" accept=".csv,.txt" />
           <div id="nameTradeDetail" class="fname">尚未載入</div>
+          <div class="action-row">
+            <button id="btnConvertDetail" class="btn">檔案2 轉成指標TXT</button>
+            <button id="btnDownloadDetail" class="btn green">下載檔案2轉出TXT</button>
+          </div>
         </div>
 
         <div class="filebox">
           <p class="block-title">檔案3：交易輸出全部資料</p>
-          <p class="hint">支援 xlsx / csv</p>
+          <p class="hint">支援 xlsx / xls / csv / txt</p>
           <input id="fileTradeAll" type="file" accept=".xlsx,.xls,.csv,.txt" />
           <div id="nameTradeAll" class="fname">尚未載入</div>
+          <div class="action-row">
+            <button id="btnConvertAll" class="btn orange">檔案3 轉成指標TXT</button>
+            <button id="btnDownloadAll" class="btn green">下載檔案3轉出TXT</button>
+          </div>
         </div>
       </div>
 
-      <div class="top-actions">
-        <button id="btnRunDetail" class="btn">轉換＋比對 檔案2</button>
-        <button id="btnRunAll" class="btn green">轉換＋比對 檔案3</button>
-        <button id="btnRunBoth" class="btn orange">兩者一起轉換＋比對</button>
-        <button id="btnClearAll" class="btn gray">全部清除</button>
+      <div class="grid2" style="margin-top:16px;">
+        <div>
+          <p class="block-title">檔案2 轉換結果</p>
+          <div id="detailPreview" class="mono"></div>
+        </div>
+        <div>
+          <p class="block-title">檔案3 轉換結果</p>
+          <div id="allPreview" class="mono"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 第二層：比對 -->
+    <div class="card">
+      <h2 class="section-title green">第二層：TXT 對 TXT 逐筆比對</h2>
+
+      <div class="grid3">
+        <div class="filebox">
+          <p class="block-title">左欄：基準TXT</p>
+          <p class="hint">通常是你的檔案1：指標輸出TXT</p>
+          <input id="fileCompareBase" type="file" accept=".txt,.csv,text/plain" />
+          <div id="nameCompareBase" class="fname">尚未載入</div>
+        </div>
+
+        <div class="filebox">
+          <p class="block-title">右欄：測試TXT（可直接用轉換結果）</p>
+          <p class="hint">可載入外部 TXT，也可按下方按鈕直接套用「檔案2轉出TXT / 檔案3轉出TXT」</p>
+          <input id="fileCompareTarget" type="file" accept=".txt,.csv,text/plain" />
+          <div id="nameCompareTarget" class="fname">尚未載入</div>
+          <div class="action-row">
+            <button id="btnUseDetailAsTarget" class="btn dark">使用 檔案2轉出TXT 當右欄</button>
+            <button id="btnUseAllAsTarget" class="btn dark">使用 檔案3轉出TXT 當右欄</button>
+          </div>
+        </div>
+
+        <div class="filebox">
+          <p class="block-title">比對操作</p>
+          <p class="hint">先載入左欄基準TXT，再載入右欄測試TXT，按下開始比對。</p>
+          <div class="action-row">
+            <button id="btnCompare" class="btn green">開始逐筆比對</button>
+            <button id="btnClearAll" class="btn gray">全部清除</button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -207,12 +278,12 @@
 
     <div class="grid2">
       <div class="card">
-        <p class="block-title">基準：指標輸出TXT</p>
-        <div id="basePreview" class="mono"></div>
+        <p class="block-title">左欄預覽：基準TXT</p>
+        <div id="compareBasePreview" class="mono"></div>
       </div>
       <div class="card">
-        <p class="block-title">轉換結果</p>
-        <div id="convertedPreview" class="mono"></div>
+        <p class="block-title">右欄預覽：測試TXT</p>
+        <div id="compareTargetPreview" class="mono"></div>
       </div>
     </div>
 
@@ -223,12 +294,12 @@
           <thead>
             <tr>
               <th style="width:70px">序號</th>
-              <th style="width:120px">結果</th>
-              <th>左欄：指標TXT</th>
-              <th>右欄：轉換結果</th>
-              <th style="width:160px">時間是否相同</th>
-              <th style="width:160px">價格是否相同</th>
-              <th style="width:160px">動作是否相同</th>
+              <th style="width:100px">結果</th>
+              <th>左欄：基準TXT</th>
+              <th>右欄：測試TXT</th>
+              <th style="width:120px">時間</th>
+              <th style="width:120px">價格</th>
+              <th style="width:120px">動作</th>
             </tr>
           </thead>
           <tbody id="compareBody">
@@ -240,6 +311,6 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
-  <script src="xq-trade-to-txt.js?v=1150331"></script>
+  <script src="xq-trade-to-txt.js?v=1150331-v2"></script>
 </body>
 </html>
