@@ -17,6 +17,7 @@
     btnConvertAll: $('btnConvertAll'),
     btnDownloadAll: $('btnDownloadAll'),
 
+    headerSourcePreview: $('headerSourcePreview'),
     detailPreview: $('detailPreview'),
     allPreview: $('allPreview'),
 
@@ -38,6 +39,7 @@
 
   const state = {
     headerText: '',
+    headerSourceRawTxt: '',
 
     convertedDetailTxt: '',
     convertedAllTxt: '',
@@ -53,8 +55,7 @@
     return String(s || '')
       .replace(/\ufeff/g, '')
       .replace(/\r\n?/g, '\n')
-      .replace(/\u3000/g, ' ')
-      .replace(/[ \t]+/g, ' ');
+      .replace(/\u3000/g, ' ');
   }
 
   function cleanLines(s) {
@@ -98,6 +99,10 @@
     return await file.arrayBuffer();
   }
 
+  function setPreview(el, txt) {
+    el.textContent = txt || '';
+  }
+
   function getHeaderFromTxt(txt) {
     const lines = cleanLines(txt);
     if (!lines.length) return '';
@@ -121,7 +126,7 @@
 
     const rows = [];
     for (let i = startIdx; i < lines.length; i++) {
-      const m = lines[i].match(/^(\d{14})\s+(-?\d+(?:\.\d+)?)\s+(新買|平賣|新賣|平買|強制平倉)$/);
+      const m = lines[i].match(/^(\d{14})(?:\.0{1,6})?\s+(-?\d+(?:\.\d+)?)\s+(新買|平賣|新賣|平買|強制平倉)\s*$/);
       if (!m) continue;
       rows.push({
         ts: m[1],
@@ -212,8 +217,19 @@
     return '';
   }
 
-  function arr2dFromCsvText(text) {
-    const wb = XLSX.read(text, { type: 'string' });
+  function parseDelimitedText(text) {
+    const raw = normalizeText(text);
+    const firstLine = raw.split('\n').find(x => x.trim()) || '';
+
+    if (firstLine.includes('\t')) {
+      return raw
+        .split('\n')
+        .map(line => line.trim())
+        .filter(Boolean)
+        .map(line => line.split('\t').map(x => x.trim()));
+    }
+
+    const wb = XLSX.read(raw, { type: 'string' });
     const ws = wb.Sheets[wb.SheetNames[0]];
     return XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
   }
@@ -248,95 +264,124 @@
     return [...map.values()];
   }
 
-  function guessAction(rawAction, rawSide, rawBS, ts, px, baseRows, forceExitTime) {
-    const act = textCell(rawAction);
-    const side = textCell(rawSide);
-    const bs = textCell(rawBS);
-    const mix = `${act}|${side}|${bs}`;
+  function mapEntryAction(dir) {
+    const s = textCell(dir);
+    if (/買進|買入|buy/i.test(s)) return '新買';
+    if (/賣出|賣空|放空|short|sell/i.test(s)) return '新賣';
+    return '';
+  }
 
-    if (/強制平倉|強平/.test(mix)) return '強制平倉';
-    if (/新買/.test(mix)) return '新買';
-    if (/平賣/.test(mix)) return '平賣';
-    if (/新賣/.test(mix)) return '新賣';
-    if (/平買/.test(mix)) return '平買';
-
-    if (/買進|買入|buy/i.test(mix)) return '新買';
-    if (/賣出|sell/i.test(mix)) return '平賣';
-    if (/放空|賣空|short/i.test(mix)) return '新賣';
-    if (/回補|補回|cover/i.test(mix)) return '平買';
+  function mapExitAction(dir, ts, px, baseRows, forceExitTime) {
+    const s = textCell(dir);
 
     const same = (baseRows || []).find(r => r.ts === ts && r.px === px);
-    if (same) return same.act;
+    if (same && same.act === '強制平倉') return '強制平倉';
 
     if (ts && ts.slice(8, 14) === forceExitTime) return '強制平倉';
+
+    if (/賣出|sell/i.test(s)) return '平賣';
+    if (/買進|買入|buy/i.test(s)) return '平買';
 
     return '';
   }
 
-  function convertArr2dToIndicatorRows(arr2d, header, baseRows) {
+  function convertTradeSummaryArr2d(arr2d, header, baseRows) {
     if (!arr2d || !arr2d.length) return [];
 
     const headers = (arr2d[0] || []).map(x => textCell(x));
     const forceExitTime = getForceExitTimeFromHeader(header);
 
-    const idxTs = findCol(headers, ['日期時間', '成交時間', 'datetime', 'time', '時間']);
-    const idxDate = findCol(headers, ['日期', 'date']);
-    const idxTime = findCol(headers, ['時間', 'time']);
-    const idxPx = findCol(headers, ['成交價格', '成交價', '價格', 'price']);
-    const idxAction = findCol(headers, ['動作', 'action', '交易別', '類型']);
-    const idxSide = findCol(headers, ['買賣別', '方向', 'side']);
-    const idxBS = findCol(headers, ['買賣', 'buy/sell']);
+    const idxEntryTime = findCol(headers, ['進場時間']);
+    const idxEntryDir  = findCol(headers, ['進場方向']);
+    const idxEntryPx   = findCol(headers, ['進場價格']);
+    const idxExitTime  = findCol(headers, ['出場時間']);
+    const idxExitDir   = findCol(headers, ['出場方向']);
+    const idxExitPx    = findCol(headers, ['出場價格']);
 
     const rows = [];
 
     for (let i = 1; i < arr2d.length; i++) {
       const row = arr2d[i] || [];
 
-      let ts = '';
-      if (idxTs >= 0) ts = parseAnyTs(row[idxTs]);
+      const inTs = idxEntryTime >= 0 ? parseAnyTs(row[idxEntryTime]) : '';
+      const inPx = idxEntryPx >= 0 ? normalizePrice(row[idxEntryPx]) : '';
+      const inAct = idxEntryDir >= 0 ? mapEntryAction(row[idxEntryDir]) : '';
 
-      if (!ts && idxDate >= 0 && idxTime >= 0) {
-        const d = parseAnyTs(row[idxDate]);
-        const t = parseAnyTs(row[idxTime]);
-        if (d && t) ts = d.slice(0, 8) + t.slice(8, 14);
+      if (inTs && inPx && inAct) {
+        rows.push({ ts: inTs, px: inPx, act: inAct });
       }
+
+      const outTs = idxExitTime >= 0 ? parseAnyTs(row[idxExitTime]) : '';
+      const outPx = idxExitPx >= 0 ? normalizePrice(row[idxExitPx]) : '';
+      const outAct = idxExitDir >= 0 ? mapExitAction(row[idxExitDir], outTs, outPx, baseRows, forceExitTime) : '';
+
+      if (outTs && outPx && outAct) {
+        rows.push({ ts: outTs, px: outPx, act: outAct });
+      }
+    }
+
+    rows.sort((a, b) => {
+      if (a.ts !== b.ts) return a.ts.localeCompare(b.ts);
+      if (a.px !== b.px) return Number(a.px) - Number(b.px);
+      return a.act.localeCompare(b.act);
+    });
+
+    return dedupeRows(rows);
+  }
+
+  function convertGenericSingleEventArr2d(arr2d, header, baseRows) {
+    if (!arr2d || !arr2d.length) return [];
+
+    const headers = (arr2d[0] || []).map(x => textCell(x));
+    const forceExitTime = getForceExitTimeFromHeader(header);
+
+    const idxTs = findCol(headers, ['日期時間', '成交時間', '時間', 'datetime', 'time']);
+    const idxPx = findCol(headers, ['成交價格', '價格', 'price', '成交價']);
+    const idxAction = findCol(headers, ['動作', 'action', '交易別', '類型']);
+    const idxDir = findCol(headers, ['方向', '買賣別', '買賣', 'side']);
+
+    const rows = [];
+
+    for (let i = 1; i < arr2d.length; i++) {
+      const row = arr2d[i] || [];
+
+      let ts = idxTs >= 0 ? parseAnyTs(row[idxTs]) : '';
+      let px = idxPx >= 0 ? normalizePrice(row[idxPx]) : '';
 
       if (!ts) {
         for (const cell of row) {
-          const p = parseAnyTs(cell);
-          if (p) {
-            ts = p;
-            break;
-          }
+          const t = parseAnyTs(cell);
+          if (t) { ts = t; break; }
         }
       }
-
-      if (!ts) continue;
-
-      let px = '';
-      if (idxPx >= 0) px = normalizePrice(row[idxPx]);
 
       if (!px) {
         for (const cell of row) {
-          const n = normalizePrice(cell);
-          if (n && Number(n) > 1000) {
-            px = n;
-            break;
-          }
+          const p = normalizePrice(cell);
+          if (p && Number(p) > 1000) { px = p; break; }
         }
       }
 
-      if (!px) continue;
+      if (!ts || !px) continue;
 
-      const act = guessAction(
-        idxAction >= 0 ? row[idxAction] : '',
-        idxSide >= 0 ? row[idxSide] : '',
-        idxBS >= 0 ? row[idxBS] : '',
-        ts, px, baseRows, forceExitTime
-      );
+      const actRaw = idxAction >= 0 ? textCell(row[idxAction]) : '';
+      const dirRaw = idxDir >= 0 ? textCell(row[idxDir]) : '';
+      let act = '';
+
+      if (/新買/.test(actRaw)) act = '新買';
+      else if (/平賣/.test(actRaw)) act = '平賣';
+      else if (/新賣/.test(actRaw)) act = '新賣';
+      else if (/平買/.test(actRaw)) act = '平買';
+      else if (/強制平倉|強平/.test(actRaw)) act = '強制平倉';
+      else if (/買進|買入/i.test(dirRaw)) act = '新買';
+      else if (/賣出|sell/i.test(dirRaw)) act = '平賣';
+      else {
+        const same = (baseRows || []).find(r => r.ts === ts && r.px === px);
+        if (same) act = same.act;
+        else if (ts.slice(8, 14) === forceExitTime) act = '強制平倉';
+      }
 
       if (!ACTIONS.has(act)) continue;
-
       rows.push({ ts, px, act });
     }
 
@@ -349,6 +394,24 @@
     return dedupeRows(rows);
   }
 
+  function convertArr2dToIndicatorRows(arr2d, header, baseRows) {
+    const headers = (arr2d[0] || []).map(x => textCell(x));
+
+    const isTradeSummary =
+      headers.includes('進場時間') &&
+      headers.includes('進場方向') &&
+      headers.includes('進場價格') &&
+      headers.includes('出場時間') &&
+      headers.includes('出場方向') &&
+      headers.includes('出場價格');
+
+    if (isTradeSummary) {
+      return convertTradeSummaryArr2d(arr2d, header, baseRows);
+    }
+
+    return convertGenericSingleEventArr2d(arr2d, header, baseRows);
+  }
+
   function downloadTextFile(filename, content) {
     const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
@@ -359,10 +422,6 @@
     a.click();
     a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
-  }
-
-  function setPreview(el, txt) {
-    el.textContent = txt || '';
   }
 
   function intersectRange(baseRows, testRows) {
@@ -467,11 +526,10 @@
         return;
       }
 
-      let arr2d = [];
       const txt = await readAsText(file);
-      arr2d = arr2dFromCsvText(txt);
+      const arr2d = parseDelimitedText(txt);
 
-      const baseRows = state.headerText ? parseIndicatorTxt(state.headerText).rows : [];
+      const baseRows = state.headerSourceRawTxt ? parseIndicatorTxt(state.headerSourceRawTxt).rows : [];
       const rows = convertArr2dToIndicatorRows(arr2d, state.headerText, baseRows);
       const out = buildIndicatorTxt(state.headerText, rows);
 
@@ -481,7 +539,7 @@
       alert(`檔案2 轉換完成，共 ${rows.length} 筆。`);
     } catch (err) {
       console.error(err);
-      alert('檔案2 轉換失敗，請打開 F12 Console 看錯誤。');
+      alert('檔案2 轉換失敗，請開 F12 Console 看錯誤。');
     }
   }
 
@@ -500,10 +558,10 @@
         arr2d = await arr2dFromXlsxFile(file);
       } else {
         const txt = await readAsText(file);
-        arr2d = arr2dFromCsvText(txt);
+        arr2d = parseDelimitedText(txt);
       }
 
-      const baseRows = state.headerText ? parseIndicatorTxt(state.headerText).rows : [];
+      const baseRows = state.headerSourceRawTxt ? parseIndicatorTxt(state.headerSourceRawTxt).rows : [];
       const rows = convertArr2dToIndicatorRows(arr2d, state.headerText, baseRows);
       const out = buildIndicatorTxt(state.headerText, rows);
 
@@ -513,7 +571,7 @@
       alert(`檔案3 轉換完成，共 ${rows.length} 筆。`);
     } catch (err) {
       console.error(err);
-      alert('檔案3 轉換失敗，請打開 F12 Console 看錯誤。');
+      alert('檔案3 轉換失敗，請開 F12 Console 看錯誤。');
     }
   }
 
@@ -592,12 +650,13 @@
       renderCompareTable(compare.result);
     } catch (err) {
       console.error(err);
-      alert('比對失敗，請打開 F12 Console 看錯誤。');
+      alert('比對失敗，請開 F12 Console 看錯誤。');
     }
   }
 
   function clearAll() {
     state.headerText = '';
+    state.headerSourceRawTxt = '';
     state.convertedDetailTxt = '';
     state.convertedAllTxt = '';
     state.compareBaseTxt = '';
@@ -615,6 +674,7 @@
     els.nameCompareBase.textContent = '尚未載入';
     els.nameCompareTarget.textContent = '尚未載入';
 
+    setPreview(els.headerSourcePreview, '');
     setPreview(els.detailPreview, '');
     setPreview(els.allPreview, '');
     setPreview(els.compareBasePreview, '');
@@ -629,11 +689,15 @@
     els.nameHeaderSource.textContent = file ? file.name : '尚未載入';
     if (!file) {
       state.headerText = '';
+      state.headerSourceRawTxt = '';
+      setPreview(els.headerSourcePreview, '');
       return;
     }
 
     const txt = await readAsText(file);
+    state.headerSourceRawTxt = txt;
     state.headerText = getHeaderFromTxt(txt);
+    setPreview(els.headerSourcePreview, txt);
   });
 
   els.fileTradeDetail.addEventListener('change', (e) => {
