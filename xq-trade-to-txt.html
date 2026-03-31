@@ -13,7 +13,7 @@
       color:#222;
     }
     .wrap{
-      max-width:1450px;
+      max-width:1500px;
       margin:0 auto;
     }
     .title{
@@ -121,6 +121,7 @@
     .ok{ color:#198754; font-weight:700; }
     .bad{ color:#dc3545; font-weight:700; }
     .neu{ color:#6c757d; font-weight:700; }
+    .warn{ color:#b45309; font-weight:700; }
 
     table{
       width:100%;
@@ -159,7 +160,7 @@
     <h1 class="title">XQ交易明細轉TXT</h1>
     <p class="sub">
       第一層：先把檔案2交易明細轉成統一的「指標TXT格式」。<br>
-      第二層：再用「TXT 對 TXT」逐筆比對同區間內的時間、點位、動作是否相符。
+      第二層：用 TXT 對 TXT 比對，並列出真正缺漏筆數與逐筆重新對齊結果。
     </p>
 
     <div class="card">
@@ -169,8 +170,8 @@
         <div class="filebox">
           <p class="block-title">檔案1：指標輸出TXT（header來源）</p>
           <p class="hint">
-            用途：取第一行參數列，讓檔案2轉出時沿用相同 header。<br>
-            同時下方也會完整顯示你載入的原始 TXT。
+            取第一行參數列，讓檔案2轉出時沿用相同 header。<br>
+            下方會完整顯示你載入的原始 TXT。
           </p>
           <input id="fileHeaderSource" type="file" accept=".txt,.csv,text/plain" />
           <div id="nameHeaderSource" class="fname">尚未載入</div>
@@ -201,7 +202,7 @@
     </div>
 
     <div class="card">
-      <h2 class="section-title green">第二層：TXT 對 TXT 逐筆比對</h2>
+      <h2 class="section-title green">第二層：TXT 對 TXT 比對</h2>
 
       <div class="grid3">
         <div class="filebox">
@@ -213,9 +214,7 @@
 
         <div class="filebox">
           <p class="block-title">右欄：測試TXT</p>
-          <p class="hint">
-            可直接載入一個 TXT，或按按鈕直接套用「檔案2轉出TXT」。
-          </p>
+          <p class="hint">可直接載入 TXT，或直接套用檔案2轉出結果。</p>
           <input id="fileCompareTarget" type="file" accept=".txt,.csv,text/plain" />
           <div id="nameCompareTarget" class="fname">尚未載入</div>
           <div class="action-row">
@@ -227,7 +226,7 @@
           <p class="block-title">比對操作</p>
           <p class="hint">先載入左欄基準TXT，再載入右欄測試TXT，按下開始比對。</p>
           <div class="action-row">
-            <button id="btnCompare" class="btn green">開始逐筆比對</button>
+            <button id="btnCompare" class="btn green">開始比對</button>
             <button id="btnClearAll" class="btn gray">全部清除</button>
           </div>
         </div>
@@ -250,14 +249,25 @@
       </div>
     </div>
 
+    <div class="grid2">
+      <div class="card">
+        <p class="block-title">左有右無</p>
+        <div id="leftOnlyPreview" class="mono"></div>
+      </div>
+      <div class="card">
+        <p class="block-title">右有左無</p>
+        <div id="rightOnlyPreview" class="mono"></div>
+      </div>
+    </div>
+
     <div class="card">
-      <p class="block-title">逐筆比對表</p>
+      <p class="block-title">逐筆比對表（重新對齊版）</p>
       <div class="table-wrap">
         <table>
           <thead>
             <tr>
               <th style="width:70px">序號</th>
-              <th style="width:100px">結果</th>
+              <th style="width:120px">結果</th>
               <th>左欄：基準TXT</th>
               <th>右欄：測試TXT</th>
               <th style="width:120px">時間</th>
@@ -273,6 +283,6 @@
     </div>
   </div>
 
-  <script src="xq-trade-to-txt.js?v=1150331-v5"></script>
+  <script src="xq-trade-to-txt.js?v=1150331-v6"></script>
 </body>
 </html>
