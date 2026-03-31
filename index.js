@@ -350,7 +350,7 @@
 
   const WEEK_KEYS = ['wk1', 'wk2', 'wk3', 'wk4'];
   const MONTH_KEYS = ['m2', 'm3', 'm4', 'm5', 'm6'];
-  const YEAR_KEYS = ['y1'];
+  const YEAR_KEYS = ['y1', 'y2', 'y3', 'y4', 'y5', 'y6'];
   const ALL_KEYS = WEEK_KEYS.concat(MONTH_KEYS).concat(YEAR_KEYS);
 
   function resetAll(key) {
@@ -590,7 +590,6 @@
           }
 
           const mergedText = merged.canon;
-
           const rows = parseCanon(mergedText);
           const start8_fallback = rows.length ? rows[0].ts.slice(0, 8) : null;
           const end8_fallback = rows.length ? rows[rows.length - 1].ts.slice(0, 8) : null;
