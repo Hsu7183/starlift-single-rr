@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>三劍客量化科技(籌備中)</title>
   <meta name="robots" content="noindex,nofollow" />
-  <!-- CSP + 反嵌入 -->
   <meta http-equiv="Content-Security-Policy"
     content="default-src 'self';
              script-src 'self' https://unpkg.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://byhbmmnacezzgkwfkozs.supabase.co 'unsafe-inline';
@@ -87,7 +86,13 @@
     .card-title.gray{ color:#6c757d }
     .card-title.black{ color:#111 }
 
-    .card-desc{ margin:0; color:#666; font-size:14px; line-height:1.5; text-align:left }
+    .card-desc{
+      margin:0;
+      color:#666;
+      font-size:14px;
+      line-height:1.6;
+      text-align:left;
+    }
 
     .lines{ margin-top:2px }
 
@@ -193,7 +198,6 @@
 <body translate="no">
   <div id="shield"><div><h3>頁面受保護</h3>偵測到嘗試檢視原始碼或開發者工具，請關閉後重新整理。</div></div>
 
-  <!-- (A) 密碼門檻 -->
   <div id="gate" class="gate">
     <div class="row" style="margin-top:12px;max-width:420px">
       <input id="pwd" type="password" placeholder="密碼 / Password" autocomplete="current-password" />
@@ -203,13 +207,11 @@
     </div>
   </div>
 
-  <!-- (B) 內容 -->
   <div id="app" class="hidden">
     <hr>
 
     <h3 class="section-title-red">交易策略</h3>
     <div class="strategy-grid">
-      <!-- 1) 順勢型 -->
       <div class="strategy-col">
         <p class="subcat">順勢型</p>
 
@@ -402,7 +404,6 @@
         </a>
       </div>
 
-      <!-- 2) 逆勢型 -->
       <div class="strategy-col">
         <p class="subcat">逆勢型</p>
         <a class="card" href="etf-00909.html">
@@ -500,7 +501,6 @@
         </a>
       </div>
 
-      <!-- 3) 盤整型 -->
       <div class="strategy-col">
         <p class="subcat">盤整型</p>
       </div>
@@ -524,7 +524,7 @@
 
       <a class="card" href="xq-trade-to-txt.html">
         <p class="card-title blue big">XQ交易明細轉TXT</p>
-        <p class="card-desc"></p>
+        <p class="card-desc">將 XQ 交易明細快速轉為標準指標 TXT，並支援 TXT 對 TXT 比對、缺漏筆數檢查與重新對齊分析。</p>
       </a>
     </div>
 
