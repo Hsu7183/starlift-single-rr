@@ -15,186 +15,231 @@
              base-uri 'none';
              form-action 'self'">
   <style>
-    :root { --card-r:12px; }
-    body{
-      font-family: Arial,"微軟正黑體",sans-serif;
-      margin:20px;
-      background:#f8f9fa;
-      color:#333;
-      -webkit-font-smoothing:antialiased;
-    }
-    hr{
-      border:none;
-      border-top:1px solid #ddd;
-      margin:20px auto;
-      max-width:1100px;
+    :root{
+      --bg:#f5f7fb;
+      --card:#ffffff;
+      --border:#e6ebf2;
+      --text:#1f2937;
+      --muted:#6b7280;
+      --red:#d32f2f;
+      --blue:#2563eb;
+      --green:#10b981;
+      --shadow:0 10px 24px rgba(15,23,42,.06);
+      --shadow-hover:0 16px 34px rgba(15,23,42,.10);
+      --radius:16px;
     }
 
-    .section-title-red{
-      max-width:1100px;
-      margin:10px auto 12px;
-      font-size:20px;
-      font-weight:800;
-      color:#d32f2f;
-      letter-spacing:.5px;
+    *{ box-sizing:border-box; }
+
+    body{
+      font-family: Arial,"微軟正黑體",sans-serif;
+      margin:0;
+      background:linear-gradient(180deg,#f8fafc 0%, #f5f7fb 100%);
+      color:var(--text);
+      -webkit-font-smoothing:antialiased;
     }
-    .section-title-blue{
-      max-width:1100px;
-      margin:10px auto 12px;
-      font-size:20px;
-      font-weight:800;
-      color:#0d6efd;
-      letter-spacing:.5px;
+
+    .page{
+      max-width:1180px;
+      margin:0 auto;
+      padding:22px 18px 42px;
     }
+
+    hr{
+      border:none;
+      border-top:1px solid #e5e7eb;
+      margin:20px 0;
+    }
+
+    .section-title-red,
+    .section-title-blue,
     .section-title-black{
-      max-width:1100px;
-      margin:10px auto 12px;
-      font-size:20px;
+      margin:10px 0 14px;
+      font-size:22px;
       font-weight:800;
-      color:#111;
-      letter-spacing:.5px;
+      letter-spacing:.4px;
+    }
+    .section-title-red{ color:var(--red); }
+    .section-title-blue{ color:var(--blue); }
+    .section-title-black{ color:#111; }
+
+    .section-note{
+      color:var(--muted);
+      font-size:13px;
+      margin:-6px 0 12px;
     }
 
     .strategy-grid{
       display:grid;
       grid-template-columns:repeat(3,1fr);
       gap:20px;
-      max-width:1100px;
-      margin:0 auto 28px;
+      margin:0 0 30px;
     }
+
     .strategy-col{
       display:flex;
       flex-direction:column;
-      gap:12px;
+      gap:14px;
     }
+
     .subcat{
-      font-weight:700;
-      font-size:16px;
-      color:#c62828;
-      margin:0 0 4px 0;
+      margin:0 0 2px;
       text-align:center;
+      font-size:16px;
+      font-weight:800;
+      color:#b91c1c;
+      letter-spacing:.2px;
+    }
+
+    .subcat-desc{
+      margin:-2px 0 0;
+      text-align:center;
+      font-size:12px;
+      color:var(--muted);
+      line-height:1.5;
     }
 
     .nav{
       display:grid;
       grid-template-columns:repeat(3,1fr);
       gap:20px;
-      max-width:1100px;
-      margin:0 auto 28px;
+      margin:0 0 28px;
     }
 
     a.card{
       display:block;
-      background:#fff;
+      background:var(--card);
       padding:18px 16px;
-      border-radius:12px;
-      box-shadow:0 2px 8px rgba(0,0,0,.08);
+      border-radius:var(--radius);
+      box-shadow:var(--shadow);
       text-decoration:none;
       color:inherit;
-      transition:transform .15s, box-shadow .15s;
-      border:1px solid #e5e7eb;
+      transition:transform .16s ease, box-shadow .16s ease, border-color .16s ease;
+      border:1px solid var(--border);
     }
+
     a.card:hover{
       transform:translateY(-4px);
-      box-shadow:0 10px 22px rgba(0,0,0,.12);
+      box-shadow:var(--shadow-hover);
+      border-color:#d7dfea;
+    }
+
+    .strategy-card{
+      min-height:298px;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,1) 0%, rgba(250,251,255,1) 100%);
     }
 
     .card-title{
-      font-weight:700;
-      font-size:18px;
-      margin:0 0 8px 0;
+      font-weight:800;
+      font-size:19px;
+      margin:0 0 10px 0;
       text-align:center;
+      letter-spacing:.2px;
     }
-    .card-title.big{ font-size:22px; }
-    .card-title.red{ color:#d32f2f; }
-    .card-title.blue{ color:#0d6efd; }
-    .card-title.gray{ color:#6c757d; }
+    .card-title.big{ font-size:26px; }
+    .card-title.red{ color:var(--red); }
+    .card-title.blue{ color:var(--blue); }
     .card-title.black{ color:#111; }
 
     .card-desc{
-      margin:6px 0 0 0;
-      color:#666;
+      margin:8px 0 0;
+      color:var(--muted);
       font-size:13px;
-      line-height:1.6;
+      line-height:1.65;
       text-align:left;
     }
 
-    .lines{ margin-top:2px; }
+    .lines{
+      margin-top:4px;
+      padding-top:2px;
+    }
 
     .line{
       display:grid;
-      grid-template-columns:1.05fr 2.15fr 0.90fr 0.90fr;
+      grid-template-columns:1.05fr 1.9fr 0.85fr 0.85fr;
       align-items:center;
       margin:2px 0;
       font-size:12px;
       column-gap:6px;
+      min-height:20px;
     }
+
     .label{
-      text-align:center;
-      color:#111;
+      text-align:left;
+      color:#111827;
       white-space:nowrap;
+      font-weight:600;
     }
+
     .range{
       text-align:center;
-      color:#999;
+      color:#9ca3af;
       font-size:10px;
       white-space:nowrap;
     }
-    .val{
-      text-align:right;
-      font-weight:700;
-      font-size:12px;
-    }
-    .val.pos{ color:#d32f2f; }
-    .val.neg{ color:#10b981; }
-    .val.neu{ color:#666; }
 
-    .avg{
+    .val, .avg{
       text-align:right;
-      font-weight:700;
+      font-weight:800;
       font-size:12px;
     }
-    .avg.pos{ color:#d32f2f; }
-    .avg.neg{ color:#10b981; }
-    .avg.neu{ color:#666; }
+
+    .val.pos, .avg.pos{ color:#d32f2f; }
+    .val.neg, .avg.neg{ color:#10b981; }
+    .val.neu, .avg.neu{ color:#6b7280; }
 
     .period{
-      margin-top:6px;
-      color:#666;
+      margin-top:10px;
+      color:#6b7280;
       font-size:12px;
       text-align:center;
+      padding-top:6px;
+      border-top:1px dashed #e5e7eb;
+    }
+
+    .status{
+      margin-top:6px;
+      text-align:center;
+      font-size:12px;
+      color:#6b7280;
+      min-height:18px;
     }
 
     .gate{
-      max-width:960px;
-      margin:20px auto;
+      max-width:980px;
+      margin:28px auto;
       background:#fff;
       border:1px solid #e5e7eb;
-      border-radius:12px;
-      box-shadow:0 2px 10px rgba(0,0,0,.05);
-      padding:16px;
+      border-radius:16px;
+      box-shadow:0 10px 24px rgba(15,23,42,.06);
+      padding:18px;
     }
+
     .row{
       display:flex;
       gap:12px;
       align-items:center;
       flex-wrap:wrap;
     }
+
     .btn{
-      background:#0d6efd;
+      background:#2563eb;
       color:#fff;
       border:0;
-      border-radius:10px;
+      border-radius:12px;
       padding:10px 14px;
       cursor:pointer;
+      font-weight:700;
     }
-    .btn.gray{ background:#6c757d; }
+    .btn.gray{ background:#6b7280; }
 
     input[type="password"]{
       width:100%;
-      padding:10px;
-      border:1px solid #e5e7eb;
-      border-radius:8px;
+      padding:11px 12px;
+      border:1px solid #dbe3ee;
+      border-radius:10px;
+      font-size:14px;
     }
 
     .error{
@@ -203,6 +248,7 @@
       margin-top:6px;
       display:none;
     }
+
     .hidden{ display:none; }
 
     html,body{
@@ -211,10 +257,12 @@
       user-select:none;
       -webkit-touch-callout:none;
     }
+
     a,button,input{
       -webkit-user-select:auto;
       user-select:auto;
     }
+
     #shield{
       position:fixed;
       inset:0;
@@ -228,11 +276,11 @@
       padding:24px;
     }
 
-    @media (max-width: 980px){
-      .strategy-grid,
-      .nav{
+    @media (max-width: 1080px){
+      .strategy-grid, .nav{
         grid-template-columns:1fr;
       }
+      .strategy-card{ min-height:auto; }
     }
   </style>
 </head>
@@ -254,167 +302,177 @@
   </div>
 
   <div id="app" class="hidden">
-    <hr>
+    <div class="page">
+      <hr>
 
-    <h3 class="section-title-red">交易策略</h3>
+      <h3 class="section-title-red">交易策略</h3>
+      <div class="section-note">依策略類型集中顯示近期報酬率與可用歷史期間。資料不足的週期將自動隱藏。</div>
 
-    <div class="strategy-grid">
+      <div class="strategy-grid">
 
-      <div class="strategy-col">
-        <p class="subcat">趨勢突破（主力策略）</p>
+        <div class="strategy-col">
+          <p class="subcat">趨勢突破（主力策略）</p>
+          <p class="subcat-desc">以主升、主跌與突破延續為核心，適合做為主要觀察與對照策略。</p>
 
-        <a class="card" href="0807.html">
-          <p class="card-title red">台指近-0807版本</p>
-          <div class="lines">
-            <p class="line"><span class="label">近1週報酬率</span><span id="wk1-range-0807" class="range">—</span><span id="wk1-0807" class="val neu">—</span><span id="wk1-avg-0807" class="avg neu">—</span></p>
-            <p class="line"><span class="label">近2週報酬率</span><span id="wk2-range-0807" class="range">—</span><span id="wk2-0807" class="val neu">—</span><span id="wk2-avg-0807" class="avg neu">—</span></p>
-            <p class="line"><span class="label">近3週報酬率</span><span id="wk3-range-0807" class="range">—</span><span id="wk3-0807" class="val neu">—</span><span id="wk3-avg-0807" class="avg neu">—</span></p>
-            <p class="line"><span class="label">近4週報酬率</span><span id="wk4-range-0807" class="range">—</span><span id="wk4-0807" class="val neu">—</span><span id="wk4-avg-0807" class="avg neu">—</span></p>
+          <a class="card strategy-card" href="0807.html">
+            <p class="card-title red">台指近-0807版本</p>
+            <div class="lines">
+              <p class="line" id="row-wk1-0807"><span class="label">近1週報酬率</span><span id="wk1-range-0807" class="range">—</span><span id="wk1-0807" class="val neu">—</span><span id="wk1-avg-0807" class="avg neu">—</span></p>
+              <p class="line" id="row-wk2-0807"><span class="label">近2週報酬率</span><span id="wk2-range-0807" class="range">—</span><span id="wk2-0807" class="val neu">—</span><span id="wk2-avg-0807" class="avg neu">—</span></p>
+              <p class="line" id="row-wk3-0807"><span class="label">近3週報酬率</span><span id="wk3-range-0807" class="range">—</span><span id="wk3-0807" class="val neu">—</span><span id="wk3-avg-0807" class="avg neu">—</span></p>
+              <p class="line" id="row-wk4-0807"><span class="label">近4週報酬率</span><span id="wk4-range-0807" class="range">—</span><span id="wk4-0807" class="val neu">—</span><span id="wk4-avg-0807" class="avg neu">—</span></p>
 
-            <p class="line"><span class="label">近2月報酬率</span><span id="m2-range-0807" class="range">—</span><span id="m2-0807" class="val neu">—</span><span id="m2-avg-0807" class="avg neu">—</span></p>
-            <p class="line"><span class="label">近3月報酬率</span><span id="m3-range-0807" class="range">—</span><span id="m3-0807" class="val neu">—</span><span id="m3-avg-0807" class="avg neu">—</span></p>
-            <p class="line"><span class="label">近4月報酬率</span><span id="m4-range-0807" class="range">—</span><span id="m4-0807" class="val neu">—</span><span id="m4-avg-0807" class="avg neu">—</span></p>
-            <p class="line"><span class="label">近5月報酬率</span><span id="m5-range-0807" class="range">—</span><span id="m5-0807" class="val neu">—</span><span id="m5-avg-0807" class="avg neu">—</span></p>
-            <p class="line"><span class="label">近6月報酬率</span><span id="m6-range-0807" class="range">—</span><span id="m6-0807" class="val neu">—</span><span id="m6-avg-0807" class="avg neu">—</span></p>
+              <p class="line" id="row-m2-0807"><span class="label">近2月報酬率</span><span id="m2-range-0807" class="range">—</span><span id="m2-0807" class="val neu">—</span><span id="m2-avg-0807" class="avg neu">—</span></p>
+              <p class="line" id="row-m3-0807"><span class="label">近3月報酬率</span><span id="m3-range-0807" class="range">—</span><span id="m3-0807" class="val neu">—</span><span id="m3-avg-0807" class="avg neu">—</span></p>
+              <p class="line" id="row-m4-0807"><span class="label">近4月報酬率</span><span id="m4-range-0807" class="range">—</span><span id="m4-0807" class="val neu">—</span><span id="m4-avg-0807" class="avg neu">—</span></p>
+              <p class="line" id="row-m5-0807"><span class="label">近5月報酬率</span><span id="m5-range-0807" class="range">—</span><span id="m5-0807" class="val neu">—</span><span id="m5-avg-0807" class="avg neu">—</span></p>
+              <p class="line" id="row-m6-0807"><span class="label">近6月報酬率</span><span id="m6-range-0807" class="range">—</span><span id="m6-0807" class="val neu">—</span><span id="m6-avg-0807" class="avg neu">—</span></p>
 
-            <p class="line" id="row-y1-0807"><span class="label">近1年報酬率</span><span id="y1-range-0807" class="range">—</span><span id="y1-0807" class="val neu">—</span><span id="y1-avg-0807" class="avg neu">—</span></p>
-            <p class="line" id="row-y2-0807"><span class="label">近2年報酬率</span><span id="y2-range-0807" class="range">—</span><span id="y2-0807" class="val neu">—</span><span id="y2-avg-0807" class="avg neu">—</span></p>
-            <p class="line" id="row-y3-0807"><span class="label">近3年報酬率</span><span id="y3-range-0807" class="range">—</span><span id="y3-0807" class="val neu">—</span><span id="y3-avg-0807" class="avg neu">—</span></p>
-            <p class="line" id="row-y4-0807"><span class="label">近4年報酬率</span><span id="y4-range-0807" class="range">—</span><span id="y4-0807" class="val neu">—</span><span id="y4-avg-0807" class="avg neu">—</span></p>
-            <p class="line" id="row-y5-0807"><span class="label">近5年報酬率</span><span id="y5-range-0807" class="range">—</span><span id="y5-0807" class="val neu">—</span><span id="y5-avg-0807" class="avg neu">—</span></p>
-            <p class="line" id="row-y6-0807"><span class="label">近6年報酬率</span><span id="y6-range-0807" class="range">—</span><span id="y6-0807" class="val neu">—</span><span id="y6-avg-0807" class="avg neu">—</span></p>
+              <p class="line" id="row-y1-0807"><span class="label">近1年報酬率</span><span id="y1-range-0807" class="range">—</span><span id="y1-0807" class="val neu">—</span><span id="y1-avg-0807" class="avg neu">—</span></p>
+              <p class="line" id="row-y2-0807"><span class="label">近2年報酬率</span><span id="y2-range-0807" class="range">—</span><span id="y2-0807" class="val neu">—</span><span id="y2-avg-0807" class="avg neu">—</span></p>
+              <p class="line" id="row-y3-0807"><span class="label">近3年報酬率</span><span id="y3-range-0807" class="range">—</span><span id="y3-0807" class="val neu">—</span><span id="y3-avg-0807" class="avg neu">—</span></p>
+              <p class="line" id="row-y4-0807"><span class="label">近4年報酬率</span><span id="y4-range-0807" class="range">—</span><span id="y4-0807" class="val neu">—</span><span id="y4-avg-0807" class="avg neu">—</span></p>
+              <p class="line" id="row-y5-0807"><span class="label">近5年報酬率</span><span id="y5-range-0807" class="range">—</span><span id="y5-0807" class="val neu">—</span><span id="y5-avg-0807" class="avg neu">—</span></p>
+              <p class="line" id="row-y6-0807"><span class="label">近6年報酬率</span><span id="y6-range-0807" class="range">—</span><span id="y6-0807" class="val neu">—</span><span id="y6-avg-0807" class="avg neu">—</span></p>
 
-            <p class="period">期間：<span id="period-0807">—</span></p>
-          </div>
+              <p class="period">期間：<span id="period-0807">—</span></p>
+              <div class="status" id="status-0807"></div>
+            </div>
+          </a>
+
+          <a class="card strategy-card" href="1001.html">
+            <p class="card-title red">台指近-1001版本</p>
+            <div class="lines">
+              <p class="line" id="row-wk1-1001"><span class="label">近1週報酬率</span><span id="wk1-range-1001" class="range">—</span><span id="wk1-1001" class="val neu">—</span><span id="wk1-avg-1001" class="avg neu">—</span></p>
+              <p class="line" id="row-wk2-1001"><span class="label">近2週報酬率</span><span id="wk2-range-1001" class="range">—</span><span id="wk2-1001" class="val neu">—</span><span id="wk2-avg-1001" class="avg neu">—</span></p>
+              <p class="line" id="row-wk3-1001"><span class="label">近3週報酬率</span><span id="wk3-range-1001" class="range">—</span><span id="wk3-1001" class="val neu">—</span><span id="wk3-avg-1001" class="avg neu">—</span></p>
+              <p class="line" id="row-wk4-1001"><span class="label">近4週報酬率</span><span id="wk4-range-1001" class="range">—</span><span id="wk4-1001" class="val neu">—</span><span id="wk4-avg-1001" class="avg neu">—</span></p>
+
+              <p class="line" id="row-m2-1001"><span class="label">近2月報酬率</span><span id="m2-range-1001" class="range">—</span><span id="m2-1001" class="val neu">—</span><span id="m2-avg-1001" class="avg neu">—</span></p>
+              <p class="line" id="row-m3-1001"><span class="label">近3月報酬率</span><span id="m3-range-1001" class="range">—</span><span id="m3-1001" class="val neu">—</span><span id="m3-avg-1001" class="avg neu">—</span></p>
+              <p class="line" id="row-m4-1001"><span class="label">近4月報酬率</span><span id="m4-range-1001" class="range">—</span><span id="m4-1001" class="val neu">—</span><span id="m4-avg-1001" class="avg neu">—</span></p>
+              <p class="line" id="row-m5-1001"><span class="label">近5月報酬率</span><span id="m5-range-1001" class="range">—</span><span id="m5-1001" class="val neu">—</span><span id="m5-avg-1001" class="avg neu">—</span></p>
+              <p class="line" id="row-m6-1001"><span class="label">近6月報酬率</span><span id="m6-range-1001" class="range">—</span><span id="m6-1001" class="val neu">—</span><span id="m6-avg-1001" class="avg neu">—</span></p>
+
+              <p class="line" id="row-y1-1001"><span class="label">近1年報酬率</span><span id="y1-range-1001" class="range">—</span><span id="y1-1001" class="val neu">—</span><span id="y1-avg-1001" class="avg neu">—</span></p>
+              <p class="line" id="row-y2-1001"><span class="label">近2年報酬率</span><span id="y2-range-1001" class="range">—</span><span id="y2-1001" class="val neu">—</span><span id="y2-avg-1001" class="avg neu">—</span></p>
+              <p class="line" id="row-y3-1001"><span class="label">近3年報酬率</span><span id="y3-range-1001" class="range">—</span><span id="y3-1001" class="val neu">—</span><span id="y3-avg-1001" class="avg neu">—</span></p>
+              <p class="line" id="row-y4-1001"><span class="label">近4年報酬率</span><span id="y4-range-1001" class="range">—</span><span id="y4-1001" class="val neu">—</span><span id="y4-avg-1001" class="avg neu">—</span></p>
+              <p class="line" id="row-y5-1001"><span class="label">近5年報酬率</span><span id="y5-range-1001" class="range">—</span><span id="y5-1001" class="val neu">—</span><span id="y5-avg-1001" class="avg neu">—</span></p>
+              <p class="line" id="row-y6-1001"><span class="label">近6年報酬率</span><span id="y6-range-1001" class="range">—</span><span id="y6-1001" class="val neu">—</span><span id="y6-avg-1001" class="avg neu">—</span></p>
+
+              <p class="period">期間：<span id="period-1001">—</span></p>
+              <div class="status" id="status-1001"></div>
+            </div>
+          </a>
+        </div>
+
+        <div class="strategy-col">
+          <p class="subcat">混合策略（進階）</p>
+          <p class="subcat-desc">整合多種邏輯與濾網，通常報酬更積極，但波動與風格切換也更明顯。</p>
+
+          <a class="card strategy-card" href="1001plusplus.html">
+            <p class="card-title blue">台指近-1001plus+版本</p>
+            <div class="lines">
+              <p class="line" id="row-wk1-1001pp"><span class="label">近1週報酬率</span><span id="wk1-range-1001pp" class="range">—</span><span id="wk1-1001pp" class="val neu">—</span><span id="wk1-avg-1001pp" class="avg neu">—</span></p>
+              <p class="line" id="row-wk2-1001pp"><span class="label">近2週報酬率</span><span id="wk2-range-1001pp" class="range">—</span><span id="wk2-1001pp" class="val neu">—</span><span id="wk2-avg-1001pp" class="avg neu">—</span></p>
+              <p class="line" id="row-wk3-1001pp"><span class="label">近3週報酬率</span><span id="wk3-range-1001pp" class="range">—</span><span id="wk3-1001pp" class="val neu">—</span><span id="wk3-avg-1001pp" class="avg neu">—</span></p>
+              <p class="line" id="row-wk4-1001pp"><span class="label">近4週報酬率</span><span id="wk4-range-1001pp" class="range">—</span><span id="wk4-1001pp" class="val neu">—</span><span id="wk4-avg-1001pp" class="avg neu">—</span></p>
+
+              <p class="line" id="row-m2-1001pp"><span class="label">近2月報酬率</span><span id="m2-range-1001pp" class="range">—</span><span id="m2-1001pp" class="val neu">—</span><span id="m2-avg-1001pp" class="avg neu">—</span></p>
+              <p class="line" id="row-m3-1001pp"><span class="label">近3月報酬率</span><span id="m3-range-1001pp" class="range">—</span><span id="m3-1001pp" class="val neu">—</span><span id="m3-avg-1001pp" class="avg neu">—</span></p>
+              <p class="line" id="row-m4-1001pp"><span class="label">近4月報酬率</span><span id="m4-range-1001pp" class="range">—</span><span id="m4-1001pp" class="val neu">—</span><span id="m4-avg-1001pp" class="avg neu">—</span></p>
+              <p class="line" id="row-m5-1001pp"><span class="label">近5月報酬率</span><span id="m5-range-1001pp" class="range">—</span><span id="m5-1001pp" class="val neu">—</span><span id="m5-avg-1001pp" class="avg neu">—</span></p>
+              <p class="line" id="row-m6-1001pp"><span class="label">近6月報酬率</span><span id="m6-range-1001pp" class="range">—</span><span id="m6-1001pp" class="val neu">—</span><span id="m6-avg-1001pp" class="avg neu">—</span></p>
+
+              <p class="line" id="row-y1-1001pp"><span class="label">近1年報酬率</span><span id="y1-range-1001pp" class="range">—</span><span id="y1-1001pp" class="val neu">—</span><span id="y1-avg-1001pp" class="avg neu">—</span></p>
+              <p class="line" id="row-y2-1001pp"><span class="label">近2年報酬率</span><span id="y2-range-1001pp" class="range">—</span><span id="y2-1001pp" class="val neu">—</span><span id="y2-avg-1001pp" class="avg neu">—</span></p>
+              <p class="line" id="row-y3-1001pp"><span class="label">近3年報酬率</span><span id="y3-range-1001pp" class="range">—</span><span id="y3-1001pp" class="val neu">—</span><span id="y3-avg-1001pp" class="avg neu">—</span></p>
+              <p class="line" id="row-y4-1001pp"><span class="label">近4年報酬率</span><span id="y4-range-1001pp" class="range">—</span><span id="y4-1001pp" class="val neu">—</span><span id="y4-avg-1001pp" class="avg neu">—</span></p>
+              <p class="line" id="row-y5-1001pp"><span class="label">近5年報酬率</span><span id="y5-range-1001pp" class="range">—</span><span id="y5-1001pp" class="val neu">—</span><span id="y5-avg-1001pp" class="avg neu">—</span></p>
+              <p class="line" id="row-y6-1001pp"><span class="label">近6年報酬率</span><span id="y6-range-1001pp" class="range">—</span><span id="y6-1001pp" class="val neu">—</span><span id="y6-avg-1001pp" class="avg neu">—</span></p>
+
+              <p class="period">期間：<span id="period-1001pp">—</span></p>
+              <div class="status" id="status-1001pp"></div>
+            </div>
+          </a>
+        </div>
+
+        <div class="strategy-col">
+          <p class="subcat">結構策略（未來主軸）</p>
+          <p class="subcat-desc">偏重型態、結構與情境判讀，適合未來策略擴充與新邏輯實驗的主軸分類。</p>
+
+          <a class="card strategy-card" href="0313.html">
+            <p class="card-title black">台指近-0313版本</p>
+            <div class="lines">
+              <p class="line" id="row-wk1-0313"><span class="label">近1週報酬率</span><span id="wk1-range-0313" class="range">—</span><span id="wk1-0313" class="val neu">—</span><span id="wk1-avg-0313" class="avg neu">—</span></p>
+              <p class="line" id="row-wk2-0313"><span class="label">近2週報酬率</span><span id="wk2-range-0313" class="range">—</span><span id="wk2-0313" class="val neu">—</span><span id="wk2-avg-0313" class="avg neu">—</span></p>
+              <p class="line" id="row-wk3-0313"><span class="label">近3週報酬率</span><span id="wk3-range-0313" class="range">—</span><span id="wk3-0313" class="val neu">—</span><span id="wk3-avg-0313" class="avg neu">—</span></p>
+              <p class="line" id="row-wk4-0313"><span class="label">近4週報酬率</span><span id="wk4-range-0313" class="range">—</span><span id="wk4-0313" class="val neu">—</span><span id="wk4-avg-0313" class="avg neu">—</span></p>
+
+              <p class="line" id="row-m2-0313"><span class="label">近2月報酬率</span><span id="m2-range-0313" class="range">—</span><span id="m2-0313" class="val neu">—</span><span id="m2-avg-0313" class="avg neu">—</span></p>
+              <p class="line" id="row-m3-0313"><span class="label">近3月報酬率</span><span id="m3-range-0313" class="range">—</span><span id="m3-0313" class="val neu">—</span><span id="m3-avg-0313" class="avg neu">—</span></p>
+              <p class="line" id="row-m4-0313"><span class="label">近4月報酬率</span><span id="m4-range-0313" class="range">—</span><span id="m4-0313" class="val neu">—</span><span id="m4-avg-0313" class="avg neu">—</span></p>
+              <p class="line" id="row-m5-0313"><span class="label">近5月報酬率</span><span id="m5-range-0313" class="range">—</span><span id="m5-0313" class="val neu">—</span><span id="m5-avg-0313" class="avg neu">—</span></p>
+              <p class="line" id="row-m6-0313"><span class="label">近6月報酬率</span><span id="m6-range-0313" class="range">—</span><span id="m6-0313" class="val neu">—</span><span id="m6-avg-0313" class="avg neu">—</span></p>
+
+              <p class="line" id="row-y1-0313"><span class="label">近1年報酬率</span><span id="y1-range-0313" class="range">—</span><span id="y1-0313" class="val neu">—</span><span id="y1-avg-0313" class="avg neu">—</span></p>
+              <p class="line" id="row-y2-0313"><span class="label">近2年報酬率</span><span id="y2-range-0313" class="range">—</span><span id="y2-0313" class="val neu">—</span><span id="y2-avg-0313" class="avg neu">—</span></p>
+              <p class="line" id="row-y3-0313"><span class="label">近3年報酬率</span><span id="y3-range-0313" class="range">—</span><span id="y3-0313" class="val neu">—</span><span id="y3-avg-0313" class="avg neu">—</span></p>
+              <p class="line" id="row-y4-0313"><span class="label">近4年報酬率</span><span id="y4-range-0313" class="range">—</span><span id="y4-0313" class="val neu">—</span><span id="y4-avg-0313" class="avg neu">—</span></p>
+              <p class="line" id="row-y5-0313"><span class="label">近5年報酬率</span><span id="y5-range-0313" class="range">—</span><span id="y5-0313" class="val neu">—</span><span id="y5-avg-0313" class="avg neu">—</span></p>
+              <p class="line" id="row-y6-0313"><span class="label">近6年報酬率</span><span id="y6-range-0313" class="range">—</span><span id="y6-0313" class="val neu">—</span><span id="y6-avg-0313" class="avg neu">—</span></p>
+
+              <p class="period">期間：<span id="period-0313">—</span></p>
+              <div class="status" id="status-0313"></div>
+            </div>
+          </a>
+        </div>
+      </div>
+
+      <hr>
+
+      <h3 class="section-title-blue">分析</h3>
+      <div class="section-note">提供單檔檢查、參數比較與格式轉換工具，作為研究與驗證流程的核心入口。</div>
+
+      <div class="nav">
+        <a class="card" href="single-trades.html">
+          <p class="card-title blue big">期貨策略研究</p>
+          <p class="card-desc">查看單一策略的交易明細、週損益、資產曲線與核心 KPI，適合快速檢查某一策略近期表現與風險結構。</p>
         </a>
 
-        <a class="card" href="1001.html">
-          <p class="card-title red">台指近-1001版本</p>
-          <div class="lines">
-            <p class="line"><span class="label">近1週報酬率</span><span id="wk1-range-1001" class="range">—</span><span id="wk1-1001" class="val neu">—</span><span id="wk1-avg-1001" class="avg neu">—</span></p>
-            <p class="line"><span class="label">近2週報酬率</span><span id="wk2-range-1001" class="range">—</span><span id="wk2-1001" class="val neu">—</span><span id="wk2-avg-1001" class="avg neu">—</span></p>
-            <p class="line"><span class="label">近3週報酬率</span><span id="wk3-range-1001" class="range">—</span><span id="wk3-1001" class="val neu">—</span><span id="wk3-avg-1001" class="avg neu">—</span></p>
-            <p class="line"><span class="label">近4週報酬率</span><span id="wk4-range-1001" class="range">—</span><span id="wk4-1001" class="val neu">—</span><span id="wk4-avg-1001" class="avg neu">—</span></p>
+        <a class="card" href="multi-pro.html">
+          <p class="card-title blue big">期貨最佳化參數研究</p>
+          <p class="card-desc">用多組參數批量比較策略結果，快速找出較穩定的參數區間，並觀察報酬、回撤與一致性變化。</p>
+        </a>
 
-            <p class="line"><span class="label">近2月報酬率</span><span id="m2-range-1001" class="range">—</span><span id="m2-1001" class="val neu">—</span><span id="m2-avg-1001" class="avg neu">—</span></p>
-            <p class="line"><span class="label">近3月報酬率</span><span id="m3-range-1001" class="range">—</span><span id="m3-1001" class="val neu">—</span><span id="m3-avg-1001" class="avg neu">—</span></p>
-            <p class="line"><span class="label">近4月報酬率</span><span id="m4-range-1001" class="range">—</span><span id="m4-1001" class="val neu">—</span><span id="m4-avg-1001" class="avg neu">—</span></p>
-            <p class="line"><span class="label">近5月報酬率</span><span id="m5-range-1001" class="range">—</span><span id="m5-1001" class="val neu">—</span><span id="m5-avg-1001" class="avg neu">—</span></p>
-            <p class="line"><span class="label">近6月報酬率</span><span id="m6-range-1001" class="range">—</span><span id="m6-1001" class="val neu">—</span><span id="m6-avg-1001" class="avg neu">—</span></p>
-
-            <p class="line" id="row-y1-1001"><span class="label">近1年報酬率</span><span id="y1-range-1001" class="range">—</span><span id="y1-1001" class="val neu">—</span><span id="y1-avg-1001" class="avg neu">—</span></p>
-            <p class="line" id="row-y2-1001"><span class="label">近2年報酬率</span><span id="y2-range-1001" class="range">—</span><span id="y2-1001" class="val neu">—</span><span id="y2-avg-1001" class="avg neu">—</span></p>
-            <p class="line" id="row-y3-1001"><span class="label">近3年報酬率</span><span id="y3-range-1001" class="range">—</span><span id="y3-1001" class="val neu">—</span><span id="y3-avg-1001" class="avg neu">—</span></p>
-            <p class="line" id="row-y4-1001"><span class="label">近4年報酬率</span><span id="y4-range-1001" class="range">—</span><span id="y4-1001" class="val neu">—</span><span id="y4-avg-1001" class="avg neu">—</span></p>
-            <p class="line" id="row-y5-1001"><span class="label">近5年報酬率</span><span id="y5-range-1001" class="range">—</span><span id="y5-1001" class="val neu">—</span><span id="y5-avg-1001" class="avg neu">—</span></p>
-            <p class="line" id="row-y6-1001"><span class="label">近6年報酬率</span><span id="y6-range-1001" class="range">—</span><span id="y6-1001" class="val neu">—</span><span id="y6-avg-1001" class="avg neu">—</span></p>
-
-            <p class="period">期間：<span id="period-1001">—</span></p>
-          </div>
+        <a class="card" href="xq-trade-to-txt.html">
+          <p class="card-title blue big">XQ交易明細轉TXT</p>
+          <p class="card-desc">將 XQ 交易明細快速轉為標準指標 TXT，並支援 TXT 對 TXT 比對、缺漏筆數檢查與重新對齊分析。</p>
         </a>
       </div>
 
-      <div class="strategy-col">
-        <p class="subcat">混合策略（進階）</p>
-
-        <a class="card" href="1001plusplus.html">
-          <p class="card-title blue">台指近-1001plus+版本</p>
-          <div class="lines">
-            <p class="line"><span class="label">近1週報酬率</span><span id="wk1-range-1001pp" class="range">—</span><span id="wk1-1001pp" class="val neu">—</span><span id="wk1-avg-1001pp" class="avg neu">—</span></p>
-            <p class="line"><span class="label">近2週報酬率</span><span id="wk2-range-1001pp" class="range">—</span><span id="wk2-1001pp" class="val neu">—</span><span id="wk2-avg-1001pp" class="avg neu">—</span></p>
-            <p class="line"><span class="label">近3週報酬率</span><span id="wk3-range-1001pp" class="range">—</span><span id="wk3-1001pp" class="val neu">—</span><span id="wk3-avg-1001pp" class="avg neu">—</span></p>
-            <p class="line"><span class="label">近4週報酬率</span><span id="wk4-range-1001pp" class="range">—</span><span id="wk4-1001pp" class="val neu">—</span><span id="wk4-avg-1001pp" class="avg neu">—</span></p>
-
-            <p class="line"><span class="label">近2月報酬率</span><span id="m2-range-1001pp" class="range">—</span><span id="m2-1001pp" class="val neu">—</span><span id="m2-avg-1001pp" class="avg neu">—</span></p>
-            <p class="line"><span class="label">近3月報酬率</span><span id="m3-range-1001pp" class="range">—</span><span id="m3-1001pp" class="val neu">—</span><span id="m3-avg-1001pp" class="avg neu">—</span></p>
-            <p class="line"><span class="label">近4月報酬率</span><span id="m4-range-1001pp" class="range">—</span><span id="m4-1001pp" class="val neu">—</span><span id="m4-avg-1001pp" class="avg neu">—</span></p>
-            <p class="line"><span class="label">近5月報酬率</span><span id="m5-range-1001pp" class="range">—</span><span id="m5-1001pp" class="val neu">—</span><span id="m5-avg-1001pp" class="avg neu">—</span></p>
-            <p class="line"><span class="label">近6月報酬率</span><span id="m6-range-1001pp" class="range">—</span><span id="m6-1001pp" class="val neu">—</span><span id="m6-avg-1001pp" class="avg neu">—</span></p>
-
-            <p class="line" id="row-y1-1001pp"><span class="label">近1年報酬率</span><span id="y1-range-1001pp" class="range">—</span><span id="y1-1001pp" class="val neu">—</span><span id="y1-avg-1001pp" class="avg neu">—</span></p>
-            <p class="line" id="row-y2-1001pp"><span class="label">近2年報酬率</span><span id="y2-range-1001pp" class="range">—</span><span id="y2-1001pp" class="val neu">—</span><span id="y2-avg-1001pp" class="avg neu">—</span></p>
-            <p class="line" id="row-y3-1001pp"><span class="label">近3年報酬率</span><span id="y3-range-1001pp" class="range">—</span><span id="y3-1001pp" class="val neu">—</span><span id="y3-avg-1001pp" class="avg neu">—</span></p>
-            <p class="line" id="row-y4-1001pp"><span class="label">近4年報酬率</span><span id="y4-range-1001pp" class="range">—</span><span id="y4-1001pp" class="val neu">—</span><span id="y4-avg-1001pp" class="avg neu">—</span></p>
-            <p class="line" id="row-y5-1001pp"><span class="label">近5年報酬率</span><span id="y5-range-1001pp" class="range">—</span><span id="y5-1001pp" class="val neu">—</span><span id="y5-avg-1001pp" class="avg neu">—</span></p>
-            <p class="line" id="row-y6-1001pp"><span class="label">近6年報酬率</span><span id="y6-range-1001pp" class="range">—</span><span id="y6-1001pp" class="val neu">—</span><span id="y6-avg-1001pp" class="avg neu">—</span></p>
-
-            <p class="period">期間：<span id="period-1001pp">—</span></p>
-          </div>
+      <div class="nav">
+        <a class="card" href="stock-multi-cloud.html">
+          <p class="card-title blue big">股票策略研究</p>
+          <p class="card-desc">彙整股票或 ETF 策略的回測資料與 KPI，適合觀察不同標的、不同規則下的整體績效與資金曲線。</p>
         </a>
       </div>
 
-      <div class="strategy-col">
-        <p class="subcat">結構策略（未來主軸）</p>
+      <hr>
 
-        <a class="card" href="0313.html">
-          <p class="card-title black">台指近-0313版本</p>
-          <div class="lines">
-            <p class="line"><span class="label">近1週報酬率</span><span id="wk1-range-0313" class="range">—</span><span id="wk1-0313" class="val neu">—</span><span id="wk1-avg-0313" class="avg neu">—</span></p>
-            <p class="line"><span class="label">近2週報酬率</span><span id="wk2-range-0313" class="range">—</span><span id="wk2-0313" class="val neu">—</span><span id="wk2-avg-0313" class="avg neu">—</span></p>
-            <p class="line"><span class="label">近3週報酬率</span><span id="wk3-range-0313" class="range">—</span><span id="wk3-0313" class="val neu">—</span><span id="wk3-avg-0313" class="avg neu">—</span></p>
-            <p class="line"><span class="label">近4週報酬率</span><span id="wk4-range-0313" class="range">—</span><span id="wk4-0313" class="val neu">—</span><span id="wk4-avg-0313" class="avg neu">—</span></p>
+      <h3 class="section-title-black">資料</h3>
+      <div class="section-note">首頁、分析頁與工具頁共用同一套 TXT 檔案來源，方便集中管理。</div>
 
-            <p class="line"><span class="label">近2月報酬率</span><span id="m2-range-0313" class="range">—</span><span id="m2-0313" class="val neu">—</span><span id="m2-avg-0313" class="avg neu">—</span></p>
-            <p class="line"><span class="label">近3月報酬率</span><span id="m3-range-0313" class="range">—</span><span id="m3-0313" class="val neu">—</span><span id="m3-avg-0313" class="avg neu">—</span></p>
-            <p class="line"><span class="label">近4月報酬率</span><span id="m4-range-0313" class="range">—</span><span id="m4-0313" class="val neu">—</span><span id="m4-avg-0313" class="avg neu">—</span></p>
-            <p class="line"><span class="label">近5月報酬率</span><span id="m5-range-0313" class="range">—</span><span id="m5-0313" class="val neu">—</span><span id="m5-avg-0313" class="avg neu">—</span></p>
-            <p class="line"><span class="label">近6月報酬率</span><span id="m6-range-0313" class="range">—</span><span id="m6-0313" class="val neu">—</span><span id="m6-avg-0313" class="avg neu">—</span></p>
-
-            <p class="line" id="row-y1-0313"><span class="label">近1年報酬率</span><span id="y1-range-0313" class="range">—</span><span id="y1-0313" class="val neu">—</span><span id="y1-avg-0313" class="avg neu">—</span></p>
-            <p class="line" id="row-y2-0313"><span class="label">近2年報酬率</span><span id="y2-range-0313" class="range">—</span><span id="y2-0313" class="val neu">—</span><span id="y2-avg-0313" class="avg neu">—</span></p>
-            <p class="line" id="row-y3-0313"><span class="label">近3年報酬率</span><span id="y3-range-0313" class="range">—</span><span id="y3-0313" class="val neu">—</span><span id="y3-avg-0313" class="avg neu">—</span></p>
-            <p class="line" id="row-y4-0313"><span class="label">近4年報酬率</span><span id="y4-range-0313" class="range">—</span><span id="y4-0313" class="val neu">—</span><span id="y4-avg-0313" class="avg neu">—</span></p>
-            <p class="line" id="row-y5-0313"><span class="label">近5年報酬率</span><span id="y5-range-0313" class="range">—</span><span id="y5-0313" class="val neu">—</span><span id="y5-avg-0313" class="avg neu">—</span></p>
-            <p class="line" id="row-y6-0313"><span class="label">近6年報酬率</span><span id="y6-range-0313" class="range">—</span><span id="y6-0313" class="val neu">—</span><span id="y6-avg-0313" class="avg neu">—</span></p>
-
-            <p class="period">期間：<span id="period-0313">—</span></p>
-          </div>
+      <div class="nav">
+        <a class="card" href="upload.html">
+          <p class="card-title black big">上傳檔案</p>
+          <p class="card-desc">集中管理策略 TXT 檔案，上傳、檢視、下載與刪除資料，作為首頁、分析頁與比對工具的共同資料來源。</p>
         </a>
       </div>
-    </div>
-
-    <hr>
-
-    <h3 class="section-title-blue">分析</h3>
-    <div style="height:8px;"></div>
-
-    <div class="nav">
-      <a class="card" href="single-trades.html">
-        <p class="card-title blue big">期貨策略研究</p>
-        <p class="card-desc">查看單一策略的交易明細、週損益、資產曲線與核心 KPI，適合快速檢查某一策略近期表現與風險結構。</p>
-      </a>
-
-      <a class="card" href="multi-pro.html">
-        <p class="card-title blue big">期貨最佳化參數研究</p>
-        <p class="card-desc">用多組參數批量比較策略結果，快速找出較穩定的參數區間，並觀察報酬、回撤與一致性變化。</p>
-      </a>
-
-      <a class="card" href="xq-trade-to-txt.html">
-        <p class="card-title blue big">XQ交易明細轉TXT</p>
-        <p class="card-desc">將 XQ 交易明細快速轉為標準指標 TXT，並支援 TXT 對 TXT 比對、缺漏筆數檢查與重新對齊分析。</p>
-      </a>
-    </div>
-
-    <div style="height:12px;"></div>
-
-    <div class="nav">
-      <a class="card" href="stock-multi-cloud.html">
-        <p class="card-title blue big">股票策略研究</p>
-        <p class="card-desc">彙整股票或 ETF 策略的回測資料與 KPI，適合觀察不同標的、不同規則下的整體績效與資金曲線。</p>
-      </a>
-    </div>
-
-    <hr>
-
-    <h3 class="section-title-black">資料</h3>
-    <div class="nav">
-      <a class="card" href="upload.html">
-        <p class="card-title black big">上傳檔案</p>
-        <p class="card-desc">集中管理策略 TXT 檔案，上傳、檢視、下載與刪除資料，作為首頁、分析頁與比對工具的共同資料來源。</p>
-      </a>
     </div>
   </div>
 
-  <script src="index.js?v=rr-v7"></script>
+  <script src="index.js?v=rr-v8"></script>
 </body>
 </html>
