@@ -1,67 +1,43 @@
 (function () {
   'use strict';
 
-  // ====== 基本常數 ======
   const SUPABASE_URL = "https://byhbmmnacezzgkwfkozs.supabase.co";
   const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYm1hY2V6emdrd2Zrb3pzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg1OTE0NzksImV4cCI6MjA3NDE2NzQ3OX0.VCSye3-fKrQphejdJSWAM6iRzv_7gkl8MLe7NeVszR0";
   const BUCKET = "reports";
 
   const PASS_HASH = "0f2b9305e317408510dc9878381e953630ed9fa3d2aadf95f1b8eb47941b18b9";
-  const KEY_OK = '__auth_ok__';
-  const FAIL_KEY = '__auth_fail__';
-  const LOCK_UNTIL_KEY = '__auth_lock_until__';
+  const KEY_OK = '__auth_ok__', FAIL_KEY = '__auth_fail__', LOCK_UNTIL_KEY = '__auth_lock_until__';
   const IDLE_MS = 30 * 60 * 1000;
 
   const $ = s => document.querySelector(s);
-  const shield = $('#shield');
-  const gate = $('#gate');
-  const app = $('#app');
-  const pwd = $('#pwd');
-  const btnLogin = $('#btnLogin');
-  const btnClear = $('#btnClear');
-  const err = $('#err');
+  const shield = $('#shield'), gate = $('#gate'), app = $('#app');
+  const pwd = $('#pwd'), btnLogin = $('#btnLogin'), btnClear = $('#btnClear'), err = $('#err');
 
-  // ====== 反嵌入 + 防開發者工具 ======
   if (window.top !== window.self) {
     try { window.top.location = window.self.location.href; } catch (_) {}
   }
-
   window.addEventListener('contextmenu', e => { e.preventDefault(); }, { capture: true });
   window.addEventListener('copy', e => e.preventDefault(), { capture: true });
   window.addEventListener('cut', e => e.preventDefault(), { capture: true });
   window.addEventListener('selectstart', e => e.preventDefault(), { capture: true });
-
   window.addEventListener('keydown', (e) => {
     const K = (e.key || '').toUpperCase();
-    if (e.key === 'F12') {
-      e.preventDefault();
-      shield.style.display = 'flex';
-    }
-    if (e.ctrlKey && ['U', 'S', 'P'].includes(K)) {
-      e.preventDefault();
-      shield.style.display = 'flex';
-    }
-    if (e.ctrlKey && e.shiftKey && ['I', 'J', 'C', 'K'].includes(K)) {
-      e.preventDefault();
-      shield.style.display = 'flex';
-    }
+    if (e.key === 'F12') { e.preventDefault(); shield.style.display = 'flex'; }
+    if (e.ctrlKey && ['U', 'S', 'P'].includes(K)) { e.preventDefault(); shield.style.display = 'flex'; }
+    if (e.ctrlKey && e.shiftKey && ['I', 'J', 'C', 'K'].includes(K)) { e.preventDefault(); shield.style.display = 'flex'; }
   }, { capture: true });
 
-  // ====== 密碼門檻 ======
   function isLocked() {
     const until = +(sessionStorage.getItem(LOCK_UNTIL_KEY) || 0);
     return Date.now() < until;
   }
-
   function remainingLockSec() {
     const until = +(sessionStorage.getItem(LOCK_UNTIL_KEY) || 0);
     return Math.max(0, Math.ceil((until - Date.now()) / 1000));
   }
-
   function setLock(seconds) {
     sessionStorage.setItem(LOCK_UNTIL_KEY, String(Date.now() + seconds * 1000));
   }
-
   function addFailAndMaybeLock() {
     const n = (+(sessionStorage.getItem(FAIL_KEY) || 0)) + 1;
     sessionStorage.setItem(FAIL_KEY, String(n));
@@ -70,7 +46,6 @@
       setLock(m * 60);
     }
   }
-
   function resetFails() {
     sessionStorage.removeItem(FAIL_KEY);
     sessionStorage.removeItem(LOCK_UNTIL_KEY);
@@ -82,41 +57,26 @@
       sessionStorage.removeItem(KEY_OK);
       location.reload();
     };
-
     const bump = () => {
       clearTimeout(idleTimer);
       idleTimer = setTimeout(kick, IDLE_MS);
     };
-
-    ['click', 'keydown', 'mousemove', 'touchstart', 'scroll'].forEach(ev => {
-      document.addEventListener(ev, bump, { passive: true });
-    });
-
+    ['click', 'keydown', 'mousemove', 'touchstart', 'scroll']
+      .forEach(ev => document.addEventListener(ev, bump, { passive: true }));
     bump();
   }
 
   function enableDevtoolsWatchAfterLogin() {
     let suspect = 0;
-
-    function trig() {
-      if (++suspect >= 3) shield.style.display = 'flex';
-    }
-
+    function trig() { if (++suspect >= 3) shield.style.display = 'flex'; }
     setInterval(() => {
-      if (
-        Math.abs(window.outerWidth - window.innerWidth) > 250 ||
-        Math.abs(window.outerHeight - window.innerHeight) > 250
-      ) {
-        trig();
-      } else {
-        suspect = 0;
-      }
+      if (Math.abs(window.outerWidth - window.innerWidth) > 250 ||
+          Math.abs(window.outerHeight - window.innerHeight) > 250) trig();
+      else suspect = 0;
     }, 1000);
-
     (function loop(p) {
       const n = performance.now();
-      if (n - p > 1200) trig();
-      else suspect = 0;
+      if (n - p > 1200) trig(); else suspect = 0;
       requestAnimationFrame(() => loop(performance.now()));
     })(performance.now());
   }
@@ -128,30 +88,22 @@
 
   async function enter() {
     err.style.display = 'none';
-
     if (isLocked()) {
       err.textContent = `嘗試次數過多，請 ${remainingLockSec()} 秒後再試。`;
       err.style.display = '';
       return;
     }
-
     const v = (pwd.value || '').trim();
     if (!v) {
       err.textContent = '請輸入密碼 / Please enter password.';
       err.style.display = '';
       return;
     }
-
     const t0 = Date.now();
-
     if (await sha256Hex(v) === PASS_HASH) {
-      sessionStorage.setItem(KEY_OK, '1');
-      resetFails();
-      gate.classList.add('hidden');
-      app.classList.remove('hidden');
-      startIdleLogout();
-      enableDevtoolsWatchAfterLogin();
-      loadDepsAndRun();
+      sessionStorage.setItem(KEY_OK, '1'); resetFails();
+      gate.classList.add('hidden'); app.classList.remove('hidden');
+      startIdleLogout(); enableDevtoolsWatchAfterLogin(); loadDepsAndRun();
     } else {
       const delay = 1000 + Math.random() * 600 - (Date.now() - t0);
       if (delay > 0) await new Promise(r => setTimeout(r, delay));
@@ -162,7 +114,6 @@
   }
 
   btnLogin.addEventListener('click', enter);
-
   btnClear.addEventListener('click', () => {
     pwd.value = '';
     err.style.display = 'none';
@@ -170,18 +121,12 @@
     sessionStorage.removeItem(KEY_OK);
     pwd.focus();
   });
-
-  pwd.addEventListener('keydown', e => {
-    if (e.key === 'Enter') enter();
-  });
+  pwd.addEventListener('keydown', e => { if (e.key === 'Enter') enter(); });
 
   (function boot() {
     if (sessionStorage.getItem(KEY_OK) === '1') {
-      gate.classList.add('hidden');
-      app.classList.remove('hidden');
-      startIdleLogout();
-      enableDevtoolsWatchAfterLogin();
-      loadDepsAndRun();
+      gate.classList.add('hidden'); app.classList.remove('hidden');
+      startIdleLogout(); enableDevtoolsWatchAfterLogin(); loadDepsAndRun();
     }
   })();
 
@@ -195,7 +140,6 @@
     });
   }
 
-  // ====== 交易列解析 / canonicalize ======
   const CANON_RE = /^(\d{14})\.0{6}\s+(\d+\.\d{6})\s+(新買|平賣|新賣|平買|強制平倉)\s*$/;
   const EXTRACT_RE = /.*?(\d{14})(?:\.0{1,6})?\s+(\d+(?:\.\d{1,6})?)\s*(新買|平賣|新賣|平買|強制平倉)\s*$/;
   const CSV_LINE_RE = /^(\d{8}),(\d{5,6}),(\d+(?:\.\d+)?),([^,]+?),/;
@@ -209,15 +153,10 @@
 
   function normalizeText(raw) {
     let s = raw.replace(/\ufeff/gi, '').replace(/\u200b|\u200c|\u200d/gi, '');
-    s = s
-      .replace(/[\x00-\x09\x0B-\x1F\x7F]/g, '')
-      .replace(/\r\n?/g, '\n')
-      .replace(/\u3000/g, ' ');
-    return s
-      .split('\n')
-      .map(l => l.replace(/\s+/g, ' ').trim())
-      .filter(Boolean)
-      .join('\n');
+    s = s.replace(/[\x00-\x09\x0B-\x1F\x7F]/g, '')
+         .replace(/\r\n?/g, '\n')
+         .replace(/\u3000/g, ' ');
+    return s.split('\n').map(l => l.replace(/\s+/g, ' ').trim()).filter(Boolean).join('\n');
   }
 
   function padTime6(t) {
@@ -226,34 +165,24 @@
   }
 
   function canonicalize(txt) {
-    const out = [];
-    let ok = 0;
+    const out = []; let ok = 0;
     const lines = txt.split('\n');
-
     for (const l of lines) {
       let m = l.match(EXTRACT_RE);
       if (m) {
-        const ts = m[1];
-        const px = Number(m[2]);
+        const ts = m[1], px = Number(m[2]);
         out.push(`${ts}.000000 ${px.toFixed(6)} ${m[3]}`);
-        ok++;
-        continue;
+        ok++; continue;
       }
-
       m = l.match(CSV_LINE_RE);
       if (m) {
-        const d8 = m[1];
-        const t6 = padTime6(m[2]);
-        const px = Number(m[3]);
-        const act0 = m[4].trim();
+        const d8 = m[1], t6 = padTime6(m[2]), px = Number(m[3]), act0 = m[4].trim();
         if (Number.isFinite(px)) {
           out.push(`${d8}${t6}.000000 ${px.toFixed(6)} ${mapAction(act0)}`);
-          ok++;
-          continue;
+          ok++; continue;
         }
       }
     }
-
     return { canon: out.join('\n'), ok };
   }
 
@@ -261,16 +190,14 @@
     const res = await fetch(url, { cache: 'no-store' });
     if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
     const buf = await res.arrayBuffer();
-
     for (const enc of ['utf-8', 'big5', 'utf-16le', 'utf-16be']) {
       try {
         const td = new TextDecoder(enc);
         const norm = normalizeText(td.decode(buf));
         const { canon, ok } = canonicalize(norm);
         if (ok > 0) return { canon, ok };
-      } catch (_) {}
+      } catch { }
     }
-
     const td = new TextDecoder('utf-8');
     const norm = normalizeText(td.decode(buf));
     const { canon, ok } = canonicalize(norm);
@@ -278,14 +205,11 @@
   }
 
   function parseCanon(text) {
-    const rows = [];
-    if (!text) return rows;
-
+    const rows = []; if (!text) return rows;
     for (const line of text.split('\n')) {
       const m = line.match(CANON_RE);
       if (m) rows.push({ ts: m[1], line });
     }
-
     rows.sort((a, b) => a.ts.localeCompare(b.ts));
     return rows;
   }
@@ -294,22 +218,18 @@
     const parsed = window.SHARED.parseTXT(mergedTxt);
     const report = window.SHARED.buildReport(parsed.rows);
     const m = new Map();
-
     for (const t of report.trades) {
       const d = String(t.tsOut).slice(0, 8);
       m.set(d, (m.get(d) || 0) + t.gainSlip);
     }
-
     const days = [...m.keys()].sort();
     const vals = days.map(d => m.get(d));
     return { days, vals };
   }
 
-  // ====== 日期工具（以本地時間計算週期）=====
   function atMidnight(d) {
     return new Date(d.getFullYear(), d.getMonth(), d.getDate());
   }
-
   function mondayOf(d) {
     const x = atMidnight(d);
     const dow = x.getDay();
@@ -317,14 +237,12 @@
     x.setDate(x.getDate() - offsetToMonday);
     return x;
   }
-
   function sundayOfWeek(d) {
     const m = mondayOf(d);
     const s = new Date(m.getTime());
     s.setDate(s.getDate() + 6);
     return s;
   }
-
   function addMonthsSameDay(d, n) {
     const x = atMidnight(d);
     const day = x.getDate();
@@ -332,7 +250,6 @@
     x.setDate(day);
     return atMidnight(x);
   }
-
   function addYearsSameDay(d, n) {
     const x = atMidnight(d);
     const day = x.getDate();
@@ -340,7 +257,6 @@
     x.setDate(day);
     return atMidnight(x);
   }
-
   function fmtDate(d) {
     const y = d.getFullYear();
     const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -348,20 +264,16 @@
     return `${y}/${m}/${dd}`;
   }
 
-  // ====== 區間加總 ======
   function d8ToDate(s8) {
     return new Date(+s8.slice(0, 4), +s8.slice(4, 6) - 1, +s8.slice(6, 8));
   }
-
   function buildPrefix(vals) {
     const p = [0];
     for (const v of vals) p.push(p[p.length - 1] + v);
     return p;
   }
-
   function sumBetween(days, vals, startDate, endDate) {
     if (!days.length) return null;
-
     const pref = buildPrefix(vals);
     const lastIdx = days.length - 1;
 
@@ -386,10 +298,7 @@
     const start = new Date(mondayOf(end).getTime());
     start.setDate(start.getDate() - (nWeeks - 1) * 7);
     const sum = sumBetween(days, vals, start, end);
-    return {
-      ret: (sum == null ? null : sum / 1_000_000),
-      range: `${fmtDate(start)}~${fmtDate(end)}`
-    };
+    return { ret: (sum == null ? null : sum / 1_000_000), range: `${fmtDate(start)}~${fmtDate(end)}` };
   }
 
   function monthReturnUser(days, vals, nMonths) {
@@ -397,10 +306,7 @@
     const base = addMonthsSameDay(end, -nMonths);
     const start = mondayOf(base);
     const sum = sumBetween(days, vals, start, end);
-    return {
-      ret: (sum == null ? null : sum / 1_000_000),
-      range: `${fmtDate(start)}~${fmtDate(end)}`
-    };
+    return { ret: (sum == null ? null : sum / 1_000_000), range: `${fmtDate(start)}~${fmtDate(end)}` };
   }
 
   function yearReturnUser(days, vals, nYears) {
@@ -408,24 +314,18 @@
     const base = addYearsSameDay(end, -nYears);
     const start = mondayOf(base);
     const sum = sumBetween(days, vals, start, end);
-    return {
-      ret: (sum == null ? null : sum / 1_000_000),
-      range: `${fmtDate(start)}~${fmtDate(end)}`
-    };
+    return { ret: (sum == null ? null : sum / 1_000_000), range: `${fmtDate(start)}~${fmtDate(end)}` };
   }
 
   function setVal(id, v) {
     const el = document.getElementById(id);
     if (!el) return;
-
     el.classList.remove('pos', 'neg', 'neu');
-
     if (v == null) {
       el.textContent = '—';
       el.classList.add('neu');
       return;
     }
-
     el.textContent = (v * 100).toFixed(2) + '%';
     el.classList.add(v > 0 ? 'pos' : (v < 0 ? 'neg' : 'neu'));
   }
@@ -433,15 +333,12 @@
   function setAvg(id, v) {
     const el = document.getElementById(id);
     if (!el) return;
-
     el.classList.remove('pos', 'neg', 'neu');
-
     if (v == null) {
       el.textContent = '—';
       el.classList.add('neu');
       return;
     }
-
     el.textContent = (v * 100).toFixed(2) + '%';
     el.classList.add(v > 0 ? 'pos' : (v < 0 ? 'neg' : 'neu'));
   }
@@ -451,8 +348,8 @@
     if (el) el.textContent = text || '—';
   }
 
-  const WEEK_KEYS = ['wk1'];
-  const MONTH_KEYS = ['m1', 'm3'];
+  const WEEK_KEYS = ['wk1', 'wk2', 'wk3', 'wk4'];
+  const MONTH_KEYS = ['m2', 'm3', 'm4', 'm5', 'm6'];
   const YEAR_KEYS = ['y1'];
   const ALL_KEYS = WEEK_KEYS.concat(MONTH_KEYS).concat(YEAR_KEYS);
 
@@ -462,7 +359,6 @@
       setVal(`${k}-${key}`, null);
       setAvg(`${k}-avg-${key}`, null);
     });
-
     YEAR_KEYS.forEach(k => {
       const row = document.getElementById(`row-${k}-${key}`);
       if (row) row.style.display = 'none';
@@ -476,16 +372,12 @@
     "0313": /(^|[^a-z0-9])0313([^a-z0-9]|$)/i
   };
 
-  // ====== 串檔合併 ======
   const RANGE_RE = /\b(20\d{6})-(20\d{6})\b/;
 
   function extractRangeFromPath(p) {
     const m = String(p || '').match(RANGE_RE);
     if (!m) return null;
-
-    const a = +m[1];
-    const b = +m[2];
-
+    const a = +m[1], b = +m[2];
     if (!Number.isFinite(a) || !Number.isFinite(b) || a <= 0 || b <= 0) return null;
     return { start: a, end: b };
   }
@@ -518,7 +410,6 @@
 
     const earliestStart = segs[0].r.start;
     const baseCandidates = segs.filter(s => s.r.start === earliestStart);
-
     baseCandidates.sort((a, b) => {
       if (a.r.end !== b.r.end) return b.r.end - a.r.end;
       return (b.metadata?.size || 0) - (a.metadata?.size || 0);
@@ -557,10 +448,8 @@
   function mergeCanonTexts(canonTexts) {
     const seen = new Set();
     const rows = [];
-
     for (const txt of canonTexts) {
       if (!txt) continue;
-
       for (const line of String(txt).split('\n')) {
         const m = line.match(CANON_RE);
         if (!m) continue;
@@ -569,7 +458,6 @@
         rows.push({ ts: m[1], line });
       }
     }
-
     rows.sort((a, b) => a.ts.localeCompare(b.ts));
     return rows.map(r => r.line).join('\n');
   }
@@ -612,7 +500,7 @@
           try {
             const { data } = await sb.storage.from(BUCKET).download(`manifests/${n}.json`);
             if (data) return JSON.parse(await data.text());
-          } catch (_) {}
+          } catch { }
         }
         return null;
       }
@@ -622,8 +510,7 @@
         await listDeepN('', 0, 8, all);
         return all.filter(it => {
           if (!it.metadata) return false;
-          const n = (it.name || '');
-          const p = (it.fullPath || '');
+          const n = (it.name || ''), p = (it.fullPath || '');
           return keyRegex.test(p) || keyRegex.test(n);
         });
       }
@@ -631,14 +518,12 @@
       function pickLatestByUpdate(files) {
         if (!files.length) return null;
         const xs = files.slice();
-
         xs.sort((a, b) => {
           const ta = Date.parse(a.updated_at || 0) || 0;
           const tb = Date.parse(b.updated_at || 0) || 0;
           if (ta !== tb) return tb - ta;
           return (b.metadata?.size || 0) - (a.metadata?.size || 0);
         });
-
         return xs[0];
       }
 
@@ -691,10 +576,7 @@
       function setPeriodText(key, start8, end8) {
         const el = document.getElementById(`period-${key}`);
         if (!el) return;
-        if (!start8 || !end8) {
-          el.textContent = '—';
-          return;
-        }
+        if (!start8 || !end8) { el.textContent = '—'; return; }
         el.textContent = `${start8} - ${end8}`;
       }
 
@@ -708,8 +590,8 @@
           }
 
           const mergedText = merged.canon;
-          const rows = parseCanon(mergedText);
 
+          const rows = parseCanon(mergedText);
           const start8_fallback = rows.length ? rows[0].ts.slice(0, 8) : null;
           const end8_fallback = rows.length ? rows[rows.length - 1].ts.slice(0, 8) : null;
 
@@ -758,7 +640,7 @@
               setAvg(`${k}-avg-${key}`, avg);
             }
           });
-        } catch (_) {
+        } catch (e) {
           resetAll(key);
           setPeriodText(key, null, null);
         }
