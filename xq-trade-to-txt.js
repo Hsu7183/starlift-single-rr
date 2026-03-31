@@ -6,15 +6,20 @@
   const els = {
     fileHeaderSource: $('fileHeaderSource'),
     fileTradeDetail: $('fileTradeDetail'),
+    filesTradeBatch: $('filesTradeBatch'),
 
     nameHeaderSource: $('nameHeaderSource'),
     nameTradeDetail: $('nameTradeDetail'),
+    namesTradeBatch: $('namesTradeBatch'),
 
     btnConvertDetail: $('btnConvertDetail'),
     btnDownloadDetail: $('btnDownloadDetail'),
+    btnBatchConvert: $('btnBatchConvert'),
+    btnBatchDownload: $('btnBatchDownload'),
 
     headerSourcePreview: $('headerSourcePreview'),
     detailPreview: $('detailPreview'),
+    batchSummary: $('batchSummary'),
 
     fileCompareBase: $('fileCompareBase'),
     fileCompareTarget: $('fileCompareTarget'),
@@ -39,6 +44,9 @@
     headerText: '',
     headerSourceRawTxt: '',
     convertedDetailTxt: '',
+    convertedDetailFilename: '',
+    batchResults: [],
+
     compareBaseTxt: '',
     compareTargetTxt: ''
   };
@@ -86,6 +94,13 @@
 
   function textCell(v) {
     return String(v == null ? '' : v).trim();
+  }
+
+  function makeOutputFilename(originalName) {
+    const name = String(originalName || 'output');
+    const dot = name.lastIndexOf('.');
+    if (dot <= 0) return `${name}_toTXT.txt`;
+    return `${name.slice(0, dot)}_toTXT.txt`;
   }
 
   async function readFileSmart(file) {
@@ -330,6 +345,19 @@
     return dedupeRows(rows);
   }
 
+  async function convertSingleTradeFile(file) {
+    const txt = await readFileSmart(file);
+    const arr2d = parseTradeDetailText(txt);
+    const baseRows = state.headerSourceRawTxt ? parseIndicatorTxt(state.headerSourceRawTxt).rows : [];
+    const rows = convertTradeDetailToIndicatorRows(arr2d, state.headerText, baseRows);
+    const out = buildIndicatorTxt(state.headerText, rows);
+    return {
+      filename: makeOutputFilename(file.name),
+      text: out,
+      rowsCount: rows.length
+    };
+  }
+
   function downloadTextFile(filename, content) {
     const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
@@ -516,8 +544,8 @@
 內容不符：${hardMismatch}
 
 判讀重點：
-若「左有右無 / 右有左無」很少，但舊版逐筆比對曾出現大量紅字，
-通常代表不是整年都不同，而是中途少幾筆造成序位錯開。`;
+若左有右無 / 右有左無很少，但舊版逐筆比對曾出現大量紅字，
+通常代表不是整段資料都不同，而是中途少幾筆造成序位錯開。`;
   }
 
   function loadDiffPreviews(setDiff) {
@@ -556,17 +584,12 @@
         return;
       }
 
-      const txt = await readFileSmart(file);
-      const arr2d = parseTradeDetailText(txt);
-      const baseRows = state.headerSourceRawTxt ? parseIndicatorTxt(state.headerSourceRawTxt).rows : [];
+      const result = await convertSingleTradeFile(file);
+      state.convertedDetailTxt = result.text;
+      state.convertedDetailFilename = result.filename;
 
-      const rows = convertTradeDetailToIndicatorRows(arr2d, state.headerText, baseRows);
-      const out = buildIndicatorTxt(state.headerText, rows);
-
-      state.convertedDetailTxt = out;
-      setPreview(els.detailPreview, out);
-
-      alert(`檔案2 轉換完成，共 ${rows.length} 筆。`);
+      setPreview(els.detailPreview, result.text);
+      alert(`檔案2 轉換完成，共 ${result.rowsCount} 筆。\n輸出檔名：${result.filename}`);
     } catch (err) {
       console.error(err);
       alert('檔案2 轉換失敗：' + (err && err.message ? err.message : err));
@@ -578,7 +601,63 @@
       alert('請先完成 檔案2 轉換。');
       return;
     }
-    downloadTextFile('trade-detail-converted.txt', state.convertedDetailTxt);
+    downloadTextFile(state.convertedDetailFilename || 'trade_toTXT.txt', state.convertedDetailTxt);
+  }
+
+  async function batchConvert() {
+    try {
+      const files = Array.from(els.filesTradeBatch.files || []);
+      if (!files.length) {
+        alert('請先選取批量檔案2。');
+        return;
+      }
+
+      state.batchResults = [];
+      const lines = [];
+
+      for (const f of files) {
+        try {
+          const result = await convertSingleTradeFile(f);
+          state.batchResults.push({
+            originalName: f.name,
+            outputName: result.filename,
+            text: result.text,
+            rowsCount: result.rowsCount,
+            ok: true
+          });
+          lines.push(`成功：${f.name} → ${result.filename}（${result.rowsCount}筆）`);
+        } catch (err) {
+          state.batchResults.push({
+            originalName: f.name,
+            outputName: '',
+            text: '',
+            rowsCount: 0,
+            ok: false,
+            error: err && err.message ? err.message : String(err)
+          });
+          lines.push(`失敗：${f.name} → ${state.batchResults[state.batchResults.length - 1].error}`);
+        }
+      }
+
+      els.batchSummary.textContent = lines.join('\n');
+      alert(`批量轉換完成。\n成功 ${state.batchResults.filter(x => x.ok).length} 個，失敗 ${state.batchResults.filter(x => !x.ok).length} 個。`);
+    } catch (err) {
+      console.error(err);
+      alert('批量轉換失敗：' + (err && err.message ? err.message : err));
+    }
+  }
+
+  async function batchDownload() {
+    const okList = state.batchResults.filter(x => x.ok);
+    if (!okList.length) {
+      alert('請先完成批量轉換。');
+      return;
+    }
+
+    for (const item of okList) {
+      downloadTextFile(item.outputName, item.text);
+      await new Promise(r => setTimeout(r, 180));
+    }
   }
 
   async function loadCompareBaseFile() {
@@ -603,11 +682,11 @@
 
   function useDetailAsTarget() {
     if (!state.convertedDetailTxt) {
-      alert('請先把 檔案2 轉成指標TXT。');
+      alert('請先把單檔檔案2轉成指標TXT。');
       return;
     }
     state.compareTargetTxt = state.convertedDetailTxt;
-    els.nameCompareTarget.textContent = '已使用：檔案2轉出TXT';
+    els.nameCompareTarget.textContent = '已使用：單檔檔案2轉出TXT';
     setPreview(els.compareTargetPreview, state.compareTargetTxt);
   }
 
@@ -642,16 +721,20 @@
     state.headerText = '';
     state.headerSourceRawTxt = '';
     state.convertedDetailTxt = '';
+    state.convertedDetailFilename = '';
+    state.batchResults = [];
     state.compareBaseTxt = '';
     state.compareTargetTxt = '';
 
     els.fileHeaderSource.value = '';
     els.fileTradeDetail.value = '';
+    els.filesTradeBatch.value = '';
     els.fileCompareBase.value = '';
     els.fileCompareTarget.value = '';
 
     els.nameHeaderSource.textContent = '尚未載入';
     els.nameTradeDetail.textContent = '尚未載入';
+    els.namesTradeBatch.textContent = '尚未載入';
     els.nameCompareBase.textContent = '尚未載入';
     els.nameCompareTarget.textContent = '尚未載入';
 
@@ -662,6 +745,7 @@
     setPreview(els.leftOnlyPreview, '');
     setPreview(els.rightOnlyPreview, '');
 
+    els.batchSummary.textContent = '';
     els.summaryBox.textContent = '尚未執行。';
     els.compareBody.innerHTML = '<tr><td colspan="7" class="neu">尚未執行。</td></tr>';
   }
@@ -673,11 +757,22 @@
     els.nameTradeDetail.textContent = file ? file.name : '尚未載入';
   });
 
+  els.filesTradeBatch.addEventListener('change', (e) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) {
+      els.namesTradeBatch.textContent = '尚未載入';
+      return;
+    }
+    els.namesTradeBatch.textContent = files.map(f => f.name).join('\n');
+  });
+
   els.fileCompareBase.addEventListener('change', loadCompareBaseFile);
   els.fileCompareTarget.addEventListener('change', loadCompareTargetFile);
 
   els.btnConvertDetail.addEventListener('click', convertDetail);
   els.btnDownloadDetail.addEventListener('click', downloadDetail);
+  els.btnBatchConvert.addEventListener('click', batchConvert);
+  els.btnBatchDownload.addEventListener('click', batchDownload);
   els.btnUseDetailAsTarget.addEventListener('click', useDetailAsTarget);
   els.btnCompare.addEventListener('click', compareNow);
   els.btnClearAll.addEventListener('click', clearAll);
