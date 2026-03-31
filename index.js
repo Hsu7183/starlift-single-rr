@@ -6,20 +6,29 @@
   const BUCKET = "reports";
 
   const PASS_HASH = "0f2b9305e317408510dc9878381e953630ed9fa3d2aadf95f1b8eb47941b18b9";
-  const KEY_OK = '__auth_ok__', FAIL_KEY = '__auth_fail__', LOCK_UNTIL_KEY = '__auth_lock_until__';
+  const KEY_OK = '__auth_ok__';
+  const FAIL_KEY = '__auth_fail__';
+  const LOCK_UNTIL_KEY = '__auth_lock_until__';
   const IDLE_MS = 30 * 60 * 1000;
 
   const $ = s => document.querySelector(s);
-  const shield = $('#shield'), gate = $('#gate'), app = $('#app');
-  const pwd = $('#pwd'), btnLogin = $('#btnLogin'), btnClear = $('#btnClear'), err = $('#err');
+  const shield = $('#shield');
+  const gate = $('#gate');
+  const app = $('#app');
+  const pwd = $('#pwd');
+  const btnLogin = $('#btnLogin');
+  const btnClear = $('#btnClear');
+  const err = $('#err');
 
   if (window.top !== window.self) {
     try { window.top.location = window.self.location.href; } catch (_) {}
   }
+
   window.addEventListener('contextmenu', e => { e.preventDefault(); }, { capture: true });
   window.addEventListener('copy', e => e.preventDefault(), { capture: true });
   window.addEventListener('cut', e => e.preventDefault(), { capture: true });
   window.addEventListener('selectstart', e => e.preventDefault(), { capture: true });
+
   window.addEventListener('keydown', (e) => {
     const K = (e.key || '').toUpperCase();
     if (e.key === 'F12') { e.preventDefault(); shield.style.display = 'flex'; }
@@ -31,13 +40,16 @@
     const until = +(sessionStorage.getItem(LOCK_UNTIL_KEY) || 0);
     return Date.now() < until;
   }
+
   function remainingLockSec() {
     const until = +(sessionStorage.getItem(LOCK_UNTIL_KEY) || 0);
     return Math.max(0, Math.ceil((until - Date.now()) / 1000));
   }
+
   function setLock(seconds) {
     sessionStorage.setItem(LOCK_UNTIL_KEY, String(Date.now() + seconds * 1000));
   }
+
   function addFailAndMaybeLock() {
     const n = (+(sessionStorage.getItem(FAIL_KEY) || 0)) + 1;
     sessionStorage.setItem(FAIL_KEY, String(n));
@@ -46,6 +58,7 @@
       setLock(m * 60);
     }
   }
+
   function resetFails() {
     sessionStorage.removeItem(FAIL_KEY);
     sessionStorage.removeItem(LOCK_UNTIL_KEY);
@@ -68,15 +81,24 @@
 
   function enableDevtoolsWatchAfterLogin() {
     let suspect = 0;
-    function trig() { if (++suspect >= 3) shield.style.display = 'flex'; }
+
+    function trig() {
+      if (++suspect >= 3) shield.style.display = 'flex';
+    }
+
     setInterval(() => {
       if (Math.abs(window.outerWidth - window.innerWidth) > 250 ||
-          Math.abs(window.outerHeight - window.innerHeight) > 250) trig();
-      else suspect = 0;
+          Math.abs(window.outerHeight - window.innerHeight) > 250) {
+        trig();
+      } else {
+        suspect = 0;
+      }
     }, 1000);
+
     (function loop(p) {
       const n = performance.now();
-      if (n - p > 1200) trig(); else suspect = 0;
+      if (n - p > 1200) trig();
+      else suspect = 0;
       requestAnimationFrame(() => loop(performance.now()));
     })(performance.now());
   }
@@ -88,18 +110,22 @@
 
   async function enter() {
     err.style.display = 'none';
+
     if (isLocked()) {
       err.textContent = `嘗試次數過多，請 ${remainingLockSec()} 秒後再試。`;
       err.style.display = '';
       return;
     }
+
     const v = (pwd.value || '').trim();
     if (!v) {
       err.textContent = '請輸入密碼 / Please enter password.';
       err.style.display = '';
       return;
     }
+
     const t0 = Date.now();
+
     if (await sha256Hex(v) === PASS_HASH) {
       sessionStorage.setItem(KEY_OK, '1');
       resetFails();
@@ -125,7 +151,9 @@
     sessionStorage.removeItem(KEY_OK);
     pwd.focus();
   });
-  pwd.addEventListener('keydown', e => { if (e.key === 'Enter') enter(); });
+  pwd.addEventListener('keydown', e => {
+    if (e.key === 'Enter') enter();
+  });
 
   (function boot() {
     if (sessionStorage.getItem(KEY_OK) === '1') {
@@ -175,17 +203,23 @@
     const out = [];
     let ok = 0;
     const lines = txt.split('\n');
+
     for (const l of lines) {
       let m = l.match(EXTRACT_RE);
       if (m) {
-        const ts = m[1], px = Number(m[2]);
+        const ts = m[1];
+        const px = Number(m[2]);
         out.push(`${ts}.000000 ${px.toFixed(6)} ${m[3]}`);
         ok++;
         continue;
       }
+
       m = l.match(CSV_LINE_RE);
       if (m) {
-        const d8 = m[1], t6 = padTime6(m[2]), px = Number(m[3]), act0 = m[4].trim();
+        const d8 = m[1];
+        const t6 = padTime6(m[2]);
+        const px = Number(m[3]);
+        const act0 = m[4].trim();
         if (Number.isFinite(px)) {
           out.push(`${d8}${t6}.000000 ${px.toFixed(6)} ${mapAction(act0)}`);
           ok++;
@@ -193,12 +227,14 @@
         }
       }
     }
+
     return { canon: out.join('\n'), ok };
   }
 
   async function fetchSmart(url) {
     const res = await fetch(url, { cache: 'no-store' });
     if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+
     const buf = await res.arrayBuffer();
     for (const enc of ['utf-8', 'big5', 'utf-16le', 'utf-16be']) {
       try {
@@ -206,8 +242,9 @@
         const norm = normalizeText(td.decode(buf));
         const { canon, ok } = canonicalize(norm);
         if (ok > 0) return { canon, ok };
-      } catch {}
+      } catch (_) {}
     }
+
     const td = new TextDecoder('utf-8');
     const norm = normalizeText(td.decode(buf));
     const { canon, ok } = canonicalize(norm);
@@ -217,30 +254,62 @@
   function parseCanon(text) {
     const rows = [];
     if (!text) return rows;
+
     for (const line of text.split('\n')) {
       const m = line.match(CANON_RE);
       if (m) rows.push({ ts: m[1], line });
     }
+
     rows.sort((a, b) => a.ts.localeCompare(b.ts));
     return rows;
   }
 
   function dailySeriesFromMerged(mergedTxt) {
+    if (!window.SHARED) {
+      throw new Error('window.SHARED 未載入');
+    }
+    if (typeof window.SHARED.parseTXT !== 'function') {
+      throw new Error('SHARED.parseTXT 不存在');
+    }
+    if (typeof window.SHARED.buildReport !== 'function') {
+      throw new Error('SHARED.buildReport 不存在');
+    }
+
     const parsed = window.SHARED.parseTXT(mergedTxt);
+    if (!parsed || !Array.isArray(parsed.rows)) {
+      throw new Error('parseTXT 結果異常');
+    }
+
     const report = window.SHARED.buildReport(parsed.rows);
+    if (!report || !Array.isArray(report.trades)) {
+      throw new Error('buildReport 結果異常');
+    }
+
+    if (!report.trades.length) {
+      throw new Error('buildReport 沒有產生 trades');
+    }
+
     const m = new Map();
     for (const t of report.trades) {
+      if (!t || t.tsOut == null || t.gainSlip == null) continue;
       const d = String(t.tsOut).slice(0, 8);
       m.set(d, (m.get(d) || 0) + t.gainSlip);
     }
+
     const days = [...m.keys()].sort();
     const vals = days.map(d => m.get(d));
+
+    if (!days.length) {
+      throw new Error('無有效日損益資料');
+    }
+
     return { days, vals };
   }
 
   function atMidnight(d) {
     return new Date(d.getFullYear(), d.getMonth(), d.getDate());
   }
+
   function mondayOf(d) {
     const x = atMidnight(d);
     const dow = x.getDay();
@@ -248,12 +317,14 @@
     x.setDate(x.getDate() - offsetToMonday);
     return x;
   }
+
   function sundayOfWeek(d) {
     const m = mondayOf(d);
     const s = new Date(m.getTime());
     s.setDate(s.getDate() + 6);
     return s;
   }
+
   function addMonthsSameDay(d, n) {
     const x = atMidnight(d);
     const day = x.getDate();
@@ -261,6 +332,7 @@
     x.setDate(day);
     return atMidnight(x);
   }
+
   function addYearsSameDay(d, n) {
     const x = atMidnight(d);
     const day = x.getDate();
@@ -268,6 +340,7 @@
     x.setDate(day);
     return atMidnight(x);
   }
+
   function fmtDate(d) {
     const y = d.getFullYear();
     const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -278,13 +351,16 @@
   function d8ToDate(s8) {
     return new Date(+s8.slice(0, 4), +s8.slice(4, 6) - 1, +s8.slice(6, 8));
   }
+
   function buildPrefix(vals) {
     const p = [0];
     for (const v of vals) p.push(p[p.length - 1] + v);
     return p;
   }
+
   function sumBetween(days, vals, startDate, endDate) {
     if (!days.length) return null;
+
     const pref = buildPrefix(vals);
     const lastIdx = days.length - 1;
 
@@ -309,7 +385,10 @@
     const start = new Date(mondayOf(end).getTime());
     start.setDate(start.getDate() - (nWeeks - 1) * 7);
     const sum = sumBetween(days, vals, start, end);
-    return { ret: (sum == null ? null : sum / 1_000_000), range: `${fmtDate(start)}~${fmtDate(end)}` };
+    return {
+      ret: (sum == null ? null : sum / 1_000_000),
+      range: `${fmtDate(start)}~${fmtDate(end)}`
+    };
   }
 
   function monthReturnUser(days, vals, nMonths) {
@@ -317,7 +396,10 @@
     const base = addMonthsSameDay(end, -nMonths);
     const start = mondayOf(base);
     const sum = sumBetween(days, vals, start, end);
-    return { ret: (sum == null ? null : sum / 1_000_000), range: `${fmtDate(start)}~${fmtDate(end)}` };
+    return {
+      ret: (sum == null ? null : sum / 1_000_000),
+      range: `${fmtDate(start)}~${fmtDate(end)}`
+    };
   }
 
   function yearReturnUser(days, vals, nYears) {
@@ -325,18 +407,24 @@
     const base = addYearsSameDay(end, -nYears);
     const start = mondayOf(base);
     const sum = sumBetween(days, vals, start, end);
-    return { ret: (sum == null ? null : sum / 1_000_000), range: `${fmtDate(start)}~${fmtDate(end)}` };
+    return {
+      ret: (sum == null ? null : sum / 1_000_000),
+      range: `${fmtDate(start)}~${fmtDate(end)}`
+    };
   }
 
   function setVal(id, v) {
     const el = document.getElementById(id);
     if (!el) return;
+
     el.classList.remove('pos', 'neg', 'neu');
+
     if (v == null) {
       el.textContent = '—';
       el.classList.add('neu');
       return;
     }
+
     el.textContent = (v * 100).toFixed(2) + '%';
     el.classList.add(v > 0 ? 'pos' : (v < 0 ? 'neg' : 'neu'));
   }
@@ -344,12 +432,15 @@
   function setAvg(id, v) {
     const el = document.getElementById(id);
     if (!el) return;
+
     el.classList.remove('pos', 'neg', 'neu');
+
     if (v == null) {
       el.textContent = '—';
       el.classList.add('neu');
       return;
     }
+
     el.textContent = (v * 100).toFixed(2) + '%';
     el.classList.add(v > 0 ? 'pos' : (v < 0 ? 'neg' : 'neu'));
   }
@@ -370,6 +461,7 @@
       setVal(`${k}-${key}`, null);
       setAvg(`${k}-avg-${key}`, null);
     });
+
     YEAR_KEYS.forEach(k => {
       const row = document.getElementById(`row-${k}-${key}`);
       if (row) row.style.display = 'none';
@@ -388,8 +480,11 @@
   function extractRangeFromPath(p) {
     const m = String(p || '').match(RANGE_RE);
     if (!m) return null;
-    const a = +m[1], b = +m[2];
+
+    const a = +m[1];
+    const b = +m[2];
     if (!Number.isFinite(a) || !Number.isFinite(b) || a <= 0 || b <= 0) return null;
+
     return { start: a, end: b };
   }
 
@@ -459,6 +554,7 @@
   function mergeCanonTexts(canonTexts) {
     const seen = new Set();
     const rows = [];
+
     for (const txt of canonTexts) {
       if (!txt) continue;
       for (const line of String(txt).split('\n')) {
@@ -469,6 +565,7 @@
         rows.push({ ts: m[1], line });
       }
     }
+
     rows.sort((a, b) => a.ts.localeCompare(b.ts));
     return rows.map(r => r.line).join('\n');
   }
@@ -529,12 +626,45 @@
     el.style.color = color || '#666';
   }
 
+  function shortErrMsg(e) {
+    if (!e) return '未知錯誤';
+    const s = String(e && e.message ? e.message : e);
+    return s.length > 40 ? s.slice(0, 40) + '…' : s;
+  }
+
   async function loadDepsAndRun() {
     ensureStatusUI();
     updateHomeProgress(0, 4, '首頁資料載入中...');
 
-    await loadScript('https://unpkg.com/@supabase/supabase-js@2');
-    await loadScript('shared.js?v=txfee45tax2');
+    try {
+      await loadScript('https://unpkg.com/@supabase/supabase-js@2');
+    } catch (e) {
+      updateHomeProgress(4, 4, '首頁資料載入失敗');
+      ['0807', '1001', '1001pp', '0313'].forEach(k => {
+        setCardStatus(k, '錯誤：supabase-js 載入失敗', '#b91c1c');
+      });
+      console.error(e);
+      return;
+    }
+
+    try {
+      await loadScript('shared.js?v=txfee45tax2');
+    } catch (e) {
+      updateHomeProgress(4, 4, '首頁資料載入失敗');
+      ['0807', '1001', '1001pp', '0313'].forEach(k => {
+        setCardStatus(k, '錯誤：shared.js 載入失敗', '#b91c1c');
+      });
+      console.error(e);
+      return;
+    }
+
+    if (!window.SHARED) {
+      updateHomeProgress(4, 4, '首頁資料載入失敗');
+      ['0807', '1001', '1001pp', '0313'].forEach(k => {
+        setCardStatus(k, '錯誤：window.SHARED 不存在', '#b91c1c');
+      });
+      return;
+    }
 
     (async function () {
       const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
@@ -570,7 +700,8 @@
         await listDeepN('', 0, 8, all);
         return all.filter(it => {
           if (!it.metadata) return false;
-          const n = (it.name || ''), p = (it.fullPath || '');
+          const n = (it.name || '');
+          const p = (it.fullPath || '');
           return keyRegex.test(p) || keyRegex.test(n);
         });
       }
@@ -591,9 +722,7 @@
         const files = await listAllFilesByRegex(WANT[key]);
         console.log('resolveMergedForKey', key, files.map(x => x.fullPath));
 
-        if (!files.length) {
-          return null;
-        }
+        if (!files.length) return null;
 
         const chainInfo = chooseChainByRange(files);
 
@@ -649,8 +778,13 @@
 
           const mergedText = merged.canon;
           const rows = parseCanon(mergedText);
-          const start8_fallback = rows.length ? rows[0].ts.slice(0, 8) : null;
-          const end8_fallback = rows.length ? rows[rows.length - 1].ts.slice(0, 8) : null;
+
+          if (!rows.length) {
+            throw new Error('canonical 交易列為空');
+          }
+
+          const start8_fallback = rows[0].ts.slice(0, 8);
+          const end8_fallback = rows[rows.length - 1].ts.slice(0, 8);
 
           const start8 = merged.periodStart || start8_fallback;
           const end8 = merged.periodEnd || end8_fallback;
@@ -703,17 +837,24 @@
           console.error('fillCard error', key, e);
           resetAll(key);
           setPeriodText(key, null, null);
-          setCardStatus(key, '錯誤', '#b91c1c');
+          setCardStatus(key, '錯誤：' + shortErrMsg(e), '#b91c1c');
         }
       }
 
-      const keys = ["0807", "1001", "1001pp", "0313"];
+      const keys = ['0807', '1001', '1001pp', '0313'];
       let done = 0;
+
       for (const key of keys) {
         await fillCard(key);
         done += 1;
         updateHomeProgress(done, keys.length, done === keys.length ? '首頁資料載入完成' : '首頁資料載入中...');
       }
-    })();
+    })().catch(e => {
+      console.error('loadDepsAndRun inner error', e);
+      updateHomeProgress(4, 4, '首頁資料載入失敗');
+      ['0807', '1001', '1001pp', '0313'].forEach(k => {
+        setCardStatus(k, '錯誤：' + shortErrMsg(e), '#b91c1c');
+      });
+    });
   }
 })();
