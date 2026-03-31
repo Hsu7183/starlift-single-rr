@@ -101,9 +101,13 @@
     }
     const t0 = Date.now();
     if (await sha256Hex(v) === PASS_HASH) {
-      sessionStorage.setItem(KEY_OK, '1'); resetFails();
-      gate.classList.add('hidden'); app.classList.remove('hidden');
-      startIdleLogout(); enableDevtoolsWatchAfterLogin(); loadDepsAndRun();
+      sessionStorage.setItem(KEY_OK, '1');
+      resetFails();
+      gate.classList.add('hidden');
+      app.classList.remove('hidden');
+      startIdleLogout();
+      enableDevtoolsWatchAfterLogin();
+      loadDepsAndRun();
     } else {
       const delay = 1000 + Math.random() * 600 - (Date.now() - t0);
       if (delay > 0) await new Promise(r => setTimeout(r, delay));
@@ -125,8 +129,11 @@
 
   (function boot() {
     if (sessionStorage.getItem(KEY_OK) === '1') {
-      gate.classList.add('hidden'); app.classList.remove('hidden');
-      startIdleLogout(); enableDevtoolsWatchAfterLogin(); loadDepsAndRun();
+      gate.classList.add('hidden');
+      app.classList.remove('hidden');
+      startIdleLogout();
+      enableDevtoolsWatchAfterLogin();
+      loadDepsAndRun();
     }
   })();
 
@@ -196,7 +203,7 @@
         const norm = normalizeText(td.decode(buf));
         const { canon, ok } = canonicalize(norm);
         if (ok > 0) return { canon, ok };
-      } catch { }
+      } catch {}
     }
     const td = new TextDecoder('utf-8');
     const norm = normalizeText(td.decode(buf));
@@ -205,7 +212,8 @@
   }
 
   function parseCanon(text) {
-    const rows = []; if (!text) return rows;
+    const rows = [];
+    if (!text) return rows;
     for (const line of text.split('\n')) {
       const m = line.match(CANON_RE);
       if (m) rows.push({ ts: m[1], line });
@@ -365,11 +373,12 @@
     });
   }
 
+  // ===== 這裡改成寬鬆版，先讓首頁抓得到 =====
   const WANT = {
-    "0807": /(^|[^a-z0-9])0807([^a-z0-9]|$)/i,
-    "1001": /(^|[^a-z0-9])1001([^a-z0-9+]|$)/i,
-    "1001pp": /(1001plus\+|1001plusplus)/i,
-    "0313": /(^|[^a-z0-9])0313([^a-z0-9]|$)/i
+    "0807": /0807/i,
+    "1001": /1001/i,
+    "1001pp": /1001plus/i,
+    "0313": /0313/i
   };
 
   const RANGE_RE = /\b(20\d{6})-(20\d{6})\b/;
@@ -462,7 +471,66 @@
     return rows.map(r => r.line).join('\n');
   }
 
+  function ensureStatusUI() {
+    let box = document.getElementById('homeLoadStatus');
+    if (!box) {
+      box = document.createElement('div');
+      box.id = 'homeLoadStatus';
+      box.style.maxWidth = '1100px';
+      box.style.margin = '0 auto 12px';
+      box.style.fontSize = '13px';
+      box.style.color = '#666';
+      box.innerHTML = `
+        <div id="homeLoadText">首頁資料載入中...</div>
+        <div style="margin-top:4px;background:#e5e7eb;border-radius:999px;height:8px;overflow:hidden;">
+          <div id="homeLoadBar" style="width:0%;height:8px;background:#0d6efd;transition:width .25s;"></div>
+        </div>
+      `;
+      const title = document.querySelector('.section-title-red');
+      if (title && title.parentNode) {
+        title.parentNode.insertBefore(box, title.nextSibling);
+      }
+    }
+  }
+
+  function updateHomeProgress(done, total, label) {
+    ensureStatusUI();
+    const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+    const txt = document.getElementById('homeLoadText');
+    const bar = document.getElementById('homeLoadBar');
+    if (txt) txt.textContent = `${label}（${done}/${total}，${pct}%）`;
+    if (bar) bar.style.width = `${pct}%`;
+  }
+
+  function ensureCardStatus(key) {
+    let el = document.getElementById(`status-${key}`);
+    if (el) return el;
+
+    const period = document.getElementById(`period-${key}`);
+    if (!period || !period.parentNode) return null;
+
+    el = document.createElement('div');
+    el.id = `status-${key}`;
+    el.style.marginTop = '4px';
+    el.style.fontSize = '12px';
+    el.style.textAlign = 'center';
+    el.style.color = '#666';
+    el.textContent = '讀取中...';
+    period.parentNode.appendChild(el);
+    return el;
+  }
+
+  function setCardStatus(key, text, color) {
+    const el = ensureCardStatus(key);
+    if (!el) return;
+    el.textContent = text;
+    el.style.color = color || '#666';
+  }
+
   async function loadDepsAndRun() {
+    ensureStatusUI();
+    updateHomeProgress(0, 4, '首頁資料載入中...');
+
     await loadScript('https://unpkg.com/@supabase/supabase-js@2');
     await loadScript('shared.js?v=txfee45tax2');
 
@@ -500,7 +568,7 @@
           try {
             const { data } = await sb.storage.from(BUCKET).download(`manifests/${n}.json`);
             if (data) return JSON.parse(await data.text());
-          } catch { }
+          } catch {}
         }
         return null;
       }
@@ -538,6 +606,8 @@
         } else {
           files = await listAllFilesByRegex(WANT[key]);
         }
+
+        console.log('resolveMergedForKey', key, files.map(x => x.fullPath));
 
         if (!files.length && mf && mf.latest_path) {
           return {
@@ -581,11 +651,14 @@
       }
 
       async function fillCard(key) {
+        setCardStatus(key, '讀取中...', '#666');
+
         try {
           const merged = await resolveMergedForKey(key);
           if (!merged || !merged.canon) {
             resetAll(key);
             setPeriodText(key, null, null);
+            setCardStatus(key, '無資料', '#b45309');
             return;
           }
 
@@ -639,18 +712,23 @@
               setAvg(`${k}-avg-${key}`, avg);
             }
           });
+
+          setCardStatus(key, '已完成', '#15803d');
         } catch (e) {
+          console.error('fillCard error', key, e);
           resetAll(key);
           setPeriodText(key, null, null);
+          setCardStatus(key, '錯誤', '#b91c1c');
         }
       }
 
-      await Promise.all([
-        fillCard("0807"),
-        fillCard("1001"),
-        fillCard("1001pp"),
-        fillCard("0313")
-      ]);
+      const keys = ["0807", "1001", "1001pp", "0313"];
+      let done = 0;
+      for (const key of keys) {
+        await fillCard(key);
+        done += 1;
+        updateHomeProgress(done, keys.length, done === keys.length ? '首頁資料載入完成' : '首頁資料載入中...');
+      }
     })();
   }
 })();
