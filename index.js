@@ -647,8 +647,7 @@
         return {
           canon: canonObj.canon,
           periodStart: null,
-          periodEnd: null,
-          fileCount: 1
+          periodEnd: null
         };
       }
 
@@ -663,8 +662,7 @@
       return {
         canon: mergedCanon,
         periodStart: String(chainInfo.start),
-        periodEnd: String(chainInfo.end),
-        fileCount: chainInfo.chain.length
+        periodEnd: String(chainInfo.end)
       };
     }
 
