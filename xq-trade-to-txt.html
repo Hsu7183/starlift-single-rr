@@ -13,7 +13,7 @@
       color:#222;
     }
     .wrap{
-      max-width:1500px;
+      max-width:1450px;
       margin:0 auto;
     }
     .title{
@@ -44,16 +44,17 @@
     .section-title.blue{ color:#0d6efd; }
     .section-title.green{ color:#198754; }
 
-    .grid3{
-      display:grid;
-      grid-template-columns:repeat(3,1fr);
-      gap:16px;
-    }
     .grid2{
       display:grid;
       grid-template-columns:1fr 1fr;
       gap:16px;
     }
+    .grid3{
+      display:grid;
+      grid-template-columns:1fr 1fr 1fr;
+      gap:16px;
+    }
+
     .filebox{
       border:1px dashed #cbd5e1;
       border-radius:12px;
@@ -95,7 +96,6 @@
     }
     .btn.gray{ background:#6c757d; }
     .btn.green{ background:#198754; }
-    .btn.orange{ background:#fd7e14; }
     .btn.dark{ background:#111827; }
 
     .mono{
@@ -106,8 +106,8 @@
       border:1px solid #e5e7eb;
       border-radius:10px;
       padding:12px;
-      min-height:240px;
-      max-height:560px;
+      min-height:260px;
+      max-height:600px;
       overflow:auto;
       font-size:12px;
       line-height:1.6;
@@ -150,7 +150,7 @@
     }
 
     @media (max-width: 1100px){
-      .grid3,.grid2{ grid-template-columns:1fr; }
+      .grid2,.grid3{ grid-template-columns:1fr; }
     }
   </style>
 </head>
@@ -158,18 +158,18 @@
   <div class="wrap">
     <h1 class="title">XQ交易明細轉TXT</h1>
     <p class="sub">
-      第一層：先把不同來源資料轉成統一的「指標TXT格式」。<br>
+      第一層：先把檔案2交易明細轉成統一的「指標TXT格式」。<br>
       第二層：再用「TXT 對 TXT」逐筆比對同區間內的時間、點位、動作是否相符。
     </p>
 
     <div class="card">
       <h2 class="section-title blue">第一層：先轉成指標TXT</h2>
 
-      <div class="grid3">
+      <div class="grid2">
         <div class="filebox">
           <p class="block-title">檔案1：指標輸出TXT（header來源）</p>
           <p class="hint">
-            用途：取第一行參數列，讓檔案2 / 檔案3 轉出時，沿用相同 header。<br>
+            用途：取第一行參數列，讓檔案2轉出時沿用相同 header。<br>
             同時下方也會完整顯示你載入的原始 TXT。
           </p>
           <input id="fileHeaderSource" type="file" accept=".txt,.csv,text/plain" />
@@ -178,7 +178,7 @@
 
         <div class="filebox">
           <p class="block-title">檔案2：交易輸出交易明細</p>
-          <p class="hint">支援 csv / txt，含你這種 Tab 分隔欄位格式。</p>
+          <p class="hint">支援 csv / txt，包含 Tab 分隔格式。</p>
           <input id="fileTradeDetail" type="file" accept=".csv,.txt" />
           <div id="nameTradeDetail" class="fname">尚未載入</div>
           <div class="action-row">
@@ -186,20 +186,9 @@
             <button id="btnDownloadDetail" class="btn green">下載檔案2轉出TXT</button>
           </div>
         </div>
-
-        <div class="filebox">
-          <p class="block-title">檔案3：交易輸出全部資料</p>
-          <p class="hint">支援 xlsx / xls / csv / txt</p>
-          <input id="fileTradeAll" type="file" accept=".xlsx,.xls,.csv,.txt" />
-          <div id="nameTradeAll" class="fname">尚未載入</div>
-          <div class="action-row">
-            <button id="btnConvertAll" class="btn orange">檔案3 轉成指標TXT</button>
-            <button id="btnDownloadAll" class="btn green">下載檔案3轉出TXT</button>
-          </div>
-        </div>
       </div>
 
-      <div class="grid3" style="margin-top:16px;">
+      <div class="grid2" style="margin-top:16px;">
         <div>
           <p class="block-title">檔案1 原始TXT預覽</p>
           <div id="headerSourcePreview" class="mono"></div>
@@ -207,10 +196,6 @@
         <div>
           <p class="block-title">檔案2 轉換結果</p>
           <div id="detailPreview" class="mono"></div>
-        </div>
-        <div>
-          <p class="block-title">檔案3 轉換結果</p>
-          <div id="allPreview" class="mono"></div>
         </div>
       </div>
     </div>
@@ -229,13 +214,12 @@
         <div class="filebox">
           <p class="block-title">右欄：測試TXT</p>
           <p class="hint">
-            可直接載入一個 TXT，或按按鈕直接套用「檔案2轉出TXT / 檔案3轉出TXT」。
+            可直接載入一個 TXT，或按按鈕直接套用「檔案2轉出TXT」。
           </p>
           <input id="fileCompareTarget" type="file" accept=".txt,.csv,text/plain" />
           <div id="nameCompareTarget" class="fname">尚未載入</div>
           <div class="action-row">
             <button id="btnUseDetailAsTarget" class="btn dark">使用 檔案2轉出TXT</button>
-            <button id="btnUseAllAsTarget" class="btn dark">使用 檔案3轉出TXT</button>
           </div>
         </div>
 
@@ -289,7 +273,6 @@
     </div>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
-  <script src="xq-trade-to-txt.js?v=1150331-v3"></script>
+  <script src="xq-trade-to-txt.js?v=1150331-v4"></script>
 </body>
 </html>
