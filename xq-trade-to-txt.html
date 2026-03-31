@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>XQ交易明細轉TXT</title>
+  <meta name="robots" content="noindex,nofollow" />
+  <style>
+    body{
+      font-family:Arial,"微軟正黑體",sans-serif;
+      margin:20px;
+      background:#f8f9fa;
+      color:#222;
+    }
+    .wrap{
+      max-width:1400px;
+      margin:0 auto;
+    }
+    .title{
+      font-size:28px;
+      font-weight:800;
+      color:#0d6efd;
+      margin:0 0 18px;
+    }
+    .sub{
+      color:#666;
+      margin:0 0 18px;
+      line-height:1.6;
+    }
+    .card{
+      background:#fff;
+      border:1px solid #e5e7eb;
+      border-radius:14px;
+      box-shadow:0 2px 10px rgba(0,0,0,.06);
+      padding:18px;
+      margin-bottom:18px;
+    }
+    .grid3{
+      display:grid;
+      grid-template-columns:repeat(3,1fr);
+      gap:16px;
+    }
+    .grid2{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:16px;
+    }
+    .block-title{
+      font-size:18px;
+      font-weight:800;
+      margin:0 0 10px;
+    }
+    .hint{
+      font-size:13px;
+      color:#666;
+      line-height:1.6;
+      margin:0 0 10px;
+    }
+    .filebox{
+      border:1px dashed #cbd5e1;
+      border-radius:12px;
+      padding:14px;
+      background:#fafafa;
+    }
+    .row{
+      display:flex;
+      gap:10px;
+      align-items:center;
+      flex-wrap:wrap;
+    }
+    .btn{
+      background:#0d6efd;
+      color:#fff;
+      border:0;
+      border-radius:10px;
+      padding:10px 14px;
+      cursor:pointer;
+      font-weight:700;
+    }
+    .btn.gray{ background:#6c757d; }
+    .btn.green{ background:#198754; }
+    .btn.orange{ background:#fd7e14; }
+    .btn.red{ background:#dc3545; }
+
+    .fname{
+      font-size:13px;
+      color:#333;
+      word-break:break-all;
+      margin-top:8px;
+    }
+    .mono{
+      font-family:Consolas,Menlo,Monaco,monospace;
+      white-space:pre-wrap;
+      word-break:break-word;
+      background:#f8fafc;
+      border:1px solid #e5e7eb;
+      border-radius:10px;
+      padding:12px;
+      min-height:180px;
+      max-height:420px;
+      overflow:auto;
+      font-size:12px;
+      line-height:1.55;
+    }
+    .summary{
+      font-size:14px;
+      line-height:1.8;
+      white-space:pre-wrap;
+      word-break:break-word;
+    }
+    table{
+      width:100%;
+      border-collapse:collapse;
+      font-size:13px;
+      background:#fff;
+    }
+    th, td{
+      border:1px solid #e5e7eb;
+      padding:8px 10px;
+      text-align:left;
+      vertical-align:top;
+    }
+    th{
+      background:#f3f4f6;
+      font-weight:800;
+      position:sticky;
+      top:0;
+      z-index:1;
+    }
+    .table-wrap{
+      border:1px solid #e5e7eb;
+      border-radius:10px;
+      overflow:auto;
+      max-height:650px;
+      background:#fff;
+    }
+    .ok{ color:#198754; font-weight:700; }
+    .bad{ color:#dc3545; font-weight:700; }
+    .neu{ color:#6c757d; font-weight:700; }
+    .pill{
+      display:inline-block;
+      padding:3px 8px;
+      border-radius:999px;
+      font-size:12px;
+      font-weight:700;
+      background:#eef2ff;
+      color:#334155;
+      margin-right:6px;
+    }
+    .top-actions{
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+      margin-top:10px;
+    }
+    @media (max-width: 1100px){
+      .grid3,.grid2{ grid-template-columns:1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1 class="title">XQ交易明細轉TXT</h1>
+    <p class="sub">
+      功能：
+      1. 載入「指標輸出TXT」作為基準格式。<br>
+      2. 載入「交易輸出交易明細(csv)」或「交易輸出全部資料(xlsx/csv)」，轉成同樣的 TXT 交易列格式。<br>
+      3. 在下方逐筆比對同區間內的時間、點位、動作是否一致，並輸出摘要。
+    </p>
+
+    <div class="card">
+      <div class="grid3">
+        <div class="filebox">
+          <p class="block-title">檔案1：指標輸出TXT</p>
+          <p class="hint">格式：第一行參數列，下面每行為 YYYYMMDDhhmmss 價格 動作</p>
+          <input id="fileBaseTxt" type="file" accept=".txt,.csv,text/plain" />
+          <div id="nameBaseTxt" class="fname">尚未載入</div>
+        </div>
+
+        <div class="filebox">
+          <p class="block-title">檔案2：交易輸出交易明細</p>
+          <p class="hint">建議載入 csv</p>
+          <input id="fileTradeDetail" type="file" accept=".csv,.txt" />
+          <div id="nameTradeDetail" class="fname">尚未載入</div>
+        </div>
+
+        <div class="filebox">
+          <p class="block-title">檔案3：交易輸出全部資料</p>
+          <p class="hint">支援 xlsx / csv</p>
+          <input id="fileTradeAll" type="file" accept=".xlsx,.xls,.csv,.txt" />
+          <div id="nameTradeAll" class="fname">尚未載入</div>
+        </div>
+      </div>
+
+      <div class="top-actions">
+        <button id="btnRunDetail" class="btn">轉換＋比對 檔案2</button>
+        <button id="btnRunAll" class="btn green">轉換＋比對 檔案3</button>
+        <button id="btnRunBoth" class="btn orange">兩者一起轉換＋比對</button>
+        <button id="btnClearAll" class="btn gray">全部清除</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <p class="block-title">比對結果摘要</p>
+      <div id="summaryBox" class="summary">尚未執行。</div>
+    </div>
+
+    <div class="grid2">
+      <div class="card">
+        <p class="block-title">基準：指標輸出TXT</p>
+        <div id="basePreview" class="mono"></div>
+      </div>
+      <div class="card">
+        <p class="block-title">轉換結果</p>
+        <div id="convertedPreview" class="mono"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <p class="block-title">逐筆比對表</p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th style="width:70px">序號</th>
+              <th style="width:120px">結果</th>
+              <th>左欄：指標TXT</th>
+              <th>右欄：轉換結果</th>
+              <th style="width:160px">時間是否相同</th>
+              <th style="width:160px">價格是否相同</th>
+              <th style="width:160px">動作是否相同</th>
+            </tr>
+          </thead>
+          <tbody id="compareBody">
+            <tr><td colspan="7" class="neu">尚未執行。</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+  <script src="xq-trade-to-txt.js?v=1150331"></script>
+</body>
+</html>
