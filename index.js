@@ -172,21 +172,24 @@
   }
 
   function canonicalize(txt) {
-    const out = []; let ok = 0;
+    const out = [];
+    let ok = 0;
     const lines = txt.split('\n');
     for (const l of lines) {
       let m = l.match(EXTRACT_RE);
       if (m) {
         const ts = m[1], px = Number(m[2]);
         out.push(`${ts}.000000 ${px.toFixed(6)} ${m[3]}`);
-        ok++; continue;
+        ok++;
+        continue;
       }
       m = l.match(CSV_LINE_RE);
       if (m) {
         const d8 = m[1], t6 = padTime6(m[2]), px = Number(m[3]), act0 = m[4].trim();
         if (Number.isFinite(px)) {
           out.push(`${d8}${t6}.000000 ${px.toFixed(6)} ${mapAction(act0)}`);
-          ok++; continue;
+          ok++;
+          continue;
         }
       }
     }
@@ -373,7 +376,6 @@
     });
   }
 
-  // ===== 這裡改成寬鬆版，先讓首頁抓得到 =====
   const WANT = {
     "0807": /0807/i,
     "1001": /1001/i,
@@ -543,10 +545,11 @@
 
       async function listDir(prefix) {
         const p = (prefix && !prefix.endsWith('/')) ? prefix + '/' : (prefix || '');
-        const { data } = await sb.storage.from(BUCKET).list(p, {
+        const { data, error } = await sb.storage.from(BUCKET).list(p, {
           limit: 1000,
           sortBy: { column: 'name', order: 'asc' }
         });
+        if (error) throw error;
         return (data || []).map(it => ({ ...it, fullPath: p + it.name }));
       }
 
@@ -560,17 +563,6 @@
             out.push(it);
           }
         }
-      }
-
-      async function readManifest(name) {
-        const tries = [name, `tw-${name}`];
-        for (const n of tries) {
-          try {
-            const { data } = await sb.storage.from(BUCKET).download(`manifests/${n}.json`);
-            if (data) return JSON.parse(await data.text());
-          } catch {}
-        }
-        return null;
       }
 
       async function listAllFilesByRegex(keyRegex) {
@@ -596,36 +588,25 @@
       }
 
       async function resolveMergedForKey(key) {
-        const mf = await readManifest(key);
-
-        let files = [];
-        if (mf && mf.prefix) {
-          const all = [];
-          await listDeepN(mf.prefix, 0, 8, all);
-          files = all.filter(it => it.metadata && (WANT[key].test(it.fullPath) || WANT[key].test(it.name)));
-        } else {
-          files = await listAllFilesByRegex(WANT[key]);
-        }
-
+        const files = await listAllFilesByRegex(WANT[key]);
         console.log('resolveMergedForKey', key, files.map(x => x.fullPath));
 
-        if (!files.length && mf && mf.latest_path) {
-          return {
-            canon: (await fetchSmart(pubUrl(mf.latest_path))).canon,
-            periodStart: null,
-            periodEnd: null
-          };
+        if (!files.length) {
+          return null;
         }
-
-        if (!files.length) return null;
 
         const chainInfo = chooseChainByRange(files);
 
         if (!chainInfo) {
           const latest = pickLatestByUpdate(files);
           if (!latest) return null;
-          const canon = (await fetchSmart(pubUrl(latest.fullPath))).canon;
-          return { canon, periodStart: null, periodEnd: null };
+          const canonObj = await fetchSmart(pubUrl(latest.fullPath));
+          return {
+            canon: canonObj.canon,
+            periodStart: null,
+            periodEnd: null,
+            fileCount: 1
+          };
         }
 
         const canonTexts = [];
@@ -639,14 +620,18 @@
         return {
           canon: mergedCanon,
           periodStart: String(chainInfo.start),
-          periodEnd: String(chainInfo.end)
+          periodEnd: String(chainInfo.end),
+          fileCount: chainInfo.chain.length
         };
       }
 
       function setPeriodText(key, start8, end8) {
         const el = document.getElementById(`period-${key}`);
         if (!el) return;
-        if (!start8 || !end8) { el.textContent = '—'; return; }
+        if (!start8 || !end8) {
+          el.textContent = '—';
+          return;
+        }
         el.textContent = `${start8} - ${end8}`;
       }
 
@@ -713,7 +698,7 @@
             }
           });
 
-          setCardStatus(key, '已完成', '#15803d');
+          setCardStatus(key, `已完成（抓到 ${merged.fileCount || 0} 檔）`, '#15803d');
         } catch (e) {
           console.error('fillCard error', key, e);
           resetAll(key);
