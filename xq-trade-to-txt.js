@@ -27,6 +27,10 @@
 
     compareBasePreview: $('compareBasePreview'),
     compareTargetPreview: $('compareTargetPreview'),
+
+    leftOnlyPreview: $('leftOnlyPreview'),
+    rightOnlyPreview: $('rightOnlyPreview'),
+
     summaryBox: $('summaryBox'),
     compareBody: $('compareBody')
   };
@@ -268,6 +272,14 @@
     return [...map.values()];
   }
 
+  function rowKey(r) {
+    return `${r.ts}|${r.px}|${r.act}`;
+  }
+
+  function rowLine(r) {
+    return `${r.ts} ${r.px} ${r.act}`;
+  }
+
   function convertTradeDetailToIndicatorRows(arr2d, header, baseRows) {
     if (!arr2d || !arr2d.length) return [];
 
@@ -354,43 +366,102 @@
     };
   }
 
-  function compareIndicatorRows(baseRows, testRows) {
-    const { baseCut, testCut, rangeText } = intersectRange(baseRows, testRows);
-    const maxLen = Math.max(baseCut.length, testCut.length);
+  function buildSetDiff(baseRows, testRows) {
+    const leftMap = new Map(baseRows.map(r => [rowKey(r), r]));
+    const rightMap = new Map(testRows.map(r => [rowKey(r), r]));
 
-    const result = [];
-    let sameCount = 0;
+    const leftOnly = [];
+    const rightOnly = [];
+    const both = [];
 
-    for (let i = 0; i < maxLen; i++) {
-      const l = baseCut[i] || null;
-      const r = testCut[i] || null;
-
-      const sameTs = !!l && !!r && l.ts === r.ts;
-      const samePx = !!l && !!r && l.px === r.px;
-      const sameAct = !!l && !!r && l.act === r.act;
-      const allSame = sameTs && samePx && sameAct;
-
-      if (allSame) sameCount++;
-
-      result.push({
-        leftLine: l ? `${l.ts} ${l.px} ${l.act}` : '',
-        rightLine: r ? `${r.ts} ${r.px} ${r.act}` : '',
-        sameTs,
-        samePx,
-        sameAct,
-        allSame
-      });
+    for (const [k, r] of leftMap.entries()) {
+      if (rightMap.has(k)) both.push(r);
+      else leftOnly.push(r);
+    }
+    for (const [k, r] of rightMap.entries()) {
+      if (!leftMap.has(k)) rightOnly.push(r);
     }
 
+    return { leftOnly, rightOnly, both };
+  }
+
+  function compareWithRealign(baseRows, testRows) {
+    let i = 0;
+    let j = 0;
+    const result = [];
+
+    while (i < baseRows.length || j < testRows.length) {
+      const l = baseRows[i] || null;
+      const r = testRows[j] || null;
+
+      if (!l && r) {
+        result.push(makeCompareRow(null, r, '右側多一筆'));
+        j++;
+        continue;
+      }
+      if (l && !r) {
+        result.push(makeCompareRow(l, null, '左側多一筆'));
+        i++;
+        continue;
+      }
+
+      if (sameRow(l, r)) {
+        result.push(makeCompareRow(l, r, '相符'));
+        i++;
+        j++;
+        continue;
+      }
+
+      const r1 = testRows[j + 1] || null;
+      const r2 = testRows[j + 2] || null;
+      const l1 = baseRows[i + 1] || null;
+      const l2 = baseRows[i + 2] || null;
+
+      if (l && r1 && sameRow(l, r1)) {
+        result.push(makeCompareRow(null, r, '右側多一筆'));
+        j++;
+        continue;
+      }
+      if (l && r2 && sameRow(l, r2)) {
+        result.push(makeCompareRow(null, r, '右側多一筆'));
+        j++;
+        continue;
+      }
+      if (l1 && r && sameRow(l1, r)) {
+        result.push(makeCompareRow(l, null, '左側多一筆'));
+        i++;
+        continue;
+      }
+      if (l2 && r && sameRow(l2, r)) {
+        result.push(makeCompareRow(l, null, '左側多一筆'));
+        i++;
+        continue;
+      }
+
+      result.push(makeCompareRow(l, r, '內容不符'));
+      i++;
+      j++;
+    }
+
+    return result;
+  }
+
+  function sameRow(a, b) {
+    return !!a && !!b && a.ts === b.ts && a.px === b.px && a.act === b.act;
+  }
+
+  function makeCompareRow(l, r, kind) {
+    const sameTs = !!l && !!r && l.ts === r.ts;
+    const samePx = !!l && !!r && l.px === r.px;
+    const sameAct = !!l && !!r && l.act === r.act;
+
     return {
-      rangeText,
-      baseCut,
-      testCut,
-      result,
-      sameCount,
-      sameRate: maxLen ? sameCount / maxLen : 0,
-      baseOnly: Math.max(0, baseCut.length - testCut.length),
-      testOnly: Math.max(0, testCut.length - baseCut.length)
+      leftLine: l ? rowLine(l) : '',
+      rightLine: r ? rowLine(r) : '',
+      sameTs,
+      samePx,
+      sameAct,
+      kind
     };
   }
 
@@ -400,28 +471,64 @@
       return;
     }
 
-    els.compareBody.innerHTML = compareRows.map((r, i) => `
-      <tr>
-        <td>${i + 1}</td>
-        <td class="${r.allSame ? 'ok' : 'bad'}">${r.allSame ? '相符' : '不符'}</td>
-        <td>${escapeHtml(r.leftLine || '—')}</td>
-        <td>${escapeHtml(r.rightLine || '—')}</td>
-        <td class="${r.sameTs ? 'ok' : 'bad'}">${r.sameTs ? '相同' : '不同'}</td>
-        <td class="${r.samePx ? 'ok' : 'bad'}">${r.samePx ? '相同' : '不同'}</td>
-        <td class="${r.sameAct ? 'ok' : 'bad'}">${r.sameAct ? '相同' : '不同'}</td>
-      </tr>
-    `).join('');
+    els.compareBody.innerHTML = compareRows.map((r, idx) => {
+      const cls =
+        r.kind === '相符' ? 'ok' :
+        (r.kind === '左側多一筆' || r.kind === '右側多一筆') ? 'warn' : 'bad';
+
+      return `
+        <tr>
+          <td>${idx + 1}</td>
+          <td class="${cls}">${escapeHtml(r.kind)}</td>
+          <td>${escapeHtml(r.leftLine || '—')}</td>
+          <td>${escapeHtml(r.rightLine || '—')}</td>
+          <td class="${r.sameTs ? 'ok' : 'bad'}">${r.leftLine && r.rightLine ? (r.sameTs ? '相同' : '不同') : '—'}</td>
+          <td class="${r.samePx ? 'ok' : 'bad'}">${r.leftLine && r.rightLine ? (r.samePx ? '相同' : '不同') : '—'}</td>
+          <td class="${r.sameAct ? 'ok' : 'bad'}">${r.leftLine && r.rightLine ? (r.sameAct ? '相同' : '不同') : '—'}</td>
+        </tr>
+      `;
+    }).join('');
   }
 
-  function renderSummary(compare) {
+  function renderSummary(rangeText, baseRows, testRows, setDiff, alignedRows) {
+    const exactMatchCount = setDiff.both.length;
+    const leftOnlyCount = setDiff.leftOnly.length;
+    const rightOnlyCount = setDiff.rightOnly.length;
+    const alignedExact = alignedRows.filter(x => x.kind === '相符').length;
+    const leftExtraAligned = alignedRows.filter(x => x.kind === '左側多一筆').length;
+    const rightExtraAligned = alignedRows.filter(x => x.kind === '右側多一筆').length;
+    const hardMismatch = alignedRows.filter(x => x.kind === '內容不符').length;
+
     els.summaryBox.textContent =
-`重疊區間：${compare.rangeText}
-基準筆數：${compare.baseCut.length}
-測試筆數：${compare.testCut.length}
-完全相符筆數：${compare.sameCount}
-完全相符率：${(compare.sameRate * 100).toFixed(2)}%
-基準多出筆數：${compare.baseOnly}
-測試多出筆數：${compare.testOnly}`;
+`重疊區間：${rangeText}
+基準筆數：${baseRows.length}
+測試筆數：${testRows.length}
+
+【集合比對】
+兩邊完全相同筆數：${exactMatchCount}
+左有右無：${leftOnlyCount}
+右有左無：${rightOnlyCount}
+
+【重新對齊逐筆比對】
+相符：${alignedExact}
+左側多一筆：${leftExtraAligned}
+右側多一筆：${rightExtraAligned}
+內容不符：${hardMismatch}
+
+判讀重點：
+若「左有右無 / 右有左無」很少，但舊版逐筆比對曾出現大量紅字，
+通常代表不是整年都不同，而是中途少幾筆造成序位錯開。`;
+  }
+
+  function loadDiffPreviews(setDiff) {
+    setPreview(
+      els.leftOnlyPreview,
+      setDiff.leftOnly.length ? setDiff.leftOnly.map(rowLine).join('\n') : '無'
+    );
+    setPreview(
+      els.rightOnlyPreview,
+      setDiff.rightOnly.length ? setDiff.rightOnly.map(rowLine).join('\n') : '無'
+    );
   }
 
   async function loadHeaderSource() {
@@ -518,9 +625,13 @@
       const left = parseIndicatorTxt(state.compareBaseTxt);
       const right = parseIndicatorTxt(state.compareTargetTxt);
 
-      const compare = compareIndicatorRows(left.rows, right.rows);
-      renderSummary(compare);
-      renderCompareTable(compare.result);
+      const range = intersectRange(left.rows, right.rows);
+      const setDiff = buildSetDiff(range.baseCut, range.testCut);
+      const alignedRows = compareWithRealign(range.baseCut, range.testCut);
+
+      renderSummary(range.rangeText, range.baseCut, range.testCut, setDiff, alignedRows);
+      loadDiffPreviews(setDiff);
+      renderCompareTable(alignedRows);
     } catch (err) {
       console.error(err);
       alert('比對失敗：' + (err && err.message ? err.message : err));
@@ -548,6 +659,8 @@
     setPreview(els.detailPreview, '');
     setPreview(els.compareBasePreview, '');
     setPreview(els.compareTargetPreview, '');
+    setPreview(els.leftOnlyPreview, '');
+    setPreview(els.rightOnlyPreview, '');
 
     els.summaryBox.textContent = '尚未執行。';
     els.compareBody.innerHTML = '<tr><td colspan="7" class="neu">尚未執行。</td></tr>';
