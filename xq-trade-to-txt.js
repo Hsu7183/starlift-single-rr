@@ -41,6 +41,15 @@
 
   const DEFAULT_FORCE_EXIT = '131200';
 
+  function escapeHtml(s) {
+    return String(s || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
   function normalizeLineBreaks(s) {
     return String(s || '').replace(/\r\n?/g, '\n');
   }
