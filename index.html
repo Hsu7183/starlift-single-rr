@@ -231,20 +231,6 @@
       padding:18px;
     }
 
-    .gate-title{
-      font-size:18px;
-      font-weight:800;
-      margin:0 0 10px;
-      color:#111827;
-    }
-
-    .gate-desc{
-      margin:0 0 14px;
-      color:#6b7280;
-      font-size:13px;
-      line-height:1.6;
-    }
-
     .row{
       display:flex;
       gap:12px;
@@ -263,11 +249,6 @@
     }
     .btn.gray{ background:#6b7280; }
 
-    .field-wrap{
-      width:100%;
-      max-width:420px;
-    }
-
     input[type="password"],
     input[type="number"]{
       width:100%;
@@ -275,12 +256,6 @@
       border:1px solid #dbe3ee;
       border-radius:10px;
       font-size:14px;
-    }
-
-    .input-help{
-      margin-top:6px;
-      font-size:12px;
-      color:#6b7280;
     }
 
     .error{
@@ -291,6 +266,30 @@
     }
 
     .hidden{ display:none; }
+
+    .slip-box{
+      max-width:520px;
+      margin:28px auto;
+      background:#fff;
+      border:1px solid #e5e7eb;
+      border-radius:16px;
+      box-shadow:0 10px 24px rgba(15,23,42,.06);
+      padding:20px;
+    }
+
+    .slip-title{
+      margin:0 0 8px;
+      font-size:20px;
+      font-weight:800;
+      color:#111827;
+    }
+
+    .slip-note{
+      margin:0 0 14px;
+      font-size:13px;
+      color:#6b7280;
+      line-height:1.6;
+    }
 
     html,body{
       -webkit-user-select:none;
@@ -342,31 +341,23 @@
   </div>
 
   <div id="gate" class="gate">
-    <p class="gate-title">首頁驗證</p>
-    <p class="gate-desc">先輸入密碼，再設定首頁滑點，之後才會顯示各策略的近期報酬率。</p>
-
-    <div id="pwdStep">
-      <div class="row" style="margin-top:12px;">
-        <div class="field-wrap">
-          <input id="pwd" type="password" placeholder="密碼 / Password" autocomplete="current-password" />
-        </div>
-        <button class="btn" id="btnLogin">下一步 / Next</button>
-        <button class="btn gray" id="btnClear">清除 / Clear</button>
-      </div>
+    <div class="row" style="margin-top:12px;max-width:420px">
+      <input id="pwd" type="password" placeholder="密碼 / Password" autocomplete="current-password" />
+      <button class="btn" id="btnLogin">進入 / Enter</button>
+      <button class="btn gray" id="btnClear">清除 / Clear</button>
       <div id="err" class="error">密碼錯誤，請再試一次。/ Incorrect password.</div>
     </div>
+  </div>
 
-    <div id="slipStep" class="hidden">
-      <div class="row" style="margin-top:12px;">
-        <div class="field-wrap">
-          <input id="slipInput" type="number" min="0" step="0.5" value="2" placeholder="滑點（每邊，點）" />
-          <div class="input-help">範例：輸入 2 代表單邊滑點 2 點，完整一筆交易會計入雙邊滑點。</div>
-        </div>
-        <button class="btn" id="btnApplySlip">套用並進入 / Apply</button>
-        <button class="btn gray" id="btnBackToPwd">返回 / Back</button>
-      </div>
-      <div id="slipErr" class="error">請輸入有效滑點。</div>
+  <div id="slipGate" class="slip-box hidden">
+    <p class="slip-title">滑點設定</p>
+    <p class="slip-note">請先輸入首頁報酬率計算要使用的單邊滑點點數，再載入首頁資料。</p>
+    <div class="row" style="max-width:360px">
+      <input id="slipInput" type="number" min="0" step="1" value="2" placeholder="單邊滑點，例如 2" />
+      <button class="btn" id="btnSlipConfirm">套用滑點並載入</button>
+      <button class="btn gray" id="btnSlipDefault">使用預設 2 點</button>
     </div>
+    <div id="slipErr" class="error">請輸入有效滑點。</div>
   </div>
 
   <div id="app" class="hidden">
@@ -374,7 +365,7 @@
       <hr>
 
       <h3 class="section-title-red">交易策略</h3>
-      <div class="section-note">依策略類型集中顯示近期報酬率與可用歷史期間。報酬率會一路計算到今天，沒有交易的日子視為 0 報酬。</div>
+      <div class="section-note">依策略類型集中顯示近期報酬率與可用歷史期間。資料不足的週期將自動隱藏。</div>
 
       <div class="strategy-grid">
         <div class="strategy-col">
