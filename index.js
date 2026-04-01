@@ -2,7 +2,7 @@
   'use strict';
 
   const SUPABASE_URL = "https://byhbmmnacezzgkwfkozs.supabase.co";
-  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYm1hY2V6emdrd2Zrb3pzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg1OTE0NzksImV4cCI6MjA3NDE2NzQ3OX0.VCSye3-fKrQphejdJSWAM6iRzv_7gkl8MLe7NeVszR0";
+  const SUPABASE_ANON_KEY = "sb_publishable_xVe8fGbqQ0XGwi4DsmjPMg_Y2RBOD3t";
   const BUCKET = "reports";
 
   const PASS_HASH = "0f2b9305e317408510dc9878381e953630ed9fa3d2aadf95f1b8eb47941b18b9";
@@ -636,7 +636,7 @@
   async function loadDepsAndRun(slipPerSide) {
     try {
       await loadScript('https://unpkg.com/@supabase/supabase-js@2');
-      await loadScript('shared.js?v=cfg-slip-final-v1');
+      await loadScript('./shared.js');
     } catch (e) {
       ['0807','1001','1001pp','0313'].forEach(k => {
         setCardStatus(k, '錯誤：' + shortErrMsg(e), '#b91c1c');
