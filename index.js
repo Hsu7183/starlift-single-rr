@@ -1,7 +1,6 @@
 (function () {
   'use strict';
 
-  // 用 upload.html 成功可用的那份設定
   const SUPABASE_URL = "https://byhbmmnacezzgkwfkozs.supabase.co";
   const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ5aGJtbW5hY2V6emdrd2Zrb3pzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg1OTE0NzksImV4cCI6MjA3NDE2NzQ3OX0.VCSye3-fKrQphejdJSWAM6iRzv_7gkl8MLe7NeVszR0";
   const BUCKET = "reports";
@@ -10,16 +9,30 @@
   const KEY_OK = '__auth_ok__';
   const FAIL_KEY = '__auth_fail__';
   const LOCK_UNTIL_KEY = '__auth_lock_until__';
+  const HOME_SLIP_KEY = '__home_slip__';
   const IDLE_MS = 30 * 60 * 1000;
 
+  const DEFAULT_SLIP_PER_SIDE = 2;
+  const DEFAULT_POINT_VALUE = 200;
+  const DEFAULT_FEE_PER_SIDE = 45;
+  const DEFAULT_TAX_RATE = 0.00002;
+
   const $ = s => document.querySelector(s);
+
   const shield = $('#shield');
   const gate = $('#gate');
+  const slipGate = $('#slipGate');
   const app = $('#app');
+
   const pwd = $('#pwd');
   const btnLogin = $('#btnLogin');
   const btnClear = $('#btnClear');
   const err = $('#err');
+
+  const slipInput = $('#slipInput');
+  const btnSlipConfirm = $('#btnSlipConfirm');
+  const btnSlipDefault = $('#btnSlipDefault');
+  const slipErr = $('#slipErr');
 
   if (window.top !== window.self) {
     try { window.top.location = window.self.location.href; } catch (_) {}
@@ -69,6 +82,7 @@
   function startIdleLogout() {
     const kick = () => {
       sessionStorage.removeItem(KEY_OK);
+      sessionStorage.removeItem(HOME_SLIP_KEY);
       location.reload();
     };
     const bump = () => {
@@ -112,6 +126,15 @@
     return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
   }
 
+  function showSlipGate() {
+    gate.classList.add('hidden');
+    app.classList.add('hidden');
+    slipGate.classList.remove('hidden');
+    slipErr.style.display = 'none';
+    slipInput.value = sessionStorage.getItem(HOME_SLIP_KEY) || String(DEFAULT_SLIP_PER_SIDE);
+    slipInput.focus();
+  }
+
   async function enter() {
     err.style.display = 'none';
 
@@ -133,11 +156,7 @@
     if (await sha256Hex(v) === PASS_HASH) {
       sessionStorage.setItem(KEY_OK, '1');
       resetFails();
-      gate.classList.add('hidden');
-      app.classList.remove('hidden');
-      startIdleLogout();
-      enableDevtoolsWatchAfterLogin();
-      loadDepsAndRun();
+      showSlipGate();
     } else {
       const delay = 1000 + Math.random() * 600 - (Date.now() - t0);
       if (delay > 0) await new Promise(r => setTimeout(r, delay));
@@ -147,25 +166,54 @@
     }
   }
 
+  function startAppWithSlip(slipPerSide) {
+    sessionStorage.setItem(HOME_SLIP_KEY, String(slipPerSide));
+    slipGate.classList.add('hidden');
+    gate.classList.add('hidden');
+    app.classList.remove('hidden');
+    startIdleLogout();
+    enableDevtoolsWatchAfterLogin();
+    loadDepsAndRun(slipPerSide);
+  }
+
+  function confirmSlip(customValue) {
+    slipErr.style.display = 'none';
+    const n = Number(customValue);
+    if (!Number.isFinite(n) || n < 0) {
+      slipErr.textContent = '請輸入有效滑點。';
+      slipErr.style.display = '';
+      return;
+    }
+    startAppWithSlip(n);
+  }
+
   btnLogin.addEventListener('click', enter);
   btnClear.addEventListener('click', () => {
     pwd.value = '';
     err.style.display = 'none';
     resetFails();
     sessionStorage.removeItem(KEY_OK);
+    sessionStorage.removeItem(HOME_SLIP_KEY);
     pwd.focus();
   });
   pwd.addEventListener('keydown', e => {
     if (e.key === 'Enter') enter();
   });
 
+  btnSlipConfirm.addEventListener('click', () => confirmSlip(slipInput.value));
+  btnSlipDefault.addEventListener('click', () => confirmSlip(DEFAULT_SLIP_PER_SIDE));
+  slipInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter') confirmSlip(slipInput.value);
+  });
+
   (function boot() {
     if (sessionStorage.getItem(KEY_OK) === '1') {
-      gate.classList.add('hidden');
-      app.classList.remove('hidden');
-      startIdleLogout();
-      enableDevtoolsWatchAfterLogin();
-      loadDepsAndRun();
+      const slip = sessionStorage.getItem(HOME_SLIP_KEY);
+      if (slip == null) {
+        showSlipGate();
+      } else {
+        startAppWithSlip(Number(slip));
+      }
     }
   })();
 
@@ -271,30 +319,73 @@
     return rows;
   }
 
-  function dailySeriesFromMerged(mergedTxt) {
+  function configureSharedForSlip(slipPerSide) {
+    window.SLIP_PER_SIDE = slipPerSide;
+    window.SHARED_CFG = {
+      slipPerSide,
+      pointValue: DEFAULT_POINT_VALUE,
+      feePerSide: DEFAULT_FEE_PER_SIDE,
+      taxRate: DEFAULT_TAX_RATE
+    };
+    window.HOMEPAGE_CFG = {
+      slipPerSide,
+      pointValue: DEFAULT_POINT_VALUE,
+      feePerSide: DEFAULT_FEE_PER_SIDE,
+      taxRate: DEFAULT_TAX_RATE
+    };
+  }
+
+  function getTradeGainValue(t) {
+    const candidates = [
+      t?.gainSlip,
+      t?.gain_slip,
+      t?.pnlSlip,
+      t?.pnl_slip,
+      t?.netSlip,
+      t?.net_slip,
+      t?.gain
+    ];
+
+    for (const v of candidates) {
+      if (typeof v === 'number' && Number.isFinite(v)) return v;
+    }
+    return null;
+  }
+
+  function dailySeriesFromMerged(mergedTxt, slipPerSide) {
     if (!window.SHARED) throw new Error('window.SHARED 未載入');
     if (typeof window.SHARED.parseTXT !== 'function') throw new Error('SHARED.parseTXT 不存在');
     if (typeof window.SHARED.buildReport !== 'function') throw new Error('SHARED.buildReport 不存在');
 
+    configureSharedForSlip(slipPerSide);
+
     const parsed = window.SHARED.parseTXT(mergedTxt);
     if (!parsed || !Array.isArray(parsed.rows)) throw new Error('parseTXT 結果異常');
 
-    const report = window.SHARED.buildReport(parsed.rows);
+    let report = null;
+    try {
+      report = window.SHARED.buildReport(parsed.rows, {
+        slipPerSide,
+        pointValue: DEFAULT_POINT_VALUE,
+        feePerSide: DEFAULT_FEE_PER_SIDE,
+        taxRate: DEFAULT_TAX_RATE
+      });
+    } catch (_) {
+      report = window.SHARED.buildReport(parsed.rows);
+    }
+
     if (!report || !Array.isArray(report.trades)) throw new Error('buildReport 結果異常');
-    if (!report.trades.length) throw new Error('buildReport 沒有產生 trades');
 
     const m = new Map();
     for (const t of report.trades) {
-      if (!t || t.tsOut == null || t.gainSlip == null) continue;
+      if (!t || t.tsOut == null) continue;
+      const gain = getTradeGainValue(t);
+      if (gain == null) continue;
       const d = String(t.tsOut).slice(0, 8);
-      m.set(d, (m.get(d) || 0) + t.gainSlip);
+      m.set(d, (m.get(d) || 0) + gain);
     }
 
-    const days = [...m.keys()].sort();
-    const vals = days.map(d => m.get(d));
-    if (!days.length) throw new Error('無有效日損益資料');
-
-    return { days, vals };
+    return m;
   }
 
   function atMidnight(d) {
@@ -339,8 +430,33 @@
     return `${y}/${m}/${dd}`;
   }
 
+  function fmtYmd8(d) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${y}${m}${dd}`;
+  }
+
   function d8ToDate(s8) {
     return new Date(+s8.slice(0, 4), +s8.slice(4, 6) - 1, +s8.slice(6, 8));
+  }
+
+  function getAnchorWeekEnd() {
+    const today = new Date();
+    return sundayOfWeek(today);
+  }
+
+  function makeCoveredSeries(dayMap, coverageStartDate, coverageEndDate) {
+    const days = [];
+    const vals = [];
+    let cur = new Date(coverageStartDate.getTime());
+    while (cur <= coverageEndDate) {
+      const d8 = fmtYmd8(cur);
+      days.push(d8);
+      vals.push(dayMap.get(d8) || 0);
+      cur.setDate(cur.getDate() + 1);
+    }
+    return { days, vals };
   }
 
   function buildPrefix(vals) {
@@ -349,50 +465,63 @@
     return p;
   }
 
-  function sumBetween(days, vals, startDate, endDate) {
-    if (!days.length) return null;
+  function sumBetweenCovered(days, vals, pref, startDate, endDate, coverageStartDate, coverageEndDate) {
+    if (startDate < coverageStartDate) return null;
+    if (endDate > coverageEndDate) return null;
+    if (!days.length) return 0;
 
-    const pref = buildPrefix(vals);
-    const lastIdx = days.length - 1;
+    const start8 = fmtYmd8(startDate);
+    const end8 = fmtYmd8(endDate);
 
-    let i = 0;
-    while (i <= lastIdx && d8ToDate(days[i]) < startDate) i++;
-    if (i > lastIdx) return null;
+    let i = days.findIndex(d => d >= start8);
+    if (i < 0) return null;
 
-    let j = lastIdx;
-    while (j >= 0 && d8ToDate(days[j]) > endDate) j--;
-    if (j < i) return null;
+    let j = -1;
+    for (let idx = days.length - 1; idx >= 0; idx--) {
+      if (days[idx] <= end8) {
+        j = idx;
+        break;
+      }
+    }
+    if (j < i) return 0;
 
     return pref[j + 1] - pref[i];
   }
 
-  function getAnchorWeekEnd() {
-    const today = new Date();
-    return sundayOfWeek(today);
-  }
-
-  function weekReturnUser(days, vals, nWeeks) {
+  function weekReturnUser(days, vals, pref, coverageStartDate, coverageEndDate, nWeeks) {
     const end = getAnchorWeekEnd();
     const start = new Date(mondayOf(end).getTime());
     start.setDate(start.getDate() - (nWeeks - 1) * 7);
-    const sum = sumBetween(days, vals, start, end);
-    return { ret: (sum == null ? null : sum / 1_000_000), range: `${fmtDate(start)}~${fmtDate(end)}` };
+
+    const sum = sumBetweenCovered(days, vals, pref, start, end, coverageStartDate, coverageEndDate);
+    return {
+      ret: (sum == null ? null : sum / 1_000_000),
+      range: `${fmtDate(start)}~${fmtDate(end)}`
+    };
   }
 
-  function monthReturnUser(days, vals, nMonths) {
+  function monthReturnUser(days, vals, pref, coverageStartDate, coverageEndDate, nMonths) {
     const end = getAnchorWeekEnd();
     const base = addMonthsSameDay(end, -nMonths);
     const start = mondayOf(base);
-    const sum = sumBetween(days, vals, start, end);
-    return { ret: (sum == null ? null : sum / 1_000_000), range: `${fmtDate(start)}~${fmtDate(end)}` };
+
+    const sum = sumBetweenCovered(days, vals, pref, start, end, coverageStartDate, coverageEndDate);
+    return {
+      ret: (sum == null ? null : sum / 1_000_000),
+      range: `${fmtDate(start)}~${fmtDate(end)}`
+    };
   }
 
-  function yearReturnUser(days, vals, nYears) {
+  function yearReturnUser(days, vals, pref, coverageStartDate, coverageEndDate, nYears) {
     const end = getAnchorWeekEnd();
     const base = addYearsSameDay(end, -nYears);
     const start = mondayOf(base);
-    const sum = sumBetween(days, vals, start, end);
-    return { ret: (sum == null ? null : sum / 1_000_000), range: `${fmtDate(start)}~${fmtDate(end)}` };
+
+    const sum = sumBetweenCovered(days, vals, pref, start, end, coverageStartDate, coverageEndDate);
+    return {
+      ret: (sum == null ? null : sum / 1_000_000),
+      range: `${fmtDate(start)}~${fmtDate(end)}`
+    };
   }
 
   function setVal(id, v) {
@@ -568,7 +697,7 @@
     return s.length > 80 ? s.slice(0, 80) + '…' : s;
   }
 
-  async function loadDepsAndRun() {
+  async function loadDepsAndRun(slipPerSide) {
     try {
       await loadScript('https://unpkg.com/@supabase/supabase-js@2');
       await loadScript('shared.js?v=txfee45tax2');
@@ -647,8 +776,7 @@
         const canonObj = await downloadCanon(latest.fullPath);
         return {
           canon: canonObj.canon,
-          periodStart: null,
-          periodEnd: null
+          periodStart: null
         };
       }
 
@@ -662,17 +790,12 @@
 
       return {
         canon: mergedCanon,
-        periodStart: String(chainInfo.start),
-        periodEnd: String(chainInfo.end)
+        periodStart: String(chainInfo.start)
       };
     }
 
-    function applyVisibleRows(key, days) {
-      if (!days || !days.length) return;
-
-      const firstDate = d8ToDate(days[0]);
-      const lastDate = d8ToDate(days[days.length - 1]);
-      const totalSpanDays = (lastDate - firstDate) / (1000 * 60 * 60 * 24);
+    function applyVisibleRows(key, coverageStartDate, coverageEndDate) {
+      const totalSpanDays = (coverageEndDate - coverageStartDate) / (1000 * 60 * 60 * 24);
 
       setRowVisible(key, 'wk1', totalSpanDays >= 7);
       setRowVisible(key, 'wk2', totalSpanDays >= 14);
@@ -694,7 +817,7 @@
     }
 
     async function fillCard(key) {
-      setCardStatus(key, '讀取中...', '#6b7280');
+      setCardStatus(key, `讀取中（滑點 ${slipPerSide} 點）...`, '#6b7280');
 
       try {
         const merged = await resolveMergedForKey(key);
@@ -705,27 +828,27 @@
           return;
         }
 
-        const mergedText = merged.canon;
-        const rows = parseCanon(mergedText);
+        const rows = parseCanon(merged.canon);
         if (!rows.length) throw new Error('canonical 交易列為空');
 
-        const start8_fallback = rows[0].ts.slice(0, 8);
-        const end8_fallback = rows[rows.length - 1].ts.slice(0, 8);
+        const coverageStart8 = merged.periodStart || rows[0].ts.slice(0, 8);
+        const coverageStartDate = d8ToDate(coverageStart8);
+        const coverageEndDate = getAnchorWeekEnd();
 
-        const start8 = merged.periodStart || start8_fallback;
-        const end8 = merged.periodEnd || end8_fallback;
+        setPeriodText(key, coverageStart8, fmtYmd8(coverageEndDate));
 
-        setPeriodText(key, start8, end8);
+        const dayMap = dailySeriesFromMerged(merged.canon, slipPerSide);
+        const covered = makeCoveredSeries(dayMap, coverageStartDate, coverageEndDate);
+        const pref = buildPrefix(covered.vals);
 
-        const { days, vals } = dailySeriesFromMerged(mergedText);
-        applyVisibleRows(key, days);
+        applyVisibleRows(key, coverageStartDate, coverageEndDate);
 
         const weekDefs = [['wk1',1],['wk2',2],['wk3',3],['wk4',4]];
         const monthDefs = [['m2',2],['m3',3],['m4',4],['m5',5],['m6',6]];
         const yearDefs = [['y1',1],['y2',2],['y3',3],['y4',4],['y5',5],['y6',6]];
 
         weekDefs.forEach(([k,n]) => {
-          const r = weekReturnUser(days, vals, n);
+          const r = weekReturnUser(covered.days, covered.vals, pref, coverageStartDate, coverageEndDate, n);
           if (r.ret == null) {
             setRowVisible(key, k, false);
             return;
@@ -736,7 +859,7 @@
         });
 
         monthDefs.forEach(([k,n]) => {
-          const r = monthReturnUser(days, vals, n);
+          const r = monthReturnUser(covered.days, covered.vals, pref, coverageStartDate, coverageEndDate, n);
           if (r.ret == null) {
             setRowVisible(key, k, false);
             return;
@@ -747,7 +870,7 @@
         });
 
         yearDefs.forEach(([k,n]) => {
-          const r = yearReturnUser(days, vals, n);
+          const r = yearReturnUser(covered.days, covered.vals, pref, coverageStartDate, coverageEndDate, n);
           if (r.ret == null) {
             setRowVisible(key, k, false);
             return;
@@ -758,7 +881,7 @@
           setAvg(`${k}-avg-${key}`, avg);
         });
 
-        setCardStatus(key, '已完成', '#15803d');
+        setCardStatus(key, `已完成（滑點 ${slipPerSide} 點）`, '#15803d');
       } catch (e) {
         console.error('fillCard error', key, e);
         resetAll(key);
