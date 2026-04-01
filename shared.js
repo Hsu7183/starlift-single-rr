@@ -10,7 +10,7 @@
        * 理論淨損益 = 點差金額 − 手續費 − 期交稅
        * 實際淨損益(含滑價) = 理論淨損益 − (slipPerSide × 2 × pointValue)
 
-   預設值（與原本邏輯一致）：
+   預設值：
    - pointValue = 200
    - feePerSide = 45
    - taxRate = 0.00002
