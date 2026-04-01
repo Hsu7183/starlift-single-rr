@@ -1,536 +1,858 @@
-<!doctype html>
-<html lang="zh-Hant">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>三劍客量化科技(籌備中)</title>
-  <meta name="robots" content="noindex,nofollow" />
-  <meta http-equiv="Content-Security-Policy"
-    content="default-src 'self';
-             script-src 'self' https://unpkg.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://byhbmmnacezzgkwfkozs.supabase.co 'unsafe-inline';
-             style-src 'self' 'unsafe-inline';
-             img-src 'self' data: https://byhbmmnacezzgkwfkozs.supabase.co;
-             connect-src 'self' https://byhbmmnacezzgkwfkozs.supabase.co https://unpkg.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com;
-             frame-ancestors 'none';
-             base-uri 'none';
-             form-action 'self'">
-  <style>
-    :root{
-      --bg:#f5f7fb;
-      --card:#ffffff;
-      --border:#e6ebf2;
-      --text:#1f2937;
-      --muted:#6b7280;
-      --red:#d32f2f;
-      --blue:#2563eb;
-      --green:#10b981;
-      --shadow:0 10px 24px rgba(15,23,42,.06);
-      --shadow-hover:0 16px 34px rgba(15,23,42,.10);
-      --radius:16px;
+(function () {
+  'use strict';
+
+  const SUPABASE_URL = "https://byhbmmnacezzgkwfkozs.supabase.co";
+  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYm1hY2V6emdrd2Zrb3pzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg1OTE0NzksImV4cCI6MjA3NDE2NzQ3OX0.VCSye3-fKrQphejdJSWAM6iRzv_7gkl8MLe7NeVszR0";
+  const BUCKET = "reports";
+
+  const PASS_HASH = "0f2b9305e317408510dc9878381e953630ed9fa3d2aadf95f1b8eb47941b18b9";
+  const KEY_OK = '__auth_ok__';
+  const FAIL_KEY = '__auth_fail__';
+  const LOCK_UNTIL_KEY = '__auth_lock_until__';
+  const HOME_SLIP_KEY = '__home_slip__';
+  const IDLE_MS = 30 * 60 * 1000;
+
+  const DEFAULT_SLIP_PER_SIDE = 2;
+  const DEFAULT_POINT_VALUE = 200;
+  const DEFAULT_FEE_PER_SIDE = 45;
+  const DEFAULT_TAX_RATE = 0.00002;
+  const BASE_CAPITAL = 1000000;
+
+  const $ = s => document.querySelector(s);
+
+  const shield = $('#shield');
+  const gate = $('#gate');
+  const slipGate = $('#slipGate');
+  const app = $('#app');
+
+  const pwd = $('#pwd');
+  const btnLogin = $('#btnLogin');
+  const btnClear = $('#btnClear');
+  const err = $('#err');
+
+  const slipInput = $('#slipInput');
+  const btnSlipConfirm = $('#btnSlipConfirm');
+  const btnSlipDefault = $('#btnSlipDefault');
+  const slipErr = $('#slipErr');
+
+  if (window.top !== window.self) {
+    try { window.top.location = window.self.location.href; } catch (_) {}
+  }
+
+  window.addEventListener('contextmenu', e => { e.preventDefault(); }, { capture: true });
+  window.addEventListener('copy', e => e.preventDefault(), { capture: true });
+  window.addEventListener('cut', e => e.preventDefault(), { capture: true });
+  window.addEventListener('selectstart', e => e.preventDefault(), { capture: true });
+
+  window.addEventListener('keydown', (e) => {
+    const K = (e.key || '').toUpperCase();
+    if (e.key === 'F12') { e.preventDefault(); shield.style.display = 'flex'; }
+    if (e.ctrlKey && ['U', 'S', 'P'].includes(K)) { e.preventDefault(); shield.style.display = 'flex'; }
+    if (e.ctrlKey && e.shiftKey && ['I', 'J', 'C', 'K'].includes(K)) { e.preventDefault(); shield.style.display = 'flex'; }
+  }, { capture: true });
+
+  function isLocked() {
+    const until = +(sessionStorage.getItem(LOCK_UNTIL_KEY) || 0);
+    return Date.now() < until;
+  }
+
+  function remainingLockSec() {
+    const until = +(sessionStorage.getItem(LOCK_UNTIL_KEY) || 0);
+    return Math.max(0, Math.ceil((until - Date.now()) / 1000));
+  }
+
+  function setLock(seconds) {
+    sessionStorage.setItem(LOCK_UNTIL_KEY, String(Date.now() + seconds * 1000));
+  }
+
+  function addFailAndMaybeLock() {
+    const n = (+(sessionStorage.getItem(FAIL_KEY) || 0)) + 1;
+    sessionStorage.setItem(FAIL_KEY, String(n));
+    if (n >= 5) {
+      const m = Math.min(60, Math.pow(2, n - 5));
+      setLock(m * 60);
+    }
+  }
+
+  function resetFails() {
+    sessionStorage.removeItem(FAIL_KEY);
+    sessionStorage.removeItem(LOCK_UNTIL_KEY);
+  }
+
+  let idleTimer = null;
+  function startIdleLogout() {
+    const kick = () => {
+      sessionStorage.removeItem(KEY_OK);
+      sessionStorage.removeItem(HOME_SLIP_KEY);
+      location.reload();
+    };
+    const bump = () => {
+      clearTimeout(idleTimer);
+      idleTimer = setTimeout(kick, IDLE_MS);
+    };
+    ['click', 'keydown', 'mousemove', 'touchstart', 'scroll'].forEach(ev => {
+      document.addEventListener(ev, bump, { passive: true });
+    });
+    bump();
+  }
+
+  function enableDevtoolsWatchAfterLogin() {
+    let suspect = 0;
+
+    function trig() {
+      if (++suspect >= 3) shield.style.display = 'flex';
     }
 
-    *{ box-sizing:border-box; }
+    setInterval(() => {
+      if (
+        Math.abs(window.outerWidth - window.innerWidth) > 250 ||
+        Math.abs(window.outerHeight - window.innerHeight) > 250
+      ) {
+        trig();
+      } else {
+        suspect = 0;
+      }
+    }, 1000);
 
-    body{
-      font-family: Arial,"微軟正黑體",sans-serif;
-      margin:0;
-      background:linear-gradient(180deg,#f8fafc 0%, #f5f7fb 100%);
-      color:var(--text);
-      -webkit-font-smoothing:antialiased;
+    (function loop(p) {
+      const n = performance.now();
+      if (n - p > 1200) trig();
+      else suspect = 0;
+      requestAnimationFrame(() => loop(performance.now()));
+    })(performance.now());
+  }
+
+  async function sha256Hex(t) {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(t));
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+
+  function showSlipGate() {
+    gate.classList.add('hidden');
+    app.classList.add('hidden');
+    slipGate.classList.remove('hidden');
+    slipErr.style.display = 'none';
+    slipInput.value = sessionStorage.getItem(HOME_SLIP_KEY) || String(DEFAULT_SLIP_PER_SIDE);
+    slipInput.focus();
+    slipInput.select();
+  }
+
+  async function enter() {
+    err.style.display = 'none';
+
+    if (isLocked()) {
+      err.textContent = `嘗試次數過多，請 ${remainingLockSec()} 秒後再試。`;
+      err.style.display = '';
+      return;
     }
 
-    .page{
-      max-width:1180px;
-      margin:0 auto;
-      padding:22px 18px 42px;
+    const v = (pwd.value || '').trim();
+    if (!v) {
+      err.textContent = '請輸入密碼 / Please enter password.';
+      err.style.display = '';
+      return;
     }
 
-    hr{
-      border:none;
-      border-top:1px solid #e5e7eb;
-      margin:20px 0;
+    const t0 = Date.now();
+
+    if (await sha256Hex(v) === PASS_HASH) {
+      sessionStorage.setItem(KEY_OK, '1');
+      resetFails();
+      sessionStorage.removeItem(HOME_SLIP_KEY);
+      showSlipGate();
+    } else {
+      const delay = 1000 + Math.random() * 600 - (Date.now() - t0);
+      if (delay > 0) await new Promise(r => setTimeout(r, delay));
+      addFailAndMaybeLock();
+      err.textContent = '密碼錯誤，請再試一次。/ Incorrect password.';
+      err.style.display = '';
     }
+  }
 
-    .section-title-red,
-    .section-title-blue,
-    .section-title-black{
-      margin:10px 0 14px;
-      font-size:22px;
-      font-weight:800;
-      letter-spacing:.4px;
+  function startAppWithSlip(slipPerSide) {
+    sessionStorage.setItem(HOME_SLIP_KEY, String(slipPerSide));
+    slipGate.classList.add('hidden');
+    gate.classList.add('hidden');
+    app.classList.remove('hidden');
+    startIdleLogout();
+    enableDevtoolsWatchAfterLogin();
+    loadDepsAndRun(slipPerSide);
+  }
+
+  function confirmSlip(customValue) {
+    slipErr.style.display = 'none';
+    const n = Number(customValue);
+    if (!Number.isFinite(n) || n < 0) {
+      slipErr.textContent = '請輸入有效滑點。';
+      slipErr.style.display = '';
+      return;
     }
-    .section-title-red{ color:var(--red); }
-    .section-title-blue{ color:var(--blue); }
-    .section-title-black{ color:#111; }
+    startAppWithSlip(n);
+  }
 
-    .section-note{
-      color:var(--muted);
-      font-size:13px;
-      margin:-6px 0 12px;
-      line-height:1.6;
+  btnLogin.addEventListener('click', enter);
+  btnClear.addEventListener('click', () => {
+    pwd.value = '';
+    err.style.display = 'none';
+    resetFails();
+    sessionStorage.removeItem(KEY_OK);
+    sessionStorage.removeItem(HOME_SLIP_KEY);
+    pwd.focus();
+  });
+
+  pwd.addEventListener('keydown', e => {
+    if (e.key === 'Enter') enter();
+  });
+
+  btnSlipConfirm.addEventListener('click', () => confirmSlip(slipInput.value));
+  btnSlipDefault.addEventListener('click', () => confirmSlip(DEFAULT_SLIP_PER_SIDE));
+  slipInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter') confirmSlip(slipInput.value);
+  });
+
+  (function boot() {
+    if (sessionStorage.getItem(KEY_OK) === '1') {
+      showSlipGate();
     }
+  })();
 
-    .strategy-grid{
-      display:grid;
-      grid-template-columns:repeat(3,1fr);
-      gap:20px;
-      margin:0 0 30px;
-    }
+  function loadScript(src) {
+    return new Promise((res, rej) => {
+      const s = document.createElement('script');
+      s.src = src;
+      s.onload = res;
+      s.onerror = () => rej(new Error('load fail: ' + src));
+      document.body.appendChild(s);
+    });
+  }
 
-    .strategy-col{
-      display:flex;
-      flex-direction:column;
-      gap:14px;
-      align-self:start;
-    }
+  const CANON_RE = /^(\d{14})(?:\.0{1,6})?\s+(\d+(?:\.\d{1,6})?)\s+(新買|平賣|新賣|平買|強制平倉)\s*$/;
+  const EXTRACT_RE = /.*?(\d{14})(?:\.0{1,6})?\s+(\d+(?:\.\d{1,6})?)\s*(新買|平賣|新賣|平買|強制平倉)\s*$/;
+  const CSV_LINE_RE = /^(\d{8}),(\d{5,6}),(\d+(?:\.\d+)?),([^,]+?),/;
 
-    .subcat{
-      margin:0 0 2px;
-      text-align:center;
-      font-size:16px;
-      font-weight:800;
-      color:#b91c1c;
-      letter-spacing:.2px;
-    }
+  function mapAction(act) {
+    if (act === '強平') return '強制平倉';
+    if (/^(買進|加碼|再加碼|加碼攤平)$/i.test(act)) return '新買';
+    if (/^賣出$/i.test(act)) return '平賣';
+    return act;
+  }
 
-    .subcat-desc{
-      margin:-2px 0 0;
-      text-align:center;
-      font-size:12px;
-      color:var(--muted);
-      line-height:1.5;
-    }
+  function normalizeText(raw) {
+    let s = raw.replace(/\ufeff/gi, '').replace(/\u200b|\u200c|\u200d/gi, '');
+    s = s
+      .replace(/[\x00-\x09\x0B-\x1F\x7F]/g, '')
+      .replace(/\r\n?/g, '\n')
+      .replace(/\u3000/g, ' ');
+    return s
+      .split('\n')
+      .map(l => l.replace(/\s+/g, ' ').trim())
+      .filter(Boolean)
+      .join('\n');
+  }
 
-    .nav{
-      display:grid;
-      grid-template-columns:repeat(3,1fr);
-      gap:20px;
-      margin:0 0 28px;
-    }
+  function padTime6(t) {
+    t = String(t || '').trim();
+    return t.padStart(6, '0').slice(0, 6);
+  }
 
-    a.card{
-      display:block;
-      background:var(--card);
-      padding:18px 16px;
-      border-radius:var(--radius);
-      box-shadow:var(--shadow);
-      text-decoration:none;
-      color:inherit;
-      transition:transform .16s ease, box-shadow .16s ease, border-color .16s ease;
-      border:1px solid var(--border);
-    }
+  function canonicalize(txt) {
+    const out = [];
+    let ok = 0;
+    const lines = txt.split('\n');
 
-    a.card:hover{
-      transform:translateY(-4px);
-      box-shadow:var(--shadow-hover);
-      border-color:#d7dfea;
-    }
-
-    .strategy-card{
-      min-height:298px;
-      background:linear-gradient(180deg, rgba(255,255,255,1) 0%, rgba(250,251,255,1) 100%);
-      display:flex;
-      flex-direction:column;
-    }
-
-    .card-title{
-      font-weight:800;
-      font-size:19px;
-      margin:0 0 12px 0;
-      text-align:center;
-      letter-spacing:.2px;
-      line-height:1.2;
-    }
-    .card-title.big{ font-size:26px; }
-    .card-title.red{ color:var(--red); }
-    .card-title.blue{ color:var(--blue); }
-    .card-title.black{ color:#111; }
-
-    .card-desc{
-      margin:8px 0 0;
-      color:var(--muted);
-      font-size:13px;
-      line-height:1.65;
-      text-align:left;
-    }
-
-    .lines{
-      margin-top:4px;
-      padding-top:2px;
-      flex:1;
-      display:flex;
-      flex-direction:column;
-    }
-
-    .line{
-      display:grid;
-      grid-template-columns:92px 128px 62px 62px;
-      align-items:center;
-      margin:2px 0;
-      font-size:12px;
-      column-gap:8px;
-      min-height:20px;
-    }
-
-    .label{
-      text-align:left;
-      color:#111827;
-      white-space:nowrap;
-      font-weight:600;
-      overflow:hidden;
-      text-overflow:ellipsis;
-    }
-
-    .range{
-      text-align:center;
-      color:#9ca3af;
-      font-size:10px;
-      white-space:nowrap;
-      font-variant-numeric:tabular-nums;
-      font-feature-settings:"tnum";
-    }
-
-    .val, .avg{
-      text-align:right;
-      font-weight:800;
-      font-size:12px;
-      font-variant-numeric:tabular-nums;
-      font-feature-settings:"tnum";
-      min-width:62px;
-    }
-
-    .val.pos, .avg.pos{ color:#d32f2f; }
-    .val.neg, .avg.neg{ color:#10b981; }
-    .val.neu, .avg.neu{ color:#6b7280; }
-
-    .period{
-      margin-top:auto;
-      color:#6b7280;
-      font-size:12px;
-      text-align:center;
-      padding-top:8px;
-      border-top:1px dashed #e5e7eb;
-    }
-
-    .status{
-      margin-top:6px;
-      text-align:center;
-      font-size:12px;
-      color:#6b7280;
-      min-height:18px;
-      font-weight:700;
-    }
-
-    .gate{
-      max-width:980px;
-      margin:28px auto;
-      background:#fff;
-      border:1px solid #e5e7eb;
-      border-radius:16px;
-      box-shadow:0 10px 24px rgba(15,23,42,.06);
-      padding:18px;
-    }
-
-    .row{
-      display:flex;
-      gap:12px;
-      align-items:center;
-      flex-wrap:wrap;
-    }
-
-    .btn{
-      background:#2563eb;
-      color:#fff;
-      border:0;
-      border-radius:12px;
-      padding:10px 14px;
-      cursor:pointer;
-      font-weight:700;
-    }
-    .btn.gray{ background:#6b7280; }
-
-    input[type="password"],
-    input[type="number"]{
-      width:100%;
-      padding:11px 12px;
-      border:1px solid #dbe3ee;
-      border-radius:10px;
-      font-size:14px;
-    }
-
-    .error{
-      color:#c62828;
-      font-size:12px;
-      margin-top:6px;
-      display:none;
-    }
-
-    .hidden{ display:none; }
-
-    .slip-box{
-      max-width:520px;
-      margin:28px auto;
-      background:#fff;
-      border:1px solid #e5e7eb;
-      border-radius:16px;
-      box-shadow:0 10px 24px rgba(15,23,42,.06);
-      padding:20px;
-    }
-
-    .slip-title{
-      margin:0 0 8px;
-      font-size:20px;
-      font-weight:800;
-      color:#111827;
-    }
-
-    .slip-note{
-      margin:0 0 14px;
-      font-size:13px;
-      color:#6b7280;
-      line-height:1.6;
-    }
-
-    html,body{
-      -webkit-user-select:none;
-      -moz-user-select:none;
-      user-select:none;
-      -webkit-touch-callout:none;
-    }
-
-    a,button,input{
-      -webkit-user-select:auto;
-      user-select:auto;
-    }
-
-    #shield{
-      position:fixed;
-      inset:0;
-      display:none;
-      align-items:center;
-      justify-content:center;
-      background:rgba(3,7,18,.96);
-      color:#fff;
-      z-index:2147483647;
-      text-align:center;
-      padding:24px;
-    }
-
-    @media (max-width: 1080px){
-      .strategy-grid,
-      .nav{
-        grid-template-columns:1fr;
+    for (const l of lines) {
+      let m = l.match(EXTRACT_RE);
+      if (m) {
+        const ts = m[1];
+        const px = Number(m[2]);
+        out.push(`${ts}.000000 ${px.toFixed(6)} ${m[3]}`);
+        ok++;
+        continue;
       }
 
-      .strategy-card{
-        min-height:auto;
-      }
-
-      .line{
-        grid-template-columns:92px 1fr 62px 62px;
+      m = l.match(CSV_LINE_RE);
+      if (m) {
+        const d8 = m[1];
+        const t6 = padTime6(m[2]);
+        const px = Number(m[3]);
+        const act0 = m[4].trim();
+        if (Number.isFinite(px)) {
+          out.push(`${d8}${t6}.000000 ${px.toFixed(6)} ${mapAction(act0)}`);
+          ok++;
+          continue;
+        }
       }
     }
-  </style>
-</head>
-<body translate="no">
-  <div id="shield">
-    <div>
-      <h3>頁面受保護</h3>
-      偵測到嘗試檢視原始碼或開發者工具，請關閉後重新整理。
-    </div>
-  </div>
 
-  <div id="gate" class="gate">
-    <div class="row" style="margin-top:12px;max-width:420px">
-      <input id="pwd" type="password" placeholder="密碼 / Password" autocomplete="current-password" />
-      <button class="btn" id="btnLogin">進入 / Enter</button>
-      <button class="btn gray" id="btnClear">清除 / Clear</button>
-      <div id="err" class="error">密碼錯誤，請再試一次。/ Incorrect password.</div>
-    </div>
-  </div>
+    return { canon: out.join('\n'), ok };
+  }
 
-  <div id="slipGate" class="slip-box hidden">
-    <p class="slip-title">滑點設定</p>
-    <p class="slip-note">請先輸入首頁報酬率計算要使用的單邊滑點點數，再載入首頁資料。</p>
-    <div class="row" style="max-width:360px">
-      <input id="slipInput" type="number" min="0" step="1" value="2" placeholder="單邊滑點，例如 2" />
-      <button class="btn" id="btnSlipConfirm">套用滑點並載入</button>
-      <button class="btn gray" id="btnSlipDefault">使用預設 2 點</button>
-    </div>
-    <div id="slipErr" class="error">請輸入有效滑點。</div>
-  </div>
+  async function blobToCanon(blob) {
+    const buf = await blob.arrayBuffer();
 
-  <div id="app" class="hidden">
-    <div class="page">
-      <hr>
+    for (const enc of ['utf-8', 'big5', 'utf-16le', 'utf-16be']) {
+      try {
+        const td = new TextDecoder(enc);
+        const norm = normalizeText(td.decode(buf));
+        const { canon, ok } = canonicalize(norm);
+        if (ok > 0) return { canon, ok };
+      } catch (_) {}
+    }
 
-      <h3 class="section-title-red">交易策略</h3>
-      <div class="section-note">依策略類型集中顯示近期報酬率與可用歷史期間。資料不足的週期將自動隱藏。</div>
+    const td = new TextDecoder('utf-8');
+    const norm = normalizeText(td.decode(buf));
+    const { canon, ok } = canonicalize(norm);
+    return { canon, ok };
+  }
 
-      <div class="strategy-grid">
-        <div class="strategy-col">
-          <p class="subcat">趨勢突破（主力策略）</p>
-          <p class="subcat-desc">以主升、主跌與突破延續為核心，適合做為主要觀察與對照策略。</p>
+  function parseCanon(text) {
+    const rows = [];
+    if (!text) return rows;
 
-          <a class="card strategy-card" href="0807.html">
-            <p class="card-title red">台指近-0807版本</p>
-            <div class="lines">
-              <p class="line" id="row-wk1-0807"><span class="label">近1週報酬率</span><span id="wk1-range-0807" class="range">—</span><span id="wk1-0807" class="val neu">—</span><span id="wk1-avg-0807" class="avg neu">—</span></p>
-              <p class="line" id="row-wk2-0807"><span class="label">近2週報酬率</span><span id="wk2-range-0807" class="range">—</span><span id="wk2-0807" class="val neu">—</span><span id="wk2-avg-0807" class="avg neu">—</span></p>
-              <p class="line" id="row-wk3-0807"><span class="label">近3週報酬率</span><span id="wk3-range-0807" class="range">—</span><span id="wk3-0807" class="val neu">—</span><span id="wk3-avg-0807" class="avg neu">—</span></p>
-              <p class="line" id="row-wk4-0807"><span class="label">近4週報酬率</span><span id="wk4-range-0807" class="range">—</span><span id="wk4-0807" class="val neu">—</span><span id="wk4-avg-0807" class="avg neu">—</span></p>
+    for (const line of text.split('\n')) {
+      const m = line.match(CANON_RE);
+      if (!m) continue;
+      rows.push({
+        ts: m[1],
+        line
+      });
+    }
 
-              <p class="line" id="row-m2-0807"><span class="label">近2月報酬率</span><span id="m2-range-0807" class="range">—</span><span id="m2-0807" class="val neu">—</span><span id="m2-avg-0807" class="avg neu">—</span></p>
-              <p class="line" id="row-m3-0807"><span class="label">近3月報酬率</span><span id="m3-range-0807" class="range">—</span><span id="m3-0807" class="val neu">—</span><span id="m3-avg-0807" class="avg neu">—</span></p>
-              <p class="line" id="row-m4-0807"><span class="label">近4月報酬率</span><span id="m4-range-0807" class="range">—</span><span id="m4-0807" class="val neu">—</span><span id="m4-avg-0807" class="avg neu">—</span></p>
-              <p class="line" id="row-m5-0807"><span class="label">近5月報酬率</span><span id="m5-range-0807" class="range">—</span><span id="m5-0807" class="val neu">—</span><span id="m5-avg-0807" class="avg neu">—</span></p>
-              <p class="line" id="row-m6-0807"><span class="label">近6月報酬率</span><span id="m6-range-0807" class="range">—</span><span id="m6-0807" class="val neu">—</span><span id="m6-avg-0807" class="avg neu">—</span></p>
+    rows.sort((a, b) => a.ts.localeCompare(b.ts));
+    return rows;
+  }
 
-              <p class="line" id="row-y1-0807"><span class="label">近1年報酬率</span><span id="y1-range-0807" class="range">—</span><span id="y1-0807" class="val neu">—</span><span id="y1-avg-0807" class="avg neu">—</span></p>
-              <p class="line" id="row-y2-0807"><span class="label">近2年報酬率</span><span id="y2-range-0807" class="range">—</span><span id="y2-0807" class="val neu">—</span><span id="y2-avg-0807" class="avg neu">—</span></p>
-              <p class="line" id="row-y3-0807"><span class="label">近3年報酬率</span><span id="y3-range-0807" class="range">—</span><span id="y3-0807" class="val neu">—</span><span id="y3-avg-0807" class="avg neu">—</span></p>
-              <p class="line" id="row-y4-0807"><span class="label">近4年報酬率</span><span id="y4-range-0807" class="range">—</span><span id="y4-0807" class="val neu">—</span><span id="y4-avg-0807" class="avg neu">—</span></p>
-              <p class="line" id="row-y5-0807"><span class="label">近5年報酬率</span><span id="y5-range-0807" class="range">—</span><span id="y5-0807" class="val neu">—</span><span id="y5-avg-0807" class="avg neu">—</span></p>
-              <p class="line" id="row-y6-0807"><span class="label">近6年報酬率</span><span id="y6-range-0807" class="range">—</span><span id="y6-0807" class="val neu">—</span><span id="y6-avg-0807" class="avg neu">—</span></p>
+  function atMidnight(d) {
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  }
 
-              <p class="period">期間：<span id="period-0807">—</span></p>
-              <div class="status" id="status-0807"></div>
-            </div>
-          </a>
+  function mondayOf(d) {
+    const x = atMidnight(d);
+    const dow = x.getDay();
+    const offsetToMonday = (dow + 6) % 7;
+    x.setDate(x.getDate() - offsetToMonday);
+    return x;
+  }
 
-          <a class="card strategy-card" href="1001.html">
-            <p class="card-title red">台指近-1001版本</p>
-            <div class="lines">
-              <p class="line" id="row-wk1-1001"><span class="label">近1週報酬率</span><span id="wk1-range-1001" class="range">—</span><span id="wk1-1001" class="val neu">—</span><span id="wk1-avg-1001" class="avg neu">—</span></p>
-              <p class="line" id="row-wk2-1001"><span class="label">近2週報酬率</span><span id="wk2-range-1001" class="range">—</span><span id="wk2-1001" class="val neu">—</span><span id="wk2-avg-1001" class="avg neu">—</span></p>
-              <p class="line" id="row-wk3-1001"><span class="label">近3週報酬率</span><span id="wk3-range-1001" class="range">—</span><span id="wk3-1001" class="val neu">—</span><span id="wk3-avg-1001" class="avg neu">—</span></p>
-              <p class="line" id="row-wk4-1001"><span class="label">近4週報酬率</span><span id="wk4-range-1001" class="range">—</span><span id="wk4-1001" class="val neu">—</span><span id="wk4-avg-1001" class="avg neu">—</span></p>
+  function sundayOfWeek(d) {
+    const m = mondayOf(d);
+    const s = new Date(m.getTime());
+    s.setDate(s.getDate() + 6);
+    return s;
+  }
 
-              <p class="line" id="row-m2-1001"><span class="label">近2月報酬率</span><span id="m2-range-1001" class="range">—</span><span id="m2-1001" class="val neu">—</span><span id="m2-avg-1001" class="avg neu">—</span></p>
-              <p class="line" id="row-m3-1001"><span class="label">近3月報酬率</span><span id="m3-range-1001" class="range">—</span><span id="m3-1001" class="val neu">—</span><span id="m3-avg-1001" class="avg neu">—</span></p>
-              <p class="line" id="row-m4-1001"><span class="label">近4月報酬率</span><span id="m4-range-1001" class="range">—</span><span id="m4-1001" class="val neu">—</span><span id="m4-avg-1001" class="avg neu">—</span></p>
-              <p class="line" id="row-m5-1001"><span class="label">近5月報酬率</span><span id="m5-range-1001" class="range">—</span><span id="m5-1001" class="val neu">—</span><span id="m5-avg-1001" class="avg neu">—</span></p>
-              <p class="line" id="row-m6-1001"><span class="label">近6月報酬率</span><span id="m6-range-1001" class="range">—</span><span id="m6-1001" class="val neu">—</span><span id="m6-avg-1001" class="avg neu">—</span></p>
+  function addMonthsSameDay(d, n) {
+    const x = atMidnight(d);
+    const day = x.getDate();
+    x.setMonth(x.getMonth() + n);
+    x.setDate(day);
+    return atMidnight(x);
+  }
 
-              <p class="line" id="row-y1-1001"><span class="label">近1年報酬率</span><span id="y1-range-1001" class="range">—</span><span id="y1-1001" class="val neu">—</span><span id="y1-avg-1001" class="avg neu">—</span></p>
-              <p class="line" id="row-y2-1001"><span class="label">近2年報酬率</span><span id="y2-range-1001" class="range">—</span><span id="y2-1001" class="val neu">—</span><span id="y2-avg-1001" class="avg neu">—</span></p>
-              <p class="line" id="row-y3-1001"><span class="label">近3年報酬率</span><span id="y3-range-1001" class="range">—</span><span id="y3-1001" class="val neu">—</span><span id="y3-avg-1001" class="avg neu">—</span></p>
-              <p class="line" id="row-y4-1001"><span class="label">近4年報酬率</span><span id="y4-range-1001" class="range">—</span><span id="y4-1001" class="val neu">—</span><span id="y4-avg-1001" class="avg neu">—</span></p>
-              <p class="line" id="row-y5-1001"><span class="label">近5年報酬率</span><span id="y5-range-1001" class="range">—</span><span id="y5-1001" class="val neu">—</span><span id="y5-avg-1001" class="avg neu">—</span></p>
-              <p class="line" id="row-y6-1001"><span class="label">近6年報酬率</span><span id="y6-range-1001" class="range">—</span><span id="y6-1001" class="val neu">—</span><span id="y6-avg-1001" class="avg neu">—</span></p>
+  function addYearsSameDay(d, n) {
+    const x = atMidnight(d);
+    const day = x.getDate();
+    x.setFullYear(x.getFullYear() + n);
+    x.setDate(day);
+    return atMidnight(x);
+  }
 
-              <p class="period">期間：<span id="period-1001">—</span></p>
-              <div class="status" id="status-1001"></div>
-            </div>
-          </a>
-        </div>
+  function fmtDate(d) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${y}/${m}/${dd}`;
+  }
 
-        <div class="strategy-col">
-          <p class="subcat">混合策略（進階）</p>
-          <p class="subcat-desc">整合多種邏輯與濾網，通常報酬更積極，但波動與風格切換也更明顯。</p>
+  function fmtYmd8(d) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${y}${m}${dd}`;
+  }
 
-          <a class="card strategy-card" href="1001plusplus.html">
-            <p class="card-title blue">台指近-1001plus+版本</p>
-            <div class="lines">
-              <p class="line" id="row-wk1-1001pp"><span class="label">近1週報酬率</span><span id="wk1-range-1001pp" class="range">—</span><span id="wk1-1001pp" class="val neu">—</span><span id="wk1-avg-1001pp" class="avg neu">—</span></p>
-              <p class="line" id="row-wk2-1001pp"><span class="label">近2週報酬率</span><span id="wk2-range-1001pp" class="range">—</span><span id="wk2-1001pp" class="val neu">—</span><span id="wk2-avg-1001pp" class="avg neu">—</span></p>
-              <p class="line" id="row-wk3-1001pp"><span class="label">近3週報酬率</span><span id="wk3-range-1001pp" class="range">—</span><span id="wk3-1001pp" class="val neu">—</span><span id="wk3-avg-1001pp" class="avg neu">—</span></p>
-              <p class="line" id="row-wk4-1001pp"><span class="label">近4週報酬率</span><span id="wk4-range-1001pp" class="range">—</span><span id="wk4-1001pp" class="val neu">—</span><span id="wk4-avg-1001pp" class="avg neu">—</span></p>
+  function d8ToDate(s8) {
+    return new Date(+s8.slice(0, 4), +s8.slice(4, 6) - 1, +s8.slice(6, 8));
+  }
 
-              <p class="line" id="row-m2-1001pp"><span class="label">近2月報酬率</span><span id="m2-range-1001pp" class="range">—</span><span id="m2-1001pp" class="val neu">—</span><span id="m2-avg-1001pp" class="avg neu">—</span></p>
-              <p class="line" id="row-m3-1001pp"><span class="label">近3月報酬率</span><span id="m3-range-1001pp" class="range">—</span><span id="m3-1001pp" class="val neu">—</span><span id="m3-avg-1001pp" class="avg neu">—</span></p>
-              <p class="line" id="row-m4-1001pp"><span class="label">近4月報酬率</span><span id="m4-range-1001pp" class="range">—</span><span id="m4-1001pp" class="val neu">—</span><span id="m4-avg-1001pp" class="avg neu">—</span></p>
-              <p class="line" id="row-m5-1001pp"><span class="label">近5月報酬率</span><span id="m5-range-1001pp" class="range">—</span><span id="m5-1001pp" class="val neu">—</span><span id="m5-avg-1001pp" class="avg neu">—</span></p>
-              <p class="line" id="row-m6-1001pp"><span class="label">近6月報酬率</span><span id="m6-range-1001pp" class="range">—</span><span id="m6-1001pp" class="val neu">—</span><span id="m6-avg-1001pp" class="avg neu">—</span></p>
+  function getAnchorWeekEnd() {
+    const today = new Date();
+    return sundayOfWeek(today);
+  }
 
-              <p class="line" id="row-y1-1001pp"><span class="label">近1年報酬率</span><span id="y1-range-1001pp" class="range">—</span><span id="y1-1001pp" class="val neu">—</span><span id="y1-avg-1001pp" class="avg neu">—</span></p>
-              <p class="line" id="row-y2-1001pp"><span class="label">近2年報酬率</span><span id="y2-range-1001pp" class="range">—</span><span id="y2-1001pp" class="val neu">—</span><span id="y2-avg-1001pp" class="avg neu">—</span></p>
-              <p class="line" id="row-y3-1001pp"><span class="label">近3年報酬率</span><span id="y3-range-1001pp" class="range">—</span><span id="y3-1001pp" class="val neu">—</span><span id="y3-avg-1001pp" class="avg neu">—</span></p>
-              <p class="line" id="row-y4-1001pp"><span class="label">近4年報酬率</span><span id="y4-range-1001pp" class="range">—</span><span id="y4-1001pp" class="val neu">—</span><span id="y4-avg-1001pp" class="avg neu">—</span></p>
-              <p class="line" id="row-y5-1001pp"><span class="label">近5年報酬率</span><span id="y5-range-1001pp" class="range">—</span><span id="y5-1001pp" class="val neu">—</span><span id="y5-avg-1001pp" class="avg neu">—</span></p>
-              <p class="line" id="row-y6-1001pp"><span class="label">近6年報酬率</span><span id="y6-range-1001pp" class="range">—</span><span id="y6-1001pp" class="val neu">—</span><span id="y6-avg-1001pp" class="avg neu">—</span></p>
+  function makeCoveredSeries(dayMap, coverageStartDate, coverageEndDate) {
+    const days = [];
+    const vals = [];
+    let cur = new Date(coverageStartDate.getTime());
 
-              <p class="period">期間：<span id="period-1001pp">—</span></p>
-              <div class="status" id="status-1001pp"></div>
-            </div>
-          </a>
-        </div>
+    while (cur <= coverageEndDate) {
+      const d8 = fmtYmd8(cur);
+      days.push(d8);
+      vals.push(dayMap.get(d8) || 0);
+      cur.setDate(cur.getDate() + 1);
+    }
 
-        <div class="strategy-col">
-          <p class="subcat">結構策略（未來主軸）</p>
-          <p class="subcat-desc">偏重型態、結構與情境判讀，適合未來策略擴充與新邏輯實驗的主軸分類。</p>
+    return { days, vals };
+  }
 
-          <a class="card strategy-card" href="0313.html">
-            <p class="card-title black">台指近-0313版本</p>
-            <div class="lines">
-              <p class="line" id="row-wk1-0313"><span class="label">近1週報酬率</span><span id="wk1-range-0313" class="range">—</span><span id="wk1-0313" class="val neu">—</span><span id="wk1-avg-0313" class="avg neu">—</span></p>
-              <p class="line" id="row-wk2-0313"><span class="label">近2週報酬率</span><span id="wk2-range-0313" class="range">—</span><span id="wk2-0313" class="val neu">—</span><span id="wk2-avg-0313" class="avg neu">—</span></p>
-              <p class="line" id="row-wk3-0313"><span class="label">近3週報酬率</span><span id="wk3-range-0313" class="range">—</span><span id="wk3-0313" class="val neu">—</span><span id="wk3-avg-0313" class="avg neu">—</span></p>
-              <p class="line" id="row-wk4-0313"><span class="label">近4週報酬率</span><span id="wk4-range-0313" class="range">—</span><span id="wk4-0313" class="val neu">—</span><span id="wk4-avg-0313" class="avg neu">—</span></p>
+  function buildPrefix(vals) {
+    const p = [0];
+    for (const v of vals) p.push(p[p.length - 1] + v);
+    return p;
+  }
 
-              <p class="line" id="row-m2-0313"><span class="label">近2月報酬率</span><span id="m2-range-0313" class="range">—</span><span id="m2-0313" class="val neu">—</span><span id="m2-avg-0313" class="avg neu">—</span></p>
-              <p class="line" id="row-m3-0313"><span class="label">近3月報酬率</span><span id="m3-range-0313" class="range">—</span><span id="m3-0313" class="val neu">—</span><span id="m3-avg-0313" class="avg neu">—</span></p>
-              <p class="line" id="row-m4-0313"><span class="label">近4月報酬率</span><span id="m4-range-0313" class="range">—</span><span id="m4-0313" class="val neu">—</span><span id="m4-avg-0313" class="avg neu">—</span></p>
-              <p class="line" id="row-m5-0313"><span class="label">近5月報酬率</span><span id="m5-range-0313" class="range">—</span><span id="m5-0313" class="val neu">—</span><span id="m5-avg-0313" class="avg neu">—</span></p>
-              <p class="line" id="row-m6-0313"><span class="label">近6月報酬率</span><span id="m6-range-0313" class="range">—</span><span id="m6-0313" class="val neu">—</span><span id="m6-avg-0313" class="avg neu">—</span></p>
+  function sumBetweenCovered(days, pref, startDate, endDate, coverageStartDate, coverageEndDate) {
+    if (startDate < coverageStartDate) return null;
+    if (endDate > coverageEndDate) return null;
+    if (!days.length) return 0;
 
-              <p class="line" id="row-y1-0313"><span class="label">近1年報酬率</span><span id="y1-range-0313" class="range">—</span><span id="y1-0313" class="val neu">—</span><span id="y1-avg-0313" class="avg neu">—</span></p>
-              <p class="line" id="row-y2-0313"><span class="label">近2年報酬率</span><span id="y2-range-0313" class="range">—</span><span id="y2-0313" class="val neu">—</span><span id="y2-avg-0313" class="avg neu">—</span></p>
-              <p class="line" id="row-y3-0313"><span class="label">近3年報酬率</span><span id="y3-range-0313" class="range">—</span><span id="y3-0313" class="val neu">—</span><span id="y3-avg-0313" class="avg neu">—</span></p>
-              <p class="line" id="row-y4-0313"><span class="label">近4年報酬率</span><span id="y4-range-0313" class="range">—</span><span id="y4-0313" class="val neu">—</span><span id="y4-avg-0313" class="avg neu">—</span></p>
-              <p class="line" id="row-y5-0313"><span class="label">近5年報酬率</span><span id="y5-range-0313" class="range">—</span><span id="y5-0313" class="val neu">—</span><span id="y5-avg-0313" class="avg neu">—</span></p>
-              <p class="line" id="row-y6-0313"><span class="label">近6年報酬率</span><span id="y6-range-0313" class="range">—</span><span id="y6-0313" class="val neu">—</span><span id="y6-avg-0313" class="avg neu">—</span></p>
+    const start8 = fmtYmd8(startDate);
+    const end8 = fmtYmd8(endDate);
 
-              <p class="period">期間：<span id="period-0313">—</span></p>
-              <div class="status" id="status-0313"></div>
-            </div>
-          </a>
-        </div>
-      </div>
+    let i = days.findIndex(d => d >= start8);
+    if (i < 0) return null;
 
-      <hr>
+    let j = -1;
+    for (let idx = days.length - 1; idx >= 0; idx--) {
+      if (days[idx] <= end8) {
+        j = idx;
+        break;
+      }
+    }
 
-      <h3 class="section-title-blue">分析</h3>
-      <div class="section-note">提供單檔檢查、參數比較與格式轉換工具，作為研究與驗證流程的核心入口。</div>
+    if (j < i) return 0;
+    return pref[j + 1] - pref[i];
+  }
 
-      <div class="nav">
-        <a class="card" href="single-trades.html">
-          <p class="card-title blue big">期貨策略研究</p>
-          <p class="card-desc">查看單一策略的交易明細、週損益、資產曲線與核心 KPI，適合快速檢查某一策略近期表現與風險結構。</p>
-        </a>
+  function weekReturnUser(days, pref, coverageStartDate, coverageEndDate, nWeeks) {
+    const end = getAnchorWeekEnd();
+    const start = new Date(mondayOf(end).getTime());
+    start.setDate(start.getDate() - (nWeeks - 1) * 7);
 
-        <a class="card" href="multi-pro.html">
-          <p class="card-title blue big">期貨最佳化參數研究</p>
-          <p class="card-desc">用多組參數批量比較策略結果，快速找出較穩定的參數區間，並觀察報酬、回撤與一致性變化。</p>
-        </a>
+    const sum = sumBetweenCovered(days, pref, start, end, coverageStartDate, coverageEndDate);
+    return {
+      ret: (sum == null ? null : sum / BASE_CAPITAL),
+      range: `${fmtDate(start)}~${fmtDate(end)}`
+    };
+  }
 
-        <a class="card" href="xq-trade-to-txt.html">
-          <p class="card-title blue big">XQ交易明細轉TXT</p>
-          <p class="card-desc">將 XQ 交易明細快速轉為標準指標 TXT，並支援 TXT 對 TXT 比對、缺漏筆數檢查與重新對齊分析。</p>
-        </a>
-      </div>
+  function monthReturnUser(days, pref, coverageStartDate, coverageEndDate, nMonths) {
+    const end = getAnchorWeekEnd();
+    const base = addMonthsSameDay(end, -nMonths);
+    const start = mondayOf(base);
 
-      <div class="nav">
-        <a class="card" href="stock-multi-cloud.html">
-          <p class="card-title blue big">股票策略研究</p>
-          <p class="card-desc">彙整股票或 ETF 策略的回測資料與 KPI，適合觀察不同標的、不同規則下的整體績效與資金曲線。</p>
-        </a>
-      </div>
+    const sum = sumBetweenCovered(days, pref, start, end, coverageStartDate, coverageEndDate);
+    return {
+      ret: (sum == null ? null : sum / BASE_CAPITAL),
+      range: `${fmtDate(start)}~${fmtDate(end)}`
+    };
+  }
 
-      <hr>
+  function yearReturnUser(days, pref, coverageStartDate, coverageEndDate, nYears) {
+    const end = getAnchorWeekEnd();
+    const base = addYearsSameDay(end, -nYears);
+    const start = mondayOf(base);
 
-      <h3 class="section-title-black">資料</h3>
-      <div class="section-note">首頁、分析頁與工具頁共用同一套 TXT 檔案來源，方便集中管理。</div>
+    const sum = sumBetweenCovered(days, pref, start, end, coverageStartDate, coverageEndDate);
+    return {
+      ret: (sum == null ? null : sum / BASE_CAPITAL),
+      range: `${fmtDate(start)}~${fmtDate(end)}`
+    };
+  }
 
-      <div class="nav">
-        <a class="card" href="upload.html">
-          <p class="card-title black big">上傳檔案</p>
-          <p class="card-desc">集中管理策略 TXT 檔案，上傳、檢視、下載與刪除資料，作為首頁、分析頁與比對工具的共同資料來源。</p>
-        </a>
-      </div>
-    </div>
-  </div>
+  function setVal(id, v) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.classList.remove('pos', 'neg', 'neu');
 
-  <script src="index.js?v=slip-final-v1"></script>
-</body>
-</html>
+    if (v == null) {
+      el.textContent = '—';
+      el.classList.add('neu');
+      return;
+    }
+
+    el.textContent = (v * 100).toFixed(2) + '%';
+    el.classList.add(v > 0 ? 'pos' : (v < 0 ? 'neg' : 'neu'));
+  }
+
+  function setAvg(id, v) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.classList.remove('pos', 'neg', 'neu');
+
+    if (v == null) {
+      el.textContent = '—';
+      el.classList.add('neu');
+      return;
+    }
+
+    el.textContent = (v * 100).toFixed(2) + '%';
+    el.classList.add(v > 0 ? 'pos' : (v < 0 ? 'neg' : 'neu'));
+  }
+
+  function setText(id, text) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = text || '—';
+  }
+
+  function setCardStatus(key, text, color) {
+    const el = document.getElementById(`status-${key}`);
+    if (!el) return;
+    el.textContent = text || '';
+    el.style.color = color || '#6b7280';
+  }
+
+  function setPeriodText(key, start8, end8) {
+    const el = document.getElementById(`period-${key}`);
+    if (!el) return;
+    if (!start8 || !end8) {
+      el.textContent = '—';
+      return;
+    }
+    el.textContent = `${start8} - ${end8}`;
+  }
+
+  function setRowVisible(key, rowKey, visible) {
+    const row = document.getElementById(`row-${rowKey}-${key}`);
+    if (row) row.style.display = visible ? 'grid' : 'none';
+  }
+
+  function resetAll(key) {
+    const keys = ['wk1','wk2','wk3','wk4','m2','m3','m4','m5','m6','y1','y2','y3','y4','y5','y6'];
+    keys.forEach(k => {
+      setText(`${k}-range-${key}`, '—');
+      setVal(`${k}-${key}`, null);
+      setAvg(`${k}-avg-${key}`, null);
+      setRowVisible(key, k, true);
+    });
+  }
+
+  const WANT = {
+    "0807": /0807/i,
+    "1001": /1001(?!plus)/i,
+    "1001pp": /1001plus/i,
+    "0313": /0313/i
+  };
+
+  const RANGE_RE = /\b(20\d{6})-(20\d{6})\b/;
+
+  function extractRangeFromPath(p) {
+    const m = String(p || '').match(RANGE_RE);
+    if (!m) return null;
+    const a = +m[1];
+    const b = +m[2];
+    if (!Number.isFinite(a) || !Number.isFinite(b) || a <= 0 || b <= 0) return null;
+    return { start: a, end: b };
+  }
+
+  function addDaysYmd(ymd, days) {
+    const s = String(ymd);
+    const dt = new Date(+s.slice(0, 4), +s.slice(4, 6) - 1, +s.slice(6, 8));
+    dt.setDate(dt.getDate() + days);
+    const y = dt.getFullYear();
+    const m = String(dt.getMonth() + 1).padStart(2, '0');
+    const d = String(dt.getDate()).padStart(2, '0');
+    return +(String(y) + m + d);
+  }
+
+  function chooseChainByRange(files) {
+    const segs = files
+      .map(f => {
+        const r = extractRangeFromPath(f.fullPath) || extractRangeFromPath(f.name);
+        return r ? { ...f, r } : null;
+      })
+      .filter(Boolean);
+
+    if (!segs.length) return null;
+
+    segs.sort((a, b) => {
+      if (a.r.start !== b.r.start) return a.r.start - b.r.start;
+      if (a.r.end !== b.r.end) return b.r.end - a.r.end;
+      return (b.metadata?.size || 0) - (a.metadata?.size || 0);
+    });
+
+    const earliestStart = segs[0].r.start;
+    const baseCandidates = segs.filter(s => s.r.start === earliestStart);
+    baseCandidates.sort((a, b) => {
+      if (a.r.end !== b.r.end) return b.r.end - a.r.end;
+      return (b.metadata?.size || 0) - (a.metadata?.size || 0);
+    });
+
+    const chain = [baseCandidates[0]];
+    let curEnd = chain[0].r.end;
+
+    while (true) {
+      const allowStart = addDaysYmd(curEnd, 7);
+      const cands = segs.filter(s => s.r.start <= allowStart && s.r.end > curEnd);
+      if (!cands.length) break;
+
+      cands.sort((a, b) => {
+        if (a.r.end !== b.r.end) return b.r.end - a.r.end;
+        const ta = Date.parse(a.updated_at || 0) || 0;
+        const tb = Date.parse(b.updated_at || 0) || 0;
+        if (ta !== tb) return tb - ta;
+        return (b.metadata?.size || 0) - (a.metadata?.size || 0);
+      });
+
+      const pick = cands[0];
+      if (!chain.some(x => x.fullPath === pick.fullPath)) chain.push(pick);
+      curEnd = Math.max(curEnd, pick.r.end);
+    }
+
+    chain.sort((a, b) => a.r.start - b.r.start);
+
+    return {
+      chain,
+      start: Math.min(...chain.map(x => x.r.start)),
+      end: Math.max(...chain.map(x => x.r.end))
+    };
+  }
+
+  function mergeCanonTexts(canonTexts) {
+    const seen = new Set();
+    const rows = [];
+
+    for (const txt of canonTexts) {
+      if (!txt) continue;
+      for (const line of String(txt).split('\n')) {
+        const m = line.match(CANON_RE);
+        if (!m) continue;
+        if (seen.has(line)) continue;
+        seen.add(line);
+        rows.push({ ts: m[1], line });
+      }
+    }
+
+    rows.sort((a, b) => a.ts.localeCompare(b.ts));
+    return rows.map(r => r.line).join('\n');
+  }
+
+  function shortErrMsg(e) {
+    if (!e) return '未知錯誤';
+    const s = String(e && e.message ? e.message : e);
+    return s.length > 80 ? s.slice(0, 80) + '…' : s;
+  }
+
+  async function loadDepsAndRun(slipPerSide) {
+    try {
+      await loadScript('https://unpkg.com/@supabase/supabase-js@2');
+      await loadScript('shared.js?v=cfg-slip-final-v1');
+    } catch (e) {
+      ['0807','1001','1001pp','0313'].forEach(k => {
+        setCardStatus(k, '錯誤：' + shortErrMsg(e), '#b91c1c');
+      });
+      return;
+    }
+
+    const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      global: { fetch: (u, o = {}) => fetch(u, { ...o, cache: 'no-store' }) }
+    });
+
+    async function listDir(prefix) {
+      const p = (prefix && !prefix.endsWith('/')) ? prefix + '/' : (prefix || '');
+      const { data, error } = await sb.storage.from(BUCKET).list(p, {
+        limit: 1000,
+        sortBy: { column: 'name', order: 'asc' }
+      });
+      if (error) throw error;
+      return (data || []).map(it => ({ ...it, fullPath: p + it.name }));
+    }
+
+    async function listDeepN(prefix, depth, maxDepth, out) {
+      if (depth > maxDepth) return;
+      const entries = await listDir(prefix);
+      for (const it of entries) {
+        if (!it.id && !it.metadata) {
+          await listDeepN(it.fullPath, depth + 1, maxDepth, out);
+        } else {
+          out.push(it);
+        }
+      }
+    }
+
+    async function listAllFilesByRegex(keyRegex) {
+      const all = [];
+      await listDeepN('', 0, 8, all);
+      return all.filter(it => {
+        if (!it.metadata) return false;
+        const n = (it.name || '');
+        const p = (it.fullPath || '');
+        return keyRegex.test(p) || keyRegex.test(n);
+      });
+    }
+
+    function pickLatestByUpdate(files) {
+      if (!files.length) return null;
+      const xs = files.slice();
+      xs.sort((a, b) => {
+        const ta = Date.parse(a.updated_at || 0) || 0;
+        const tb = Date.parse(b.updated_at || 0) || 0;
+        if (ta !== tb) return tb - ta;
+        return (b.metadata?.size || 0) - (a.metadata?.size || 0);
+      });
+      return xs[0];
+    }
+
+    async function downloadCanon(fullPath) {
+      const { data, error } = await sb.storage.from(BUCKET).download(fullPath);
+      if (error) throw error;
+      if (!data) throw new Error('download 無資料');
+      return await blobToCanon(data);
+    }
+
+    async function resolveMergedForKey(key) {
+      const files = await listAllFilesByRegex(WANT[key]);
+      if (!files.length) return null;
+
+      const chainInfo = chooseChainByRange(files);
+
+      if (!chainInfo) {
+        const latest = pickLatestByUpdate(files);
+        if (!latest) return null;
+        const canonObj = await downloadCanon(latest.fullPath);
+        return {
+          canon: canonObj.canon,
+          periodStart: null
+        };
+      }
+
+      const canonTexts = [];
+      for (const f of chainInfo.chain) {
+        const { canon } = await downloadCanon(f.fullPath);
+        canonTexts.push(canon);
+      }
+
+      const mergedCanon = mergeCanonTexts(canonTexts);
+
+      return {
+        canon: mergedCanon,
+        periodStart: String(chainInfo.start)
+      };
+    }
+
+    function applyVisibleRows(key, coverageStartDate, coverageEndDate) {
+      const totalSpanDays = (coverageEndDate - coverageStartDate) / (1000 * 60 * 60 * 24);
+
+      setRowVisible(key, 'wk1', totalSpanDays >= 7);
+      setRowVisible(key, 'wk2', totalSpanDays >= 14);
+      setRowVisible(key, 'wk3', totalSpanDays >= 21);
+      setRowVisible(key, 'wk4', totalSpanDays >= 28);
+
+      setRowVisible(key, 'm2', totalSpanDays >= 60);
+      setRowVisible(key, 'm3', totalSpanDays >= 90);
+      setRowVisible(key, 'm4', totalSpanDays >= 120);
+      setRowVisible(key, 'm5', totalSpanDays >= 150);
+      setRowVisible(key, 'm6', totalSpanDays >= 180);
+
+      setRowVisible(key, 'y1', totalSpanDays >= 365);
+      setRowVisible(key, 'y2', totalSpanDays >= 365 * 2);
+      setRowVisible(key, 'y3', totalSpanDays >= 365 * 3);
+      setRowVisible(key, 'y4', totalSpanDays >= 365 * 4);
+      setRowVisible(key, 'y5', totalSpanDays >= 365 * 5);
+      setRowVisible(key, 'y6', totalSpanDays >= 365 * 6);
+    }
+
+    function dailySeriesFromMerged(mergedTxt, slipPerSide) {
+      const parsed = window.SHARED.parseTXT(mergedTxt);
+      if (!parsed || !Array.isArray(parsed.rows)) throw new Error('parseTXT 結果異常');
+
+      const report = window.SHARED.buildReport(parsed.rows, {
+        slipPerSide,
+        pointValue: DEFAULT_POINT_VALUE,
+        feePerSide: DEFAULT_FEE_PER_SIDE,
+        taxRate: DEFAULT_TAX_RATE
+      });
+
+      if (!report || !Array.isArray(report.trades)) throw new Error('buildReport 結果異常');
+
+      const m = new Map();
+      for (const t of report.trades) {
+        if (!t || t.tsOut == null) continue;
+        const gain = typeof t.gainSlip === 'number' ? t.gainSlip : null;
+        if (gain == null) continue;
+        const d = String(t.tsOut).slice(0, 8);
+        m.set(d, (m.get(d) || 0) + gain);
+      }
+
+      return m;
+    }
+
+    async function fillCard(key) {
+      setCardStatus(key, `讀取中（滑點 ${slipPerSide} 點）...`, '#6b7280');
+
+      try {
+        const merged = await resolveMergedForKey(key);
+        if (!merged || !merged.canon) {
+          resetAll(key);
+          setPeriodText(key, null, null);
+          setCardStatus(key, '無資料', '#b45309');
+          return;
+        }
+
+        const rows = parseCanon(merged.canon);
+        if (!rows.length) throw new Error('canonical 交易列為空');
+
+        const coverageStart8 = merged.periodStart || rows[0].ts.slice(0, 8);
+        const coverageStartDate = d8ToDate(coverageStart8);
+        const coverageEndDate = getAnchorWeekEnd();
+
+        setPeriodText(key, coverageStart8, fmtYmd8(coverageEndDate));
+
+        const dayMap = dailySeriesFromMerged(merged.canon, slipPerSide);
+        const covered = makeCoveredSeries(dayMap, coverageStartDate, coverageEndDate);
+        const pref = buildPrefix(covered.vals);
+
+        applyVisibleRows(key, coverageStartDate, coverageEndDate);
+
+        const weekDefs = [['wk1',1],['wk2',2],['wk3',3],['wk4',4]];
+        const monthDefs = [['m2',2],['m3',3],['m4',4],['m5',5],['m6',6]];
+        const yearDefs = [['y1',1],['y2',2],['y3',3],['y4',4],['y5',5],['y6',6]];
+
+        weekDefs.forEach(([k,n]) => {
+          const r = weekReturnUser(covered.days, pref, coverageStartDate, coverageEndDate, n);
+          if (r.ret == null) {
+            setRowVisible(key, k, false);
+            return;
+          }
+          setText(`${k}-range-${key}`, r.range);
+          setVal(`${k}-${key}`, r.ret);
+          setAvg(`${k}-avg-${key}`, null);
+        });
+
+        monthDefs.forEach(([k,n]) => {
+          const r = monthReturnUser(covered.days, pref, coverageStartDate, coverageEndDate, n);
+          if (r.ret == null) {
+            setRowVisible(key, k, false);
+            return;
+          }
+          setText(`${k}-range-${key}`, r.range);
+          setVal(`${k}-${key}`, r.ret);
+          setAvg(`${k}-avg-${key}`, null);
+        });
+
+        yearDefs.forEach(([k,n]) => {
+          const r = yearReturnUser(covered.days, pref, coverageStartDate, coverageEndDate, n);
+          if (r.ret == null) {
+            setRowVisible(key, k, false);
+            return;
+          }
+          const avg = r.ret / n;
+          setText(`${k}-range-${key}`, r.range);
+          setVal(`${k}-${key}`, r.ret);
+          setAvg(`${k}-avg-${key}`, avg);
+        });
+
+        setCardStatus(key, `已完成（滑點 ${slipPerSide} 點）`, '#15803d');
+      } catch (e) {
+        console.error('fillCard error', key, e);
+        resetAll(key);
+        setPeriodText(key, null, null);
+        setCardStatus(key, '錯誤：' + shortErrMsg(e), '#b91c1c');
+      }
+    }
+
+    for (const key of ['0807','1001','1001pp','0313']) {
+      await fillCard(key);
+    }
+  }
+})();
