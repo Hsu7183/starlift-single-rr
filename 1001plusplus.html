@@ -30,6 +30,7 @@
       font-size: 13px;
     }
 
+    /* 共用卡片外觀 */
     .card {
       background: #fff;
       border: 1px solid #e5e7eb;
@@ -39,6 +40,7 @@
       margin-bottom: 8px;
     }
 
+    /* 差異檢查那一行 */
     .row {
       display: flex;
       gap: 8px;
@@ -76,15 +78,17 @@
       white-space: pre-wrap;
     }
 
+    /* 上方：分數卡 + 工具列（沿用 single-trades） */
     .top-row {
       max-width: 1100px;
       margin: 0 auto 4px auto;
       display: flex;
-      flex-wrap: nowrap;
+      flex-wrap: nowrap;        /* 不要把分數卡跟工具列拆開 */
       gap: 8px;
       align-items: stretch;
     }
 
+    /* 綜合分數卡片 */
     .kpi-score-card {
       flex: 0 0 150px;
       background: #fff;
@@ -118,11 +122,12 @@
       line-height: 1.3;
     }
 
+    /* 工具列（本金 / 滑點 / TXT / 雲端 / 計算） */
     .toolbar {
       flex: 1 1 auto;
       margin: 0;
       display: flex;
-      flex-wrap: nowrap;
+      flex-wrap: nowrap;        /* 都擠在同一行，窄螢幕用橫向捲動 */
       gap: 8px;
       align-items: center;
       justify-content: flex-start;
@@ -148,6 +153,7 @@
       white-space: nowrap;
     }
 
+    /* TXT + 雲端檔 block：隱藏，但保留給 single-trades.js 使用 */
     .file-block {
       display: none;
       flex-direction: column;
@@ -165,6 +171,7 @@
       max-width: 380px;
     }
 
+    /* 參數列 */
     .param-line {
       max-width: 1100px;
       margin: 0 auto 4px auto;
@@ -175,6 +182,7 @@
       text-overflow: ellipsis;
     }
 
+    /* KPI 區塊共用 */
     .kpi-wrapper {
       margin: 4px auto;
       max-width: 1100px;
@@ -280,14 +288,17 @@
     .num-neg { color: #0a7f00; }
   </style>
 
+  <!-- 依賴：Chart.js + Supabase + single-trades.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 </head>
 
 <body>
   <div class="wrap">
+
     <h1>1001plus+版本</h1>
 
+    <!-- 差異檢查 -->
     <div class="card" id="diffCard">
       <div class="row">
         <strong>差異檢查</strong>
@@ -299,10 +310,12 @@
       <div id="periodText" class="muted" style="margin-top:6px;"></div>
     </div>
 
+    <!-- 自動流程狀態 -->
     <div class="card">
       <span id="autostatus" class="muted">初始化中…</span>
     </div>
 
+    <!-- 上方：綜合分數卡 + 工具列 -->
     <div class="top-row">
       <div class="kpi-score-card" id="scoreCard">
         <div class="score-title">綜合分數</div>
@@ -321,6 +334,7 @@
           <input type="number" id="slipInput" value="2" step="0.1">
         </label>
 
+        <!-- TXT 檔 + 雲端檔 block：隱藏，但保留給 single-trades.js 使用 -->
         <div class="file-block">
           <label>
             TXT 檔：
@@ -338,16 +352,20 @@
       </div>
     </div>
 
+    <!-- TXT 第一行參數 -->
     <div class="param-line" id="paramLine"></div>
 
+    <!-- 主資產曲線 -->
     <div class="chart-wrapper chart-main">
       <canvas id="equityChart"></canvas>
     </div>
 
+    <!-- 每週損益圖 -->
     <div class="chart-wrapper chart-weekly">
       <canvas id="weeklyPnlChart"></canvas>
     </div>
 
+    <!-- 建議優化指標 -->
     <div class="kpi-wrapper kpi-bad-card">
       <table class="kpi-table">
         <thead>
@@ -367,6 +385,7 @@
       </table>
     </div>
 
+    <!-- 全部 KPI 明細 -->
     <div class="kpi-wrapper">
       <table class="kpi-table">
         <thead>
@@ -383,6 +402,7 @@
       </table>
     </div>
 
+    <!-- 交易明細 -->
     <div class="card">
       <table class="trade-table">
         <thead class="trade-head">
@@ -405,7 +425,9 @@
     </div>
   </div>
 
+  <!-- 單檔分析主邏輯 -->
   <script src="single-trades.js"></script>
+  <!-- 1001plus+ 專屬：自動找最新 1001plus+ + 基準，合併後直接餵給 single-trades.js -->
   <script src="1001plusplus.js"></script>
 </body>
 </html>
