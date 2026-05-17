@@ -5,8 +5,6 @@
 // 2. 避免新賣被誤翻成新買
 // 3. 自動判斷 UTF-8 / Big5 編碼
 // 4. 本機選檔可自動計算
-// 5. 雲端檔可由 single-trades-cloud.js 呼叫自動計算
-// 6. 雲端失敗不影響本機分析
 
 (function () {
   'use strict';
@@ -1168,6 +1166,127 @@
   const capitalInput = $('#capitalInput');
   const slipInput = $('#slipInput');
   const runBtn = $('#runBtn');
+  const localDataSelect = $('#localDataSelect');
+  const btnLoadLocalData = $('#btnLoadLocalData');
+  const localDataMsg = $('#localDataMsg');
+  const LOCAL_DATA_FILES = [
+    {
+      key: 'data/1001plus+-20200103-20260515.txt',
+      name: '1001plus+-20200103-20260515.txt',
+      label: '1001plus+ 20200103-20260515'
+    }
+  ];
+
+  function localDataName(key) {
+    return String(key || '').split('/').pop() || 'project-data.txt';
+  }
+
+  function localDataLabel(name) {
+    const base = String(name || '').replace(/\.txt$/i, '');
+    return base.replace('1001plus+-', '1001plus+ ');
+  }
+
+  function setLocalDataMsg(text, color) {
+    if (!localDataMsg) return;
+    localDataMsg.textContent = text || '';
+    localDataMsg.style.color = color || '#666';
+  }
+
+  function getLocalDataEntries() {
+    const reports = window.LOCAL_REPORTS || {};
+    const seen = new Set();
+    const embedded = Object.keys(reports)
+      .filter(key => /\.txt$/i.test(key))
+      .map(key => {
+        const name = localDataName(key);
+        if (seen.has(name)) return null;
+        seen.add(name);
+        return { key, name, label: localDataLabel(name) };
+      })
+      .filter(Boolean);
+
+    for (const item of LOCAL_DATA_FILES) {
+      if (seen.has(item.name)) continue;
+      seen.add(item.name);
+      embedded.push(item);
+    }
+
+    return embedded
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  async function readLocalDataText(key, name) {
+    const reports = window.LOCAL_REPORTS || {};
+    const direct = reports[key] || reports[name] || reports[`data/${name}`];
+    if (typeof direct === 'string') return direct;
+
+    const res = await fetch(key, { cache: 'no-store' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.text();
+  }
+
+  function populateLocalDataSelect() {
+    if (!localDataSelect) return;
+    const entries = getLocalDataEntries();
+    localDataSelect.innerHTML = '';
+
+    if (!entries.length) {
+      const opt = document.createElement('option');
+      opt.value = '';
+      opt.textContent = '（data 無資料）';
+      localDataSelect.appendChild(opt);
+      localDataSelect.disabled = true;
+      if (btnLoadLocalData) btnLoadLocalData.disabled = true;
+      return;
+    }
+
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = '選擇 data 資料';
+    localDataSelect.appendChild(placeholder);
+
+    entries.forEach(item => {
+      const opt = document.createElement('option');
+      opt.value = item.key;
+      opt.textContent = item.label;
+      opt.dataset.filename = item.name;
+      localDataSelect.appendChild(opt);
+    });
+
+    localDataSelect.disabled = false;
+    if (btnLoadLocalData) btnLoadLocalData.disabled = false;
+  }
+
+  async function loadSelectedLocalData() {
+    if (!localDataSelect) return;
+    const key = localDataSelect.value;
+    if (!key) {
+      setLocalDataMsg('請先選擇 data 資料', '#b45309');
+      return;
+    }
+
+    const name = localDataSelect.selectedOptions[0]?.dataset.filename || localDataName(key);
+    let text = '';
+
+    try {
+      text = await readLocalDataText(key, name);
+    } catch (err) {
+      setLocalDataMsg('讀取失敗：' + (err && err.message ? err.message : err), '#b91c1c');
+      return;
+    }
+
+    const file = new File([text], name, { type: 'text/plain' });
+
+    if (fileInput && window.DataTransfer) {
+      const dt = new DataTransfer();
+      dt.items.add(file);
+      fileInput.files = dt.files;
+    }
+
+    gFile = file;
+    setLocalDataMsg(`已載入 ${name}`, '#15803d');
+    await loadAndRenderFile(file);
+  }
 
   if (fileInput) {
     fileInput.addEventListener('change', async function (ev) {
@@ -1202,6 +1321,22 @@
         return;
       }
       await loadAndRenderFile(gFile);
+    });
+  }
+
+  populateLocalDataSelect();
+
+  if (btnLoadLocalData) {
+    btnLoadLocalData.addEventListener('click', loadSelectedLocalData);
+  }
+
+  if (localDataSelect) {
+    localDataSelect.addEventListener('change', function () {
+      if (this.value) {
+        loadSelectedLocalData();
+      } else {
+        setLocalDataMsg('');
+      }
     });
   }
 

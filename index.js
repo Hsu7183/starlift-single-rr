@@ -4,6 +4,8 @@
   const SUPABASE_URL = "https://byhbmmnacezzgkwfkozs.supabase.co";
   const SUPABASE_ANON_KEY = "sb_publishable_xVe8fGbqQ0XGwi4DsmjPMg_Y2RBOD3t";
   const BUCKET = "reports";
+  const LOCAL_1001PLUS_NAME = "1001plus+-20200103-20260515.txt";
+  const LOCAL_1001PLUS_FILE = "data/" + LOCAL_1001PLUS_NAME;
 
   const PASS_HASH = "0f2b9305e317408510dc9878381e953630ed9fa3d2aadf95f1b8eb47941b18b9";
   const KEY_OK = '__auth_ok__';
@@ -460,6 +462,26 @@
     };
   }
 
+  function calendarYearReturnUser(days, pref, coverageStartDate, coverageEndDate, year) {
+    const yearStart = new Date(year, 0, 1);
+    const yearEnd = new Date(year, 11, 31);
+    const start = yearStart < coverageStartDate ? coverageStartDate : yearStart;
+    const end = yearEnd > coverageEndDate ? coverageEndDate : yearEnd;
+
+    if (start > end) {
+      return {
+        ret: null,
+        range: '—'
+      };
+    }
+
+    const sum = sumBetweenCovered(days, pref, start, end, coverageStartDate, coverageEndDate);
+    return {
+      ret: (sum == null ? null : sum / BASE_CAPITAL),
+      range: `${fmtDate(start)}~${fmtDate(end)}`
+    };
+  }
+
   function setVal(id, v) {
     const el = document.getElementById(id);
     if (!el) return;
@@ -518,7 +540,7 @@
   }
 
   function resetAll(key) {
-    const keys = ['wk1','wk2','wk3','wk4','m2','m3','m4','m5','m6','y1','y2','y3','y4','y5','y6'];
+    const keys = ['wk1','wk2','wk3','wk4','m2','m3','m4','m5','m6','y1','cy0','cy1','cy2','cy3','cy4','cy5'];
     keys.forEach(k => {
       setText(`${k}-range-${key}`, '—');
       setVal(`${k}-${key}`, null);
@@ -528,10 +550,7 @@
   }
 
   const WANT = {
-    "0807": /0807/i,
-    "1001": /1001(?!plus)/i,
-    "1001pp": /1001plus/i,
-    "0313": /0313/i
+    "1001pp": /1001plus/i
   };
 
   const RANGE_RE = /\b(20\d{6})-(20\d{6})\b/;
@@ -635,22 +654,58 @@
 
   async function loadDepsAndRun(slipPerSide) {
     try {
-      await loadScript('https://unpkg.com/@supabase/supabase-js@2');
       await loadScript('./shared.js');
     } catch (e) {
-      ['0807','1001','1001pp','0313'].forEach(k => {
+      ['1001pp'].forEach(k => {
         setCardStatus(k, '錯誤：' + shortErrMsg(e), '#b91c1c');
       });
       return;
     }
 
-    const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      global: { fetch: (u, o = {}) => fetch(u, { ...o, cache: 'no-store' }) }
-    });
+    let sb = null;
+    let supabaseAttempted = false;
+
+    async function ensureSupabase() {
+      if (sb) return sb;
+      if (!window.supabase && !supabaseAttempted) {
+        supabaseAttempted = true;
+        await loadScript('https://unpkg.com/@supabase/supabase-js@2');
+      }
+      if (window.supabase) {
+        sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+          global: { fetch: (u, o = {}) => fetch(u, { ...o, cache: 'no-store' }) }
+        });
+        return sb;
+      }
+      throw new Error('本機資料檔讀取失敗，且 Supabase SDK 未載入');
+    }
+
+    async function loadLocalReportText() {
+      const reports = window.LOCAL_REPORTS || {};
+      const embeddedText = reports[LOCAL_1001PLUS_FILE] || reports[LOCAL_1001PLUS_NAME];
+      if (typeof embeddedText === 'string') {
+        return {
+          name: LOCAL_1001PLUS_NAME,
+          text: embeddedText
+        };
+      }
+
+      try {
+        const res = await fetch(LOCAL_1001PLUS_FILE, { cache: 'no-store' });
+        if (!res.ok) return null;
+        return {
+          name: LOCAL_1001PLUS_NAME,
+          text: await res.text()
+        };
+      } catch (_) {
+        return null;
+      }
+    }
 
     async function listDir(prefix) {
+      const client = await ensureSupabase();
       const p = (prefix && !prefix.endsWith('/')) ? prefix + '/' : (prefix || '');
-      const { data, error } = await sb.storage.from(BUCKET).list(p, {
+      const { data, error } = await client.storage.from(BUCKET).list(p, {
         limit: 1000,
         sortBy: { column: 'name', order: 'asc' }
       });
@@ -694,13 +749,30 @@
     }
 
     async function downloadCanon(fullPath) {
-      const { data, error } = await sb.storage.from(BUCKET).download(fullPath);
+      const client = await ensureSupabase();
+      const { data, error } = await client.storage.from(BUCKET).download(fullPath);
       if (error) throw error;
       if (!data) throw new Error('download 無資料');
       return await blobToCanon(data);
     }
 
     async function resolveMergedForKey(key) {
+      if (key === '1001pp') {
+        const local = await loadLocalReportText();
+        if (local && local.text) {
+          const norm = normalizeText(local.text);
+          const { canon, ok } = canonicalize(norm);
+          if (ok > 0) {
+            const range = extractRangeFromPath(local.name);
+            return {
+              canon,
+              periodStart: range ? String(range.start) : null,
+              sourceName: local.name
+            };
+          }
+        }
+      }
+
       const files = await listAllFilesByRegex(WANT[key]);
       if (!files.length) return null;
 
@@ -712,7 +784,8 @@
         const canonObj = await downloadCanon(latest.fullPath);
         return {
           canon: canonObj.canon,
-          periodStart: null
+          periodStart: null,
+          sourceName: latest.name || latest.fullPath
         };
       }
 
@@ -726,7 +799,8 @@
 
       return {
         canon: mergedCanon,
-        periodStart: String(chainInfo.start)
+        periodStart: String(chainInfo.start),
+        sourceName: chainInfo.chain.map(f => f.name || f.fullPath).join(' + ')
       };
     }
 
@@ -745,11 +819,12 @@
       setRowVisible(key, 'm6', totalSpanDays >= 180);
 
       setRowVisible(key, 'y1', totalSpanDays >= 365);
-      setRowVisible(key, 'y2', totalSpanDays >= 365 * 2);
-      setRowVisible(key, 'y3', totalSpanDays >= 365 * 3);
-      setRowVisible(key, 'y4', totalSpanDays >= 365 * 4);
-      setRowVisible(key, 'y5', totalSpanDays >= 365 * 5);
-      setRowVisible(key, 'y6', totalSpanDays >= 365 * 6);
+
+      const endYear = coverageEndDate.getFullYear();
+      const startYear = coverageStartDate.getFullYear();
+      for (let i = 0; i < 6; i++) {
+        setRowVisible(key, `cy${i}`, endYear - i >= startYear);
+      }
     }
 
     function dailySeriesFromMerged(mergedTxt, slipPerSide) {
@@ -806,7 +881,9 @@
 
         const weekDefs = [['wk1',1],['wk2',2],['wk3',3],['wk4',4]];
         const monthDefs = [['m2',2],['m3',3],['m4',4],['m5',5],['m6',6]];
-        const yearDefs = [['y1',1],['y2',2],['y3',3],['y4',4],['y5',5],['y6',6]];
+        const yearDefs = [['y1',1]];
+        const endYear = coverageEndDate.getFullYear();
+        const calendarYearDefs = Array.from({ length: 6 }, (_, i) => [`cy${i}`, endYear - i]);
 
         weekDefs.forEach(([k,n]) => {
           const r = weekReturnUser(covered.days, pref, coverageStartDate, coverageEndDate, n);
@@ -842,7 +919,20 @@
           setAvg(`${k}-avg-${key}`, avg);
         });
 
-        setCardStatus(key, `已完成（滑點 ${slipPerSide} 點）`, '#15803d');
+        calendarYearDefs.forEach(([k, year]) => {
+          setText(`${k}-label-${key}`, `${year}年報酬率`);
+          const r = calendarYearReturnUser(covered.days, pref, coverageStartDate, coverageEndDate, year);
+          if (r.ret == null) {
+            setRowVisible(key, k, false);
+            return;
+          }
+          setText(`${k}-range-${key}`, r.range);
+          setVal(`${k}-${key}`, r.ret);
+          setAvg(`${k}-avg-${key}`, null);
+        });
+
+        const sourceText = merged.sourceName ? `，資料：${merged.sourceName}` : '';
+        setCardStatus(key, `已完成（滑點 ${slipPerSide} 點）${sourceText}`, '#15803d');
       } catch (e) {
         console.error('fillCard error', key, e);
         resetAll(key);
@@ -851,7 +941,7 @@
       }
     }
 
-    for (const key of ['0807','1001','1001pp','0313']) {
+    for (const key of ['1001pp']) {
       await fillCard(key);
     }
   }

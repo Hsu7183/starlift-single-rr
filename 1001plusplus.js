@@ -20,14 +20,36 @@
   const SUPABASE_URL  = "https://byhbmmnacezzgkwfkozs.supabase.co";
   const SUPABASE_ANON = "sb_publishable_xVe8fGbqQ0XGwi4DsmjPMg_Y2RBOD3t";
   const BUCKET        = "reports";
+  const LOCAL_1001PLUS_NAME = "1001plus+-20200103-20260515.txt";
+  const LOCAL_1001PLUS_FILE = "data/" + LOCAL_1001PLUS_NAME;
 
-  if (!window.supabase) {
-    console.error('Supabase SDK 未載入');
+  let sb = null;
+  let supabaseAttempted = false;
+
+  function loadScript(src) {
+    return new Promise((res, rej) => {
+      const s = document.createElement('script');
+      s.src = src;
+      s.onload = res;
+      s.onerror = () => rej(new Error('load fail: ' + src));
+      document.body.appendChild(s);
+    });
   }
 
-  const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON, {
-    global: { fetch: (u, o = {}) => fetch(u, { ...o, cache: 'no-store' }) }
-  });
+  async function ensureSupabase() {
+    if (sb) return sb;
+    if (!window.supabase && !supabaseAttempted) {
+      supabaseAttempted = true;
+      await loadScript('https://unpkg.com/@supabase/supabase-js@2');
+    }
+    if (window.supabase) {
+      sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON, {
+        global: { fetch: (u, o = {}) => fetch(u, { ...o, cache: 'no-store' }) }
+      });
+      return sb;
+    }
+    throw new Error('Supabase SDK 未載入');
+  }
 
   // 1001plus+ 檔名容錯：1001plus+ / 1001plusplus / 1001plus
   const WANT = /(1001\s*plus\+|1001plusplus|1001plus\+|1001plus)/i;
@@ -43,13 +65,15 @@
   }
 
   function pubUrl(path) {
+    if (!sb) throw new Error('Supabase SDK 未載入');
     const { data } = sb.storage.from(BUCKET).getPublicUrl(path);
     return data?.publicUrl || '#';
   }
 
   async function listOnce(prefix) {
+    const client = await ensureSupabase();
     const p = (prefix && !prefix.endsWith('/')) ? (prefix + '/') : (prefix || '');
-    const { data, error } = await sb.storage.from(BUCKET).list(p, {
+    const { data, error } = await client.storage.from(BUCKET).list(p, {
       limit : 1000,
       sortBy: { column: 'name', order: 'asc' }
     });
@@ -113,6 +137,38 @@
     return { canon: out.join('\n'), ok };
   }
 
+  function textToCanon(raw, enc = 'local') {
+    const norm = normalizeText(String(raw || ''));
+    const { canon, ok } = canonicalize(norm);
+    return { enc, canon, ok };
+  }
+
+  async function loadLocalSource() {
+    const reports = window.LOCAL_REPORTS || {};
+    const embeddedText = reports[LOCAL_1001PLUS_FILE] || reports[LOCAL_1001PLUS_NAME];
+    if (typeof embeddedText === 'string') {
+      return {
+        name: LOCAL_1001PLUS_NAME,
+        fullPath: LOCAL_1001PLUS_FILE,
+        from: 'local',
+        text: embeddedText
+      };
+    }
+
+    try {
+      const res = await fetch(LOCAL_1001PLUS_FILE, { cache: 'no-store' });
+      if (!res.ok) return null;
+      return {
+        name: LOCAL_1001PLUS_NAME,
+        fullPath: LOCAL_1001PLUS_FILE,
+        from: 'local',
+        text: await res.text()
+      };
+    } catch (_) {
+      return null;
+    }
+  }
+
   async function fetchSmart(url) {
     const res = await fetch(url, { cache: 'no-store' });
     if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
@@ -121,16 +177,13 @@
     for (const enc of ['utf-8', 'big5', 'utf-16le', 'utf-16be']) {
       try {
         const td   = new TextDecoder(enc, { fatal: false });
-        const norm = normalizeText(td.decode(buf));
-        const { canon, ok } = canonicalize(norm);
-        if (ok > 0) return { enc, canon, ok };
+        const got = textToCanon(td.decode(buf), enc);
+        if (got.ok > 0) return got;
       } catch (e) {}
     }
 
     const td   = new TextDecoder('utf-8');
-    const norm = normalizeText(td.decode(buf));
-    const { canon, ok } = canonicalize(norm);
-    return { enc: 'utf-8', canon, ok };
+    return textToCanon(td.decode(buf), 'utf-8');
   }
 
   function parseCanon(text) {
@@ -267,26 +320,32 @@
           from    : 'url'
         };
       } else {
-        setStatus('從 Supabase（reports）讀取清單…');
-        list = (await listCandidates()).filter(f =>
-          WANT.test(f.name) || WANT.test(f.fullPath)
-        );
+        const local = await loadLocalSource();
+        if (local) {
+          latest = local;
+          setStatus(`使用本機資料檔：${LOCAL_1001PLUS_FILE}`);
+        } else {
+          setStatus('從 Supabase（reports）讀取清單…');
+          list = (await listCandidates()).filter(f =>
+            WANT.test(f.name) || WANT.test(f.fullPath)
+          );
 
-        if (!list.length) {
-          setStatus('找不到檔名含「1001plus+ / 1001plusplus」的 TXT（可用 ?file= 指定）。', true);
-          return;
+          if (!list.length) {
+            setStatus('找不到本機 1001plus+ TXT，也找不到資料室中的 1001plus+ TXT（可用 ?file= 指定）。', true);
+            return;
+          }
+
+          // 排序：檔名最大日期 > updatedAt > size
+          list.sort((a, b) => {
+            const sa = lastDateScore(a.name);
+            const sb = lastDateScore(b.name);
+            if (sa !== sb) return sb - sa;
+            if (a.updatedAt !== b.updatedAt) return b.updatedAt - a.updatedAt;
+            return (b.size || 0) - (a.size || 0);
+          });
+
+          latest = list[0];
         }
-
-        // 排序：檔名最大日期 > updatedAt > size
-        list.sort((a, b) => {
-          const sa = lastDateScore(a.name);
-          const sb = lastDateScore(b.name);
-          if (sa !== sb) return sb - sa;
-          if (a.updatedAt !== b.updatedAt) return b.updatedAt - a.updatedAt;
-          return (b.size || 0) - (a.size || 0);
-        });
-
-        latest = list[0];
       }
 
       if (!latest) {
@@ -304,13 +363,13 @@
       if (elBase) elBase.textContent = base ? base.name : '（尚無）';
 
       // 3) 下載最新檔 & 基準檔，做 canonical 化與合併
-      setStatus('下載最新 1001plus+ 檔案並解碼中…');
+      setStatus(latest.from === 'local'
+        ? '讀取本機 1001plus+ 檔案並解碼中…'
+        : '下載最新 1001plus+ 檔案並解碼中…');
 
-      const latestUrl = latest.from === 'url'
-        ? latest.fullPath
-        : pubUrl(latest.fullPath);
-
-      const rNew = await fetchSmart(latestUrl);
+      const rNew = latest.text != null
+        ? textToCanon(latest.text, latest.from || 'local')
+        : await fetchSmart(latest.from === 'url' ? latest.fullPath : pubUrl(latest.fullPath));
       if (rNew.ok === 0) {
         setStatus(`最新檔沒有合法交易行（解碼=${rNew.enc}）。`, true);
         return;

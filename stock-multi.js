@@ -1,4 +1,4 @@
-// 股票｜雲端多檔分析（指標 TXT 版） - 多檔 KPI + Score + MAE 版
+// 股票｜本機多檔分析（指標 TXT 版） - 多檔 KPI + Score + MAE 版
 // - 解析每檔 TXT 中含「稅後損益=」「累積損益=」「MAE%=」的行（賣出）
 // - Summary（表格）：
 //   * Score：PF / MAR / MaxDD / AvgMAE% / Sharpe / Sortino / Expectancy / Payoff / HitRate / TradesPerMonth 綜合評分（0–100）

@@ -257,11 +257,13 @@
           <input type="file" id="fileInput" accept=".txt,.TF_1m">
         </label>
         <label>
-          雲端檔：
-          <select id="cloudSelect" class="cloud-select">
-            <option value="">（雲端未載入）</option>
+          專案資料：
+          <select id="localDataSelect" class="cloud-select">
+            <option value="">（讀取中）</option>
           </select>
         </label>
+        <button id="btnLoadLocalData" type="button">載入資料</button>
+        <span id="localDataMsg" class="score-desc"></span>
       </div>
 
       <button id="runBtn">計算</button>
@@ -333,8 +335,7 @@
   </table>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="single-trades.js"></script>
-  <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
-  <script src="single-trades-cloud.js"></script>
+  <script src="data/local-reports.js"></script>
+  <script src="single-trades.js?v=local-data-v2"></script>
 </body>
 </html>

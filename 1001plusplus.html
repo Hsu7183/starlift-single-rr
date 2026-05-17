@@ -288,9 +288,8 @@
     .num-neg { color: #0a7f00; }
   </style>
 
-  <!-- 依賴：Chart.js + Supabase + single-trades.js -->
+  <!-- 依賴：Chart.js + single-trades.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 </head>
 
 <body>
@@ -425,6 +424,7 @@
     </div>
   </div>
 
+  <script src="data/local-reports.js"></script>
   <!-- 單檔分析主邏輯 -->
   <script src="single-trades.js"></script>
   <!-- 1001plus+ 專屬：自動找最新 1001plus+ + 基準，合併後直接餵給 single-trades.js -->
