@@ -536,14 +536,23 @@
     const leftExtraAligned = alignedRows.filter(x => x.kind === '左側多一筆').length;
     const rightExtraAligned = alignedRows.filter(x => x.kind === '右側多一筆').length;
     const hardMismatch = alignedRows.filter(x => x.kind === '內容不符').length;
+    const allSame =
+      baseRows.length === testRows.length &&
+      alignedExact === baseRows.length &&
+      leftExtraAligned === 0 &&
+      rightExtraAligned === 0 &&
+      hardMismatch === 0;
 
     els.summaryBox.textContent =
-`重疊區間：${rangeText}
+`整體結果：${allSame ? '相同' : '不相同'}
+差異統計：左側多一筆 ${leftExtraAligned}，右側多一筆 ${rightExtraAligned}，內容不符 ${hardMismatch}
+
+重疊區間：${rangeText}
 基準筆數：${baseRows.length}
 測試筆數：${testRows.length}
 
 【集合比對】
-兩邊完全相同筆數：${exactMatchCount}
+完全相同筆數：${exactMatchCount}
 左有右無：${leftOnlyCount}
 右有左無：${rightOnlyCount}
 
