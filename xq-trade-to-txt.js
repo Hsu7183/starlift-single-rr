@@ -85,6 +85,13 @@
     return String(s || '').replace(/\D/g, '').padStart(6, '0').slice(0, 6);
   }
 
+  function normalizeTimestampDigits(v) {
+    const digits = String(v == null ? '' : v).replace(/\D/g, '');
+    if (digits.length >= 14) return digits.slice(0, 14);
+    if (digits.length === 12) return digits + '00';
+    return '';
+  }
+
   function normalizePrice(v) {
     if (v == null || v === '') return '';
     const n = Number(String(v).replace(/,/g, '').trim());
@@ -162,10 +169,12 @@
 
     const rows = [];
     for (let i = startIdx; i < lines.length; i++) {
-      const m = lines[i].match(/^(\d{14})(?:\.0{1,6})?\s+(-?\d+(?:\.\d+)?)\s+(新買|平賣|新賣|平買|強制平倉)\s*$/);
+      const m = lines[i].match(/^(\d{12}|\d{14})(?:\.\d{1,6})?\s+(-?\d+(?:\.\d+)?)\s+(新買|平賣|新賣|平買|強制平倉)\s*$/);
       if (!m) continue;
+      const ts = normalizeTimestampDigits(m[1]);
+      if (!ts) continue;
       rows.push({
-        ts: m[1],
+        ts,
         px: normalizePrice(m[2]),
         act: m[3]
       });
@@ -192,6 +201,7 @@
     if (!s) return '';
 
     const digits = s.replace(/\D/g, '');
+    if (digits.length === 12) return digits + '00';
     if (digits.length >= 14) return digits.slice(0, 14);
 
     const m1 = s.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?$/);
