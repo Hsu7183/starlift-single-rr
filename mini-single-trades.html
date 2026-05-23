@@ -2,7 +2,7 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="utf-8">
-  <title>三劍客量化科技機構級單檔分析</title>
+  <title>三劍客量化科技機構級小台單檔分析</title>
 
   <style>
     body {
@@ -231,7 +231,7 @@
 </head>
 
 <body>
-  <h1>三劍客量化科技機構級單檔分析</h1>
+  <h1>三劍客量化科技機構級小台單檔分析</h1>
 
   <div class="top-row">
     <div class="kpi-score-card" id="scoreCard">
@@ -243,7 +243,7 @@
     <div class="toolbar">
       <label>
         本金：
-        <input type="number" id="capitalInput" value="1000000" step="10000">
+        <input type="number" id="capitalInput" value="250000" step="5000">
       </label>
 
       <label>
@@ -336,6 +336,15 @@
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="data/local-reports.js"></script>
+  <script>
+    window.FUTURES_PRODUCT_PROFILE = {
+      market: 'mini',
+      label: '小台',
+      pointValue: 50,
+      feePerSide: 18,
+      capital: 250000
+    };
+  </script>
   <script src="single-trades.js?v=mini-futures-v1"></script>
 </body>
 </html>

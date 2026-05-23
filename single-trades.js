@@ -9,12 +9,39 @@
 (function () {
   'use strict';
 
+  const PRODUCT_PROFILES = {
+    tx: {
+      market: 'tx',
+      label: '大台',
+      pointValue: 200,
+      feePerSide: 45,
+      capital: 1000000
+    },
+    mini: {
+      market: 'mini',
+      label: '小台',
+      pointValue: 50,
+      feePerSide: 18,
+      capital: 250000
+    }
+  };
+
+  function resolveProductProfile() {
+    const urlMarket = new URL(location.href).searchParams.get('market');
+    const configured = window.FUTURES_PRODUCT_PROFILE || {};
+    const market = configured.market || window.FUTURES_MARKET || urlMarket || 'tx';
+    const base = PRODUCT_PROFILES[market] || PRODUCT_PROFILES.tx;
+    return { ...base, ...configured };
+  }
+
+  const PRODUCT_PROFILE = resolveProductProfile();
+
   const CFG = {
-    pointValue: 200,
-    feePerSide: 45,
+    pointValue: PRODUCT_PROFILE.pointValue,
+    feePerSide: PRODUCT_PROFILE.feePerSide,
     taxRate: 0.00002,
     slipPerSide: 0,
-    capital: 1000000
+    capital: PRODUCT_PROFILE.capital
   };
 
   let gParsed = null;
@@ -1177,6 +1204,21 @@
     }
   ];
 
+  function applyProductChrome() {
+    if (capitalInput) {
+      capitalInput.value = String(PRODUCT_PROFILE.capital);
+      capitalInput.step = PRODUCT_PROFILE.market === 'mini' ? '5000' : '10000';
+    }
+
+    if (PRODUCT_PROFILE.market !== 'mini') return;
+
+    document.title = document.title.replace('機構級單檔分析', '機構級小台單檔分析');
+    const h1 = $('h1');
+    if (h1 && !h1.textContent.includes('小台')) {
+      h1.textContent = h1.textContent.replace('機構級單檔分析', '機構級小台單檔分析');
+    }
+  }
+
   function localDataName(key) {
     return String(key || '').split('/').pop() || 'project-data.txt';
   }
@@ -1324,6 +1366,7 @@
     });
   }
 
+  applyProductChrome();
   populateLocalDataSelect();
 
   if (btnLoadLocalData) {

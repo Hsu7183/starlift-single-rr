@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>三劍客量化科技 1001plus+ 單檔分析</title>
+  <title>三劍客量化科技 小台1001plus+ 單檔分析</title>
 
   <style>
     body {
@@ -295,7 +295,7 @@
 <body>
   <div class="wrap">
 
-    <h1>1001plus+版本</h1>
+    <h1>小台1001plus+版本</h1>
 
     <!-- 差異檢查 -->
     <div class="card" id="diffCard">
@@ -325,7 +325,7 @@
       <div class="toolbar">
         <label>
           本金：
-          <input type="number" id="capitalInput" value="1000000" step="10000">
+          <input type="number" id="capitalInput" value="250000" step="5000">
         </label>
 
         <label>
@@ -425,6 +425,15 @@
   </div>
 
   <script src="data/local-reports.js"></script>
+  <script>
+    window.FUTURES_PRODUCT_PROFILE = {
+      market: 'mini',
+      label: '小台',
+      pointValue: 50,
+      feePerSide: 18,
+      capital: 250000
+    };
+  </script>
   <!-- 單檔分析主邏輯 -->
   <script src="single-trades.js?v=mini-futures-v1"></script>
   <!-- 1001plus+ 專屬：自動找最新 1001plus+ + 基準，合併後直接餵給 single-trades.js -->

@@ -2,7 +2,7 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="utf-8">
-  <title>三劍客量化科技機構級多檔分析</title>
+  <title>三劍客量化科技機構級小台多檔分析</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
 
   <style>
@@ -200,14 +200,14 @@
   </style>
 </head>
 <body>
-  <h1>三劍客量化科技機構級多檔分析</h1>
+  <h1>三劍客量化科技機構級小台多檔分析</h1>
 
   <!-- 工具列：本金 / 滑點 / 多檔 TXT / 計算 -->
   <div class="top-row">
     <div class="toolbar">
       <label>
         本金：
-        <input type="number" id="capitalInput" value="1000000" step="10000">
+        <input type="number" id="capitalInput" value="250000" step="5000">
       </label>
       <label>
         滑點（每邊點數）：
@@ -271,6 +271,15 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script>
+    window.FUTURES_PRODUCT_PROFILE = {
+      market: 'mini',
+      label: '小台',
+      pointValue: 50,
+      feePerSide: 18,
+      capital: 250000
+    };
+  </script>
   <script src="multi-pro.js?v=mini-futures-v1"></script>
 </body>
 </html>

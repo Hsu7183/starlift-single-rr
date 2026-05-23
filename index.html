@@ -72,7 +72,7 @@
 
     .strategy-grid{
       display:grid;
-      grid-template-columns:minmax(280px,420px);
+      grid-template-columns:repeat(2,minmax(280px,420px));
       justify-content:center;
       gap:20px;
       margin:0 0 30px;
@@ -410,18 +410,30 @@
 
       <div class="nav">
         <a class="card" href="single-trades.html">
-          <p class="card-title blue big">期貨策略研究</p>
+          <p class="card-title blue big">大台期貨策略研究</p>
           <p class="card-desc">查看單一策略的交易明細、週損益、資產曲線與核心 KPI，適合快速檢查某一策略近期表現與風險結構。</p>
         </a>
 
         <a class="card" href="multi-pro.html">
-          <p class="card-title blue big">期貨最佳化參數研究</p>
+          <p class="card-title blue big">大台期貨最佳化參數研究</p>
           <p class="card-desc">用多組參數批量比較策略結果，快速找出較穩定的參數區間，並觀察報酬、回撤與一致性變化。</p>
         </a>
 
         <a class="card" href="xq-trade-to-txt.html">
           <p class="card-title blue big">XQ交易明細轉TXT</p>
           <p class="card-desc">將 XQ 交易明細快速轉為標準指標 TXT，並支援 TXT 對 TXT 比對、缺漏筆數檢查與重新對齊分析。</p>
+        </a>
+      </div>
+
+      <div class="nav">
+        <a class="card" href="mini-single-trades.html">
+          <p class="card-title blue big">小台期貨策略研究</p>
+          <p class="card-desc">同大台單檔分析流程，改用成本 25 萬、1 點 50、手續費單邊 18，期交稅計算方式相同。</p>
+        </a>
+
+        <a class="card" href="mini-multi-pro.html">
+          <p class="card-title blue big">小台期貨最佳化參數研究</p>
+          <p class="card-desc">同大台多檔參數比較流程，改用小台合約點值、手續費與資金基準進行 KPI 計算。</p>
         </a>
       </div>
 
@@ -436,6 +448,6 @@
   </div>
 
   <script src="./data/local-reports.js"></script>
-  <script src="./index.js?v=yearly-returns-v1"></script>
+  <script src="./index.js?v=mini-futures-v1"></script>
 </body>
 </html>

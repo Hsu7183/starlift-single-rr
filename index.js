@@ -18,7 +18,22 @@
   const DEFAULT_POINT_VALUE = 200;
   const DEFAULT_FEE_PER_SIDE = 45;
   const DEFAULT_TAX_RATE = 0.00002;
-  const BASE_CAPITAL = 1000000;
+  const CARD_PROFILES = {
+    "1001pp": {
+      label: "大台",
+      pointValue: DEFAULT_POINT_VALUE,
+      feePerSide: DEFAULT_FEE_PER_SIDE,
+      taxRate: DEFAULT_TAX_RATE,
+      capital: 1000000
+    },
+    "1001pp-mini": {
+      label: "小台",
+      pointValue: 50,
+      feePerSide: 18,
+      taxRate: DEFAULT_TAX_RATE,
+      capital: 250000
+    }
+  };
 
   const $ = s => document.querySelector(s);
 
@@ -426,43 +441,47 @@
     return pref[j + 1] - pref[i];
   }
 
-  function weekReturnUser(days, pref, coverageStartDate, coverageEndDate, nWeeks) {
+  function returnFromSum(sum, profile) {
+    return sum == null ? null : sum / profile.capital;
+  }
+
+  function weekReturnUser(days, pref, coverageStartDate, coverageEndDate, nWeeks, profile) {
     const end = getAnchorWeekEnd();
     const start = new Date(mondayOf(end).getTime());
     start.setDate(start.getDate() - (nWeeks - 1) * 7);
 
     const sum = sumBetweenCovered(days, pref, start, end, coverageStartDate, coverageEndDate);
     return {
-      ret: (sum == null ? null : sum / BASE_CAPITAL),
+      ret: returnFromSum(sum, profile),
       range: `${fmtDate(start)}~${fmtDate(end)}`
     };
   }
 
-  function monthReturnUser(days, pref, coverageStartDate, coverageEndDate, nMonths) {
+  function monthReturnUser(days, pref, coverageStartDate, coverageEndDate, nMonths, profile) {
     const end = getAnchorWeekEnd();
     const base = addMonthsSameDay(end, -nMonths);
     const start = mondayOf(base);
 
     const sum = sumBetweenCovered(days, pref, start, end, coverageStartDate, coverageEndDate);
     return {
-      ret: (sum == null ? null : sum / BASE_CAPITAL),
+      ret: returnFromSum(sum, profile),
       range: `${fmtDate(start)}~${fmtDate(end)}`
     };
   }
 
-  function yearReturnUser(days, pref, coverageStartDate, coverageEndDate, nYears) {
+  function yearReturnUser(days, pref, coverageStartDate, coverageEndDate, nYears, profile) {
     const end = getAnchorWeekEnd();
     const base = addYearsSameDay(end, -nYears);
     const start = mondayOf(base);
 
     const sum = sumBetweenCovered(days, pref, start, end, coverageStartDate, coverageEndDate);
     return {
-      ret: (sum == null ? null : sum / BASE_CAPITAL),
+      ret: returnFromSum(sum, profile),
       range: `${fmtDate(start)}~${fmtDate(end)}`
     };
   }
 
-  function calendarYearReturnUser(days, pref, coverageStartDate, coverageEndDate, year) {
+  function calendarYearReturnUser(days, pref, coverageStartDate, coverageEndDate, year, profile) {
     const yearStart = new Date(year, 0, 1);
     const yearEnd = new Date(year, 11, 31);
     const start = yearStart < coverageStartDate ? coverageStartDate : yearStart;
@@ -477,7 +496,7 @@
 
     const sum = sumBetweenCovered(days, pref, start, end, coverageStartDate, coverageEndDate);
     return {
-      ret: (sum == null ? null : sum / BASE_CAPITAL),
+      ret: returnFromSum(sum, profile),
       range: `${fmtDate(start)}~${fmtDate(end)}`
     };
   }
@@ -539,6 +558,35 @@
     if (row) row.style.display = visible ? 'grid' : 'none';
   }
 
+  function ensureMiniStrategyCard() {
+    if (document.getElementById('row-wk1-1001pp-mini')) return;
+
+    const baseRow = document.getElementById('row-wk1-1001pp');
+    const baseCol = baseRow ? baseRow.closest('.strategy-col') : null;
+    if (!baseCol) return;
+
+    const miniCol = baseCol.cloneNode(true);
+    miniCol.querySelectorAll('[id]').forEach(el => {
+      el.id = el.id.replace('1001pp', '1001pp-mini');
+    });
+
+    const subcat = miniCol.querySelector('.subcat');
+    if (subcat) subcat.textContent = '1001plus+ 小台';
+
+    const desc = miniCol.querySelector('.subcat-desc');
+    if (desc) {
+      desc.textContent = '小台版本：成本 25 萬、1 點 50、手續費單邊 18，期交稅計算方式相同。';
+    }
+
+    const link = miniCol.querySelector('a.strategy-card');
+    if (link) link.href = 'mini-1001plusplus.html';
+
+    const title = miniCol.querySelector('.card-title');
+    if (title) title.textContent = '小台近-1001plus+版本';
+
+    baseCol.after(miniCol);
+  }
+
   function resetAll(key) {
     const keys = ['wk1','wk2','wk3','wk4','m2','m3','m4','m5','m6','y1','cy0','cy1','cy2','cy3','cy4','cy5'];
     keys.forEach(k => {
@@ -550,7 +598,8 @@
   }
 
   const WANT = {
-    "1001pp": /1001plus/i
+    "1001pp": /1001plus/i,
+    "1001pp-mini": /1001plus/i
   };
 
   const RANGE_RE = /\b(20\d{6})-(20\d{6})\b/;
@@ -662,6 +711,8 @@
       return;
     }
 
+    ensureMiniStrategyCard();
+
     let sb = null;
     let supabaseAttempted = false;
 
@@ -757,7 +808,7 @@
     }
 
     async function resolveMergedForKey(key) {
-      if (key === '1001pp') {
+      if (key === '1001pp' || key === '1001pp-mini') {
         const local = await loadLocalReportText();
         if (local && local.text) {
           const norm = normalizeText(local.text);
@@ -827,15 +878,15 @@
       }
     }
 
-    function dailySeriesFromMerged(mergedTxt, slipPerSide) {
+    function dailySeriesFromMerged(mergedTxt, slipPerSide, profile) {
       const parsed = window.SHARED.parseTXT(mergedTxt);
       if (!parsed || !Array.isArray(parsed.rows)) throw new Error('parseTXT 結果異常');
 
       const report = window.SHARED.buildReport(parsed.rows, {
         slipPerSide,
-        pointValue: DEFAULT_POINT_VALUE,
-        feePerSide: DEFAULT_FEE_PER_SIDE,
-        taxRate: DEFAULT_TAX_RATE
+        pointValue: profile.pointValue,
+        feePerSide: profile.feePerSide,
+        taxRate: profile.taxRate
       });
 
       if (!report || !Array.isArray(report.trades)) throw new Error('buildReport 結果異常');
@@ -853,7 +904,8 @@
     }
 
     async function fillCard(key) {
-      setCardStatus(key, `讀取中（滑點 ${slipPerSide} 點）...`, '#6b7280');
+      const profile = CARD_PROFILES[key] || CARD_PROFILES["1001pp"];
+      setCardStatus(key, `讀取中（${profile.label}，滑點 ${slipPerSide} 點）...`, '#6b7280');
 
       try {
         const merged = await resolveMergedForKey(key);
@@ -873,7 +925,7 @@
 
         setPeriodText(key, coverageStart8, fmtYmd8(coverageEndDate));
 
-        const dayMap = dailySeriesFromMerged(merged.canon, slipPerSide);
+        const dayMap = dailySeriesFromMerged(merged.canon, slipPerSide, profile);
         const covered = makeCoveredSeries(dayMap, coverageStartDate, coverageEndDate);
         const pref = buildPrefix(covered.vals);
 
@@ -886,7 +938,7 @@
         const calendarYearDefs = Array.from({ length: 6 }, (_, i) => [`cy${i}`, endYear - i]);
 
         weekDefs.forEach(([k,n]) => {
-          const r = weekReturnUser(covered.days, pref, coverageStartDate, coverageEndDate, n);
+          const r = weekReturnUser(covered.days, pref, coverageStartDate, coverageEndDate, n, profile);
           if (r.ret == null) {
             setRowVisible(key, k, false);
             return;
@@ -897,7 +949,7 @@
         });
 
         monthDefs.forEach(([k,n]) => {
-          const r = monthReturnUser(covered.days, pref, coverageStartDate, coverageEndDate, n);
+          const r = monthReturnUser(covered.days, pref, coverageStartDate, coverageEndDate, n, profile);
           if (r.ret == null) {
             setRowVisible(key, k, false);
             return;
@@ -908,7 +960,7 @@
         });
 
         yearDefs.forEach(([k,n]) => {
-          const r = yearReturnUser(covered.days, pref, coverageStartDate, coverageEndDate, n);
+          const r = yearReturnUser(covered.days, pref, coverageStartDate, coverageEndDate, n, profile);
           if (r.ret == null) {
             setRowVisible(key, k, false);
             return;
@@ -921,7 +973,7 @@
 
         calendarYearDefs.forEach(([k, year]) => {
           setText(`${k}-label-${key}`, `${year}年報酬率`);
-          const r = calendarYearReturnUser(covered.days, pref, coverageStartDate, coverageEndDate, year);
+          const r = calendarYearReturnUser(covered.days, pref, coverageStartDate, coverageEndDate, year, profile);
           if (r.ret == null) {
             setRowVisible(key, k, false);
             return;
@@ -932,7 +984,7 @@
         });
 
         const sourceText = merged.sourceName ? `，資料：${merged.sourceName}` : '';
-        setCardStatus(key, `已完成（滑點 ${slipPerSide} 點）${sourceText}`, '#15803d');
+        setCardStatus(key, `已完成（${profile.label}，滑點 ${slipPerSide} 點）${sourceText}`, '#15803d');
       } catch (e) {
         console.error('fillCard error', key, e);
         resetAll(key);
@@ -941,7 +993,7 @@
       }
     }
 
-    for (const key of ['1001pp']) {
+    for (const key of Object.keys(CARD_PROFILES)) {
       await fillCard(key);
     }
   }
