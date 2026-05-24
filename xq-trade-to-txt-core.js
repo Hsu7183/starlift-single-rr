@@ -519,17 +519,21 @@
     };
   }
 
-  function compareRowsAtOffset(leftRows, rightRows, leftOffset) {
+  function compareRowsAtOffset(leftRows, rightRows, leftOffset, rightOffset) {
+    leftOffset = Math.max(0, Number(leftOffset) || 0);
+    rightOffset = Math.max(0, Number(rightOffset) || 0);
     const rows = [];
     const leftAvailable = Math.max(0, leftRows.length - leftOffset);
-    const len = Math.max(leftAvailable, rightRows.length);
+    const rightAvailable = Math.max(0, rightRows.length - rightOffset);
+    const len = Math.max(leftAvailable, rightAvailable);
     let openSide = '';
 
     for (let i = 0; i < len; i++) {
       const li = leftOffset + i;
+      const ri = rightOffset + i;
       const left = li < leftRows.length ? leftRows[li] : null;
-      const right = i < rightRows.length ? rightRows[i] : null;
-      const row = makeCompareRow(left, right, left ? li + 1 : null, right ? i + 1 : null, openSide);
+      const right = ri < rightRows.length ? rightRows[ri] : null;
+      const row = makeCompareRow(left, right, left ? li + 1 : null, right ? ri + 1 : null, openSide);
       rows.push(row);
       const stateAction = left ? left.act : (right ? right.act : '');
       openSide = updateOpenSide(openSide, stateAction);
@@ -547,6 +551,95 @@
       index,
       oneBased: index >= 0 ? index + 1 : 0,
       row: index >= 0 ? leftRows[index] : null
+    };
+  }
+
+  function findFirstLeftInRight(leftRows, rightRows) {
+    if (!leftRows.length) return { found: false, index: -1, oneBased: 0, row: null };
+    const firstKey = eventKey(leftRows[0], 'timeAction');
+    const index = rightRows.findIndex(r => eventKey(r, 'timeAction') === firstKey);
+    return {
+      found: index >= 0,
+      index,
+      oneBased: index >= 0 ? index + 1 : 0,
+      row: index >= 0 ? rightRows[index] : null
+    };
+  }
+
+  function summarizeAlignment(rows) {
+    const paired = rows.filter(r => r.left && r.right);
+    return {
+      pairedCount: paired.length,
+      logicCount: paired.filter(r => r.logicConsistent).length,
+      exactCount: paired.filter(r => r.exact).length,
+      realErrorCount: paired.filter(r => r.status === 'mismatch').length,
+      missingCount: rows.filter(r => r.status === 'left-extra' || r.status === 'right-extra').length
+    };
+  }
+
+  function chooseAlignment(leftRows, rightRows, autoOffset) {
+    const firstRight = findFirstRightInLeft(leftRows, rightRows);
+    const firstLeft = findFirstLeftInRight(leftRows, rightRows);
+    const candidates = [{ leftOffset: 0, rightOffset: 0, type: 'direct' }];
+
+    if (autoOffset && firstRight.found) {
+      candidates.push({ leftOffset: firstRight.index, rightOffset: 0, type: 'right-first-in-left' });
+    }
+    if (autoOffset && firstLeft.found) {
+      candidates.push({ leftOffset: 0, rightOffset: firstLeft.index, type: 'left-first-in-right' });
+    }
+
+    let best = null;
+    for (const c of candidates) {
+      const rows = compareRowsAtOffset(leftRows, rightRows, c.leftOffset, c.rightOffset);
+      const score = summarizeAlignment(rows);
+      const candidate = Object.assign({}, c, score, { rows });
+
+      if (!best) {
+        best = candidate;
+        continue;
+      }
+
+      const candidateRank = [
+        candidate.logicCount,
+        -candidate.realErrorCount,
+        -candidate.missingCount,
+        candidate.exactCount,
+        -candidate.leftOffset,
+        -candidate.rightOffset
+      ];
+      const bestRank = [
+        best.logicCount,
+        -best.realErrorCount,
+        -best.missingCount,
+        best.exactCount,
+        -best.leftOffset,
+        -best.rightOffset
+      ];
+
+      for (let i = 0; i < candidateRank.length; i++) {
+        if (candidateRank[i] > bestRank[i]) {
+          best = candidate;
+          break;
+        }
+        if (candidateRank[i] < bestRank[i]) break;
+      }
+    }
+
+    return {
+      firstRight,
+      firstLeft,
+      best: best || {
+        leftOffset: 0,
+        rightOffset: 0,
+        type: 'direct',
+        rows: compareRowsAtOffset(leftRows, rightRows, 0, 0),
+        pairedCount: 0,
+        logicCount: 0,
+        exactCount: 0,
+        realErrorCount: 0,
+        missingCount: 0
+      }
     };
   }
 
@@ -628,7 +721,7 @@
     }, options || {});
     const leftParsed = parseIndicatorTxt(baseText, { ignoreHeader: opts.ignoreHeader });
     const rightParsed = parseIndicatorTxt(targetText, { ignoreHeader: opts.ignoreHeader });
-    return analyzeRows(leftParsed.rows, rightParsed.rows, opts, leftParsed, rightParsed);
+    return analyzeRowsV2(leftParsed.rows, rightParsed.rows, opts, leftParsed, rightParsed);
   }
 
   function analyzeRows(leftRows, rightRows, options, leftParsed, rightParsed) {
@@ -716,6 +809,101 @@
     };
   }
 
+  function analyzeRowsV2(leftRows, rightRows, options, leftParsed, rightParsed) {
+    const opts = Object.assign({
+      mode: 'timeAction',
+      autoOffset: true,
+      slippageMode: true,
+      mode1155201: false
+    }, options || {});
+
+    const mode = opts.mode1155201 ? 'timeAction' : (opts.mode === 'strict' ? 'strict' : 'timeAction');
+    const logicSetDiff = buildSetDiff(leftRows, rightRows, 'timeAction');
+    const exactSetDiff = buildSetDiff(leftRows, rightRows, 'strict');
+
+    const directRows = compareRowsAtOffset(leftRows, rightRows, 0, 0);
+    const pairedDirect = directRows.filter(r => r.left && r.right);
+    const directExactCount = pairedDirect.filter(r => r.exact).length;
+    const directLogicCount = pairedDirect.filter(r => r.logicConsistent).length;
+    const directMisalignedCount = pairedDirect.filter(r => !r.logicConsistent).length;
+
+    const alignment = chooseAlignment(leftRows, rightRows, opts.autoOffset);
+    const firstRight = alignment.firstRight;
+    const firstLeft = alignment.firstLeft;
+    const leftOffset = alignment.best.leftOffset;
+    const rightOffset = alignment.best.rightOffset;
+    const alignedRows = alignment.best.rows;
+    const alignedPaired = alignedRows.filter(r => r.left && r.right);
+    const strategyLogicConsistentCount = alignedPaired.filter(r => r.logicConsistent).length;
+    const exactAlignedCount = alignedPaired.filter(r => r.exact).length;
+    const slippageDiffCount = alignedPaired.filter(r => r.status === 'slippage').length;
+    const realErrorCount = alignedPaired.filter(r => r.status === 'mismatch').length;
+    const missingInAlignedCount = alignedRows.filter(r => r.status === 'left-extra' || r.status === 'right-extra').length;
+    const missingEventCount = logicSetDiff.leftOnly.length + logicSetDiff.rightOnly.length;
+    const missingPrefix = leftOffset;
+    const extraTargetPrefix = rightOffset;
+    const slippageStats = computeSlippageStats(alignedRows);
+
+    let inference = '找不到可對齊的起點，請檢查兩邊 TXT 的期間是否重疊。';
+    if (!rightRows.length) {
+      inference = '右邊測試TXT沒有可比對事件。';
+    } else if (leftOffset > 0 && realErrorCount === 0 && missingInAlignedCount === 0) {
+      inference = `測試TXT疑似缺少基準TXT前 ${missingPrefix} 筆，後續可對齊。`;
+    } else if (rightOffset > 0 && realErrorCount === 0 && missingInAlignedCount === 0) {
+      inference = `測試TXT起始時間早於基準TXT，右邊前 ${extraTargetPrefix} 筆不在基準範圍，後續可對齊。`;
+    } else if (realErrorCount === 0 && missingInAlignedCount === 0 && slippageDiffCount > 0) {
+      inference = '策略邏輯一致，僅有滑價差異。';
+    } else if (realErrorCount === 0 && missingInAlignedCount === 0) {
+      inference = '左右事件可對齊，策略邏輯一致。';
+    } else if (firstRight.found || firstLeft.found) {
+      inference = `已找到對齊起點，但後續仍有 ${realErrorCount} 筆真正錯誤、${missingInAlignedCount} 筆缺少事件。`;
+    }
+
+    return {
+      mode,
+      mode1155201: !!opts.mode1155201,
+      slippageMode: !!opts.slippageMode,
+      leftParsed: leftParsed || null,
+      rightParsed: rightParsed || null,
+      leftRows,
+      rightRows,
+      leftCount: leftRows.length,
+      rightCount: rightRows.length,
+      setDiff: logicSetDiff,
+      exactSetDiff,
+      sameEventCount: logicSetDiff.both.length,
+      exactEventCount: exactSetDiff.both.length,
+      leftOnlyCount: logicSetDiff.leftOnly.length,
+      rightOnlyCount: logicSetDiff.rightOnly.length,
+      directRows,
+      directExactCount,
+      directLogicCount,
+      directMisalignedCount,
+      directExtraCount: Math.abs(leftRows.length - rightRows.length),
+      firstRight,
+      firstLeft,
+      alignmentType: alignment.best.type,
+      autoOffsetUsed: !!opts.autoOffset && (leftOffset > 0 || rightOffset > 0),
+      leftOffset,
+      rightOffset,
+      missingPrefix,
+      extraTargetPrefix,
+      alignedRows,
+      strategyLogicConsistentCount,
+      exactAlignedCount,
+      slippageDiffCount,
+      realErrorCount,
+      missingInAlignedCount,
+      missingEventCount,
+      slippageStats,
+      inference,
+      orderExact:
+        leftRows.length === rightRows.length &&
+        directRows.length === leftRows.length &&
+        directRows.every(r => r.exact)
+    };
+  }
+
   return {
     ACTIONS,
     normalizeLineBreaks,
@@ -733,7 +921,7 @@
     buildSetDiff,
     compareRowsAtOffset,
     findFirstRightInLeft,
-    analyzeRows,
+    analyzeRows: analyzeRowsV2,
     compareTexts,
     statusText,
     sameStrict,

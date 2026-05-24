@@ -47,6 +47,33 @@ function toText(rows) {
   assert.match(result.inference, /缺少基準TXT前 132 筆/);
 }
 
+{
+  const left = makeRows(618);
+  const prefix = makeRows(242).map((r, i) => ({
+    ts: tsAt(i - 1000),
+    px: String(18000 + i),
+    act: r.act
+  }));
+  const right = prefix.concat(left);
+  const result = core.compareTexts(toText(left), toText(right), {
+    mode: 'timeAction',
+    ignoreHeader: true,
+    autoOffset: true
+  });
+
+  assert.strictEqual(result.leftCount, 618);
+  assert.strictEqual(result.rightCount, 860);
+  assert.strictEqual(result.sameEventCount, 618);
+  assert.strictEqual(result.rightOnlyCount, 242);
+  assert.strictEqual(result.firstRight.found, false);
+  assert.strictEqual(result.firstLeft.found, true);
+  assert.strictEqual(result.firstLeft.oneBased, 243);
+  assert.strictEqual(result.rightOffset, 242);
+  assert.strictEqual(result.strategyLogicConsistentCount, 618);
+  assert.strictEqual(result.realErrorCount, 0);
+  assert.strictEqual(result.alignmentType, 'left-first-in-right');
+}
+
 // Case A: time/action equal, price different -> slippage, not real error.
 {
   const left = '20240605102100 21484 新買';

@@ -257,6 +257,17 @@
     };
   }
 
+  function alignmentOffsetText(result) {
+    if (!result.autoOffsetUsed) return '未啟用，或找不到比直接逐筆更好的對齊起點';
+    if (result.leftOffset > 0) {
+      return `已啟用，逐筆表從左邊第 ${result.leftOffset + 1} 筆 vs 右邊第 1 筆開始`;
+    }
+    if (result.rightOffset > 0) {
+      return `已啟用，逐筆表從左邊第 1 筆 vs 右邊第 ${result.rightOffset + 1} 筆開始`;
+    }
+    return '已啟用，左右從第一筆開始';
+  }
+
   function renderSummary(result) {
     const modeLabel = result.mode1155201
       ? '11552-01 模式（時間 + 動作一致即策略邏輯一致）'
@@ -264,9 +275,10 @@
     const firstText = result.firstRight.found
       ? `是，在左邊第 ${result.firstRight.oneBased} 筆`
       : '否';
-    const offsetText = result.autoOffsetUsed
-      ? `已啟用，逐筆表從左邊第 ${result.leftOffset + 1} 筆 vs 右邊第 1 筆開始`
-      : '未啟用或找不到可對齊起點';
+    const offsetText = alignmentOffsetText(result);
+    const leftInRightText = result.firstLeft && result.firstLeft.found
+      ? `是，在右邊第 ${result.firstLeft.oneBased} 筆`
+      : '否';
     const s = result.slippageStats;
 
     els.summaryBox.textContent = [
@@ -298,8 +310,10 @@
       `右邊第一筆是否存在於左邊：${firstText}`,
       result.firstRight.found ? `右邊第一筆：${rowLine(result.rightRows[0])}` : '',
       result.firstRight.found ? `左邊對應筆：${rowLine(result.firstRight.row)}` : '',
+      `左邊第一筆是否存在於右邊：${leftInRightText}`,
       `offset 對齊：${offsetText}`,
       result.firstRight.found && result.missingPrefix > 0 ? `右邊疑似缺少左邊前 ${result.missingPrefix} 筆` : '',
+      result.firstLeft && result.firstLeft.found && result.extraTargetPrefix > 0 ? `測試TXT起始時間早於基準TXT，右邊前 ${result.extraTargetPrefix} 筆不在基準範圍` : '',
       '',
       '【滑價統計】',
       `總可比較筆數：${s.totalComparable}`,
