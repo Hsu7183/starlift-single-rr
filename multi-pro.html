@@ -149,11 +149,11 @@
     }
     td:nth-child(2) {
       text-align: left;
-      max-width: 420px;
+      max-width: 260px;
     }
     td.param-cell {
-      min-width: 240px;
-      max-width: 420px;
+      min-width: 150px;
+      max-width: 260px;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -179,6 +179,43 @@
     .param-mode-sep {
       color: #aaa;
       padding: 0 6px;
+    }
+    .kpi-filter-row th {
+      background: #fafafa;
+      padding: 3px 4px;
+      border-bottom: 1px solid #e6e6e6;
+    }
+    .kpi-filter-cell {
+      min-width: 70px;
+    }
+    .kpi-filter-pair {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 2px;
+    }
+    .kpi-filter {
+      width: 100%;
+      box-sizing: border-box;
+      font-size: 10px;
+      padding: 2px 3px;
+      border: 1px solid #d0d7de;
+      border-radius: 3px;
+      background: #fff;
+      text-align: right;
+    }
+    .filter-clear {
+      font-size: 10px;
+      padding: 2px 6px;
+      border: 1px solid #d0d7de;
+      border-radius: 3px;
+      background: #fff;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .empty-row {
+      text-align: center;
+      color: #777;
+      padding: 16px;
     }
     tbody tr:nth-child(even) {
       background: #fcfcfc;
@@ -268,8 +305,7 @@
       <thead>
         <tr>
           <th class="sortable" data-key="dateTag">製作時間</th>
-          <th>公式做多</th>
-          <th>公式做空</th>
+          <th>公式</th>
           <th class="sortable" data-key="nTrades">筆數</th>
           <th class="sortable" data-key="costRatio">成本比</th>
           <th class="sortable" data-key="riskOfRuin">破產風險</th>
@@ -295,10 +331,10 @@
   </div>
 
   <div class="hint">
-    提示：1）製作時間只保留「日_時間」，例如 08_065140。2）公式做多/做空欄顯示 UseM 核心條件。3）圖表顯示分數最高那一檔的資產曲線。
+    提示：1）製作時間只保留「日_時間」，例如 08_065140。2）公式欄顯示 UseM 多空核心條件。3）KPI 篩選左框為最低、右框為最高。4）圖表顯示目前篩選後排序第一檔的資產曲線。
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="multi-pro.js?v=multi-pro-kpi-order-v1"></script>
+  <script src="multi-pro.js?v=multi-pro-kpi-filter-v1"></script>
 </body>
 </html>

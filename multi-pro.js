@@ -79,6 +79,16 @@
   let gResults = [];
   let gSort = { key: 'score', dir: 'desc' };
   let gChart = null;
+  let gFilters = {};
+
+  const KPI_FILTER_KEYS = [
+    'nTrades', 'costRatio', 'riskOfRuin', 'pf', 'winRate', 'avgTrade',
+    'maxDdPct', 'worstDay', 'worstWeek', 'ulcer', 'totalReturn', 'cagr',
+    'sharpe', 'sortino', 'calmar', 'score'
+  ];
+  const PERCENT_FILTER_KEYS = new Set([
+    'costRatio', 'riskOfRuin', 'winRate', 'maxDdPct', 'totalReturn', 'cagr'
+  ]);
 
   // ===== 小工具 =====
   const fmtInt = (n) => {
@@ -209,7 +219,7 @@
     };
   }
 
-  function renderFormulaCell(td, summary, side) {
+  function renderParamSummaryCell(td, summary) {
     td.classList.add('param-cell');
     td.title = summary.raw || '';
     const wrap = document.createElement('div');
@@ -223,10 +233,22 @@
         wrap.appendChild(modeSep);
       }
 
-      const span = document.createElement('span');
-      span.className = side === 'long' ? 'param-long' : 'param-short';
-      span.textContent = side === 'long' ? formula.long : (formula.short || '—');
-      wrap.appendChild(span);
+      const longSpan = document.createElement('span');
+      longSpan.className = 'param-long';
+      longSpan.textContent = formula.long;
+      wrap.appendChild(longSpan);
+
+      if (formula.short) {
+        const sep = document.createElement('span');
+        sep.className = 'param-sep';
+        sep.textContent = ' / ';
+        wrap.appendChild(sep);
+
+        const shortSpan = document.createElement('span');
+        shortSpan.className = 'param-short';
+        shortSpan.textContent = formula.short;
+        wrap.appendChild(shortSpan);
+      }
     });
 
     td.appendChild(wrap);
@@ -801,6 +823,77 @@
     return 'score-badge score-improve';
   }
 
+  function metricValueForKey(row, key) {
+    const k = row.kpi || {};
+    switch (key) {
+      case 'score':       return row.score || 0;
+      case 'cagr':        return k.cagr;
+      case 'totalReturn': return k.totalReturnPct;
+      case 'maxDdPct':    return k.maxDdPct;
+      case 'pf':          return k.pf;
+      case 'winRate':     return k.winRate;
+      case 'sharpe':      return k.sharpeTrade;
+      case 'sortino':     return k.sortinoTrade;
+      case 'calmar':      return k.calmar;
+      case 'riskOfRuin':  return k.riskOfRuin;
+      case 'costRatio':   return k.costRatio;
+      case 'nTrades':     return k.nTrades;
+      case 'avgTrade':    return k.avg;
+      case 'worstDay':    return k.worstDayPnl;
+      case 'worstWeek':   return k.worstWeekPnl;
+      case 'ulcer':       return k.ulcerIndex;
+      default:            return null;
+    }
+  }
+
+  function parseFilterNumber(key, raw) {
+    const text = String(raw == null ? '' : raw).trim();
+    if (!text) return null;
+    const value = Number(text.replace(/[%,$,]/g, ''));
+    if (!isFinite(value)) return null;
+    return PERCENT_FILTER_KEYS.has(key) ? value / 100 : value;
+  }
+
+  function refreshFiltersFromInputs() {
+    const next = {};
+    table.querySelectorAll('.kpi-filter').forEach(input => {
+      const key = input.dataset.key;
+      const bound = input.dataset.bound;
+      const value = parseFilterNumber(key, input.value);
+      if (!key || !bound || value == null) return;
+      if (!next[key]) next[key] = {};
+      next[key][bound] = value;
+    });
+    gFilters = next;
+  }
+
+  function hasActiveFilters() {
+    return Object.keys(gFilters).length > 0;
+  }
+
+  function passesFilters(row) {
+    for (const [key, rule] of Object.entries(gFilters)) {
+      const value = metricValueForKey(row, key);
+      if (value == null || !isFinite(value)) return false;
+      if (rule.min != null && value < rule.min) return false;
+      if (rule.max != null && value > rule.max) return false;
+    }
+    return true;
+  }
+
+  function filteredResults() {
+    return gResults.filter(passesFilters);
+  }
+
+  function updateFilterStatus(visibleCount) {
+    if (!gResults.length) return;
+    if (hasActiveFilters()) {
+      statusLine.textContent = `完成：顯示 ${visibleCount} / ${gResults.length} 檔（已套用篩選）。`;
+    } else {
+      statusLine.textContent = `完成：共計算 ${gResults.length} 檔。`;
+    }
+  }
+
   // ===== 主流程 =====
   async function runAnalysis() {
     const files = Array.prototype.slice.call(fileInput.files || []);
@@ -883,7 +976,7 @@
     gSort = { key: 'score', dir: 'desc' };
     sortAndRender();
 
-    statusLine.textContent = `完成：共計算 ${gResults.length} 檔。`;
+    updateFilterStatus(filteredResults().length);
     runBtn.disabled = false;
     fileInput.disabled = false;
   }
@@ -891,8 +984,21 @@
   // ===== 表格 =====
   function renderTable() {
     tbody.innerHTML = '';
+    const rows = filteredResults();
 
-    gResults.forEach(r => {
+    if (!rows.length && gResults.length) {
+      const tr = document.createElement('tr');
+      const td = document.createElement('td');
+      td.colSpan = table.querySelectorAll('thead tr:first-child th').length;
+      td.className = 'empty-row';
+      td.textContent = '沒有符合篩選條件的結果';
+      tr.appendChild(td);
+      tbody.appendChild(tr);
+      updateFilterStatus(0);
+      return;
+    }
+
+    rows.forEach(r => {
       const k = r.kpi || {};
       const tr = document.createElement('tr');
 
@@ -900,14 +1006,9 @@
       tdDate.textContent = r.dateTag;
       tr.appendChild(tdDate);
 
-      const summary = r.paramSummary || { raw: r.params };
-      const tdLongFormula = document.createElement('td');
-      renderFormulaCell(tdLongFormula, summary, 'long');
-      tr.appendChild(tdLongFormula);
-
-      const tdShortFormula = document.createElement('td');
-      renderFormulaCell(tdShortFormula, summary, 'short');
-      tr.appendChild(tdShortFormula);
+      const tdParam = document.createElement('td');
+      renderParamSummaryCell(tdParam, r.paramSummary || { raw: r.params });
+      tr.appendChild(tdParam);
 
       function kpiCell(value, fmt, ratingKey) {
         const td = document.createElement('td');
@@ -952,6 +1053,8 @@
       tbody.appendChild(tr);
     });
 
+    updateFilterStatus(rows.length);
+
     const ths = table.querySelectorAll('th.sortable');
     ths.forEach(th => {
       th.removeAttribute('data-sort-dir');
@@ -971,12 +1074,13 @@
       gChart = null;
     }
 
-    if (!gResults.length) {
+    const rows = filteredResults();
+    if (!rows.length) {
       chartTitleEl.textContent = '頂檔資產曲線（含滑價累積損益）';
       return;
     }
 
-    const top = gResults[0];
+    const top = rows[0];
     const eq = top.equitySeries || { x: [], y: [] };
     const labels = eq.x;
     const data   = eq.y;
@@ -1036,33 +1140,8 @@
         return 0;
       }
 
-      if (key === 'score') {
-        va = a.score || 0;
-        vb = b.score || 0;
-      } else {
-        const kA = a.kpi || {};
-        const kB = b.kpi || {};
-        switch (key) {
-          case 'cagr':           va = kA.cagr;           vb = kB.cagr; break;
-          case 'totalReturn':    va = kA.totalReturnPct; vb = kB.totalReturnPct; break;
-          case 'maxDdPct':       va = kA.maxDdPct;       vb = kB.maxDdPct; break;
-          case 'pf':             va = kA.pf;             vb = kB.pf; break;
-          case 'winRate':        va = kA.winRate;        vb = kB.winRate; break;
-          case 'sharpe':         va = kA.sharpeTrade;    vb = kB.sharpeTrade; break;
-          case 'sortino':        va = kA.sortinoTrade;   vb = kB.sortinoTrade; break;
-          case 'calmar':         va = kA.calmar;         vb = kB.calmar; break;
-          case 'riskOfRuin':     va = kA.riskOfRuin;     vb = kB.riskOfRuin; break;
-          case 'costRatio':      va = kA.costRatio;      vb = kB.costRatio; break;
-          case 'nTrades':        va = kA.nTrades;        vb = kB.nTrades; break;
-          case 'avgTrade':       va = kA.avg;            vb = kB.avg; break;
-          case 'worstDay':       va = kA.worstDayPnl;    vb = kB.worstDayPnl; break;
-          case 'worstWeek':      va = kA.worstWeekPnl;   vb = kB.worstWeekPnl; break;
-          case 'ulcer':          va = kA.ulcerIndex;     vb = kB.ulcerIndex; break;
-          case 'recoveryFactor': va = kA.recoveryFactor; vb = kB.recoveryFactor; break;
-          case 'turnover':       va = kA.turnover;       vb = kB.turnover; break;
-          default: va = 0; vb = 0;
-        }
-      }
+      va = metricValueForKey(a, key);
+      vb = metricValueForKey(b, key);
 
       if (!isFinite(va) && !isFinite(vb)) return 0;
       if (!isFinite(va)) return 1;
@@ -1074,6 +1153,62 @@
 
     renderTable();
     renderChart();
+  }
+
+  function initFilterRow() {
+    const headRow = table.querySelector('thead tr');
+    if (!headRow || table.querySelector('.kpi-filter-row')) return;
+
+    const row = document.createElement('tr');
+    row.className = 'kpi-filter-row';
+
+    Array.from(headRow.cells).forEach((th, idx) => {
+      const cell = document.createElement('th');
+      const key = th.dataset.key;
+
+      if (KPI_FILTER_KEYS.includes(key)) {
+        cell.className = 'kpi-filter-cell';
+
+        const wrap = document.createElement('div');
+        wrap.className = 'kpi-filter-pair';
+
+        ['min', 'max'].forEach(bound => {
+          const input = document.createElement('input');
+          input.className = 'kpi-filter';
+          input.type = 'number';
+          input.inputMode = 'decimal';
+          input.dataset.key = key;
+          input.dataset.bound = bound;
+          input.placeholder = bound === 'min' ? '低' : '高';
+          input.title = `${th.textContent}${bound === 'min' ? '最低' : '最高'}`;
+          wrap.appendChild(input);
+        });
+
+        cell.appendChild(wrap);
+      } else if (idx === 0) {
+        const clearBtn = document.createElement('button');
+        clearBtn.type = 'button';
+        clearBtn.className = 'filter-clear';
+        clearBtn.textContent = '清除';
+        clearBtn.title = '清除所有 KPI 篩選';
+        clearBtn.addEventListener('click', () => {
+          table.querySelectorAll('.kpi-filter').forEach(input => { input.value = ''; });
+          refreshFiltersFromInputs();
+          sortAndRender();
+        });
+        cell.appendChild(clearBtn);
+      }
+
+      row.appendChild(cell);
+    });
+
+    row.addEventListener('input', event => {
+      if (!event.target.classList.contains('kpi-filter')) return;
+      refreshFiltersFromInputs();
+      sortAndRender();
+    });
+
+    headRow.after(row);
   }
 
   // ===== 事件 =====
@@ -1098,6 +1233,8 @@
   runBtn.addEventListener('click', () => {
     runAnalysis();
   });
+
+  initFilterRow();
 
   const ths = table.querySelectorAll('th.sortable');
   ths.forEach(th => {
