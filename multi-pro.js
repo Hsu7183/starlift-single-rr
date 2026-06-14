@@ -112,28 +112,28 @@
   }
 
   const MODE_FORMULAS = {
-    UseM00: { title: 'M00 基準', formula: '第0層 C1 ROD 基準' },
-    UseM01: { title: 'M01 同向破高低', formula: '前K同向，O 突破前高/前低' },
-    UseM02: { title: 'M02 同向 M1', formula: '前K同向，O 站上/跌破 M1' },
-    UseM03: { title: 'M03 同向未破', formula: '前K同向，O 未突破前高/前低' },
-    UseM04: { title: 'M04 同向未 M1', formula: '前K同向，O 未站上/跌破 M1' },
-    UseM05: { title: 'M05 同向區間', formula: '前K同向，O 在 M1 到 H1/L1 區間' },
-    UseM06: { title: 'M06 反向破高低', formula: '前K反向，O 突破前高/前低' },
-    UseM07: { title: 'M07 反向 M1', formula: '前K反向，O 站上/跌破 M1' },
-    UseM08: { title: 'M08 反向 BM1', formula: '前K反向，O 站上/跌破 BM1' },
-    UseM09: { title: 'M09 反向 O1', formula: '前K反向，O 站上/跌破 O1' },
-    UseM10: { title: 'M10 反向未破', formula: '前K反向，O 未突破前高/前低' },
-    UseM11: { title: 'M11 反向未 M1', formula: '前K反向，O 未站上/跌破 M1' },
-    UseM12: { title: 'M12 反向未 BM1', formula: '前K反向，O 未站上/跌破 BM1' },
-    UseM13: { title: 'M13 反向未 O1', formula: '前K反向，O 未站回/跌回 O1' },
-    UseM14: { title: 'M14 反向 M1-H1/L1', formula: '前K反向，O 在 M1 到 H1/L1 區間' },
-    UseM15: { title: 'M15 反向 M1-BM1', formula: '前K反向，O 在 M1 到 BM1 區間' },
-    UseM16: { title: 'M16 反向 M1-O1', formula: '前K反向，O 在 M1 到 O1 區間' },
-    UseM17: { title: 'M17 反向 BM1-H1/L1', formula: '前K反向，O 在 BM1 到 H1/L1 區間' },
-    UseM18: { title: 'M18 反向 BM1-M1', formula: '前K反向，O 在 BM1 到 M1 區間' },
-    UseM19: { title: 'M19 反向 BM1-O1', formula: '前K反向，O 在 BM1 到 O1 區間' },
-    UseM20: { title: 'M20 反向 O1-H1/L1', formula: '前K反向，O 在 O1 到 H1/L1 區間' },
-    UseM21: { title: 'M21 反向 O1-M1', formula: '前K反向，O 在 O1 到 M1 區間' }
+    UseM00: { title: '基準', long: '直接通過', short: '直接通過' },
+    UseM01: { title: '同向破高低', long: 'O > H[1] 且 C[1] > O[1]', short: 'O < L[1] 且 C[1] < O[1]' },
+    UseM02: { title: '同向 M1', long: 'O > M1 且 C[1] > O[1]', short: 'O < M1 且 C[1] < O[1]' },
+    UseM03: { title: '同向未破', long: 'O < H[1] 且 C[1] > O[1]', short: 'O > L[1] 且 C[1] < O[1]' },
+    UseM04: { title: '同向未 M1', long: 'O < M1 且 C[1] > O[1]', short: 'O > M1 且 C[1] < O[1]' },
+    UseM05: { title: '同向區間', long: 'M1 < O < H[1] 且 C[1] > O[1]', short: 'L[1] < O < M1 且 C[1] < O[1]' },
+    UseM06: { title: '反向破高低', long: 'O > H[1] 且 C[1] < O[1]', short: 'O < L[1] 且 C[1] > O[1]' },
+    UseM07: { title: '反向 M1', long: 'O > M1 且 C[1] < O[1]', short: 'O < M1 且 C[1] > O[1]' },
+    UseM08: { title: '反向 BM1', long: 'O > BM1 且 C[1] < O[1]', short: 'O < BM1 且 C[1] > O[1]' },
+    UseM09: { title: '反向 O[1]', long: 'O > O[1] 且 C[1] < O[1]', short: 'O < O[1] 且 C[1] > O[1]' },
+    UseM10: { title: '反向未破', long: 'O < H[1] 且 C[1] < O[1]', short: 'O > L[1] 且 C[1] > O[1]' },
+    UseM11: { title: '反向未 M1', long: 'O < M1 且 C[1] < O[1]', short: 'O > M1 且 C[1] > O[1]' },
+    UseM12: { title: '反向未 BM1', long: 'O < BM1 且 C[1] < O[1]', short: 'O > BM1 且 C[1] > O[1]' },
+    UseM13: { title: '反向未 O[1]', long: 'O < O[1] 且 C[1] < O[1]', short: 'O > O[1] 且 C[1] > O[1]' },
+    UseM14: { title: '反向 M1-H[1]', long: 'M1 < O < H[1] 且 C[1] < O[1]', short: 'L[1] < O < M1 且 C[1] > O[1]' },
+    UseM15: { title: '反向 M1-BM1', long: 'M1 < O < BM1 且 C[1] < O[1]', short: 'BM1 < O < M1 且 C[1] > O[1]' },
+    UseM16: { title: '反向 M1-O[1]', long: 'M1 < O < O[1] 且 C[1] < O[1]', short: 'O[1] < O < M1 且 C[1] > O[1]' },
+    UseM17: { title: '反向 BM1-H[1]', long: 'BM1 < O < H[1] 且 C[1] < O[1]', short: 'L[1] < O < BM1 且 C[1] > O[1]' },
+    UseM18: { title: '反向 BM1-M1', long: 'BM1 < O < M1 且 C[1] < O[1]', short: 'M1 < O < BM1 且 C[1] > O[1]' },
+    UseM19: { title: '反向 BM1-O[1]', long: 'BM1 < O < O[1] 且 C[1] < O[1]', short: 'O[1] < O < BM1 且 C[1] > O[1]' },
+    UseM20: { title: '反向 O[1]-H[1]', long: 'O[1] < O < H[1] 且 C[1] < O[1]', short: 'L[1] < O < O[1] 且 C[1] > O[1]' },
+    UseM21: { title: '反向 O[1]-M1', long: 'O[1] < O < M1 且 C[1] < O[1]', short: 'M1 < O < O[1] 且 C[1] > O[1]' }
   };
 
   function parseHeaderParams(header) {
@@ -172,44 +172,16 @@
     const headerMap = parseHeaderParams(header);
     const rawValues = headerToValues(header);
     const activeModes = activeModesFromHeader(headerMap, fileName);
-    const modeTexts = activeModes.map(mode => {
+    const formulaLines = activeModes.map(mode => {
       const info = MODE_FORMULAS[mode];
-      return info ? `${mode}：${info.title.replace(/^M\d{2}\s*/, '')}` : mode;
+      if (!info) return mode;
+      return `${mode} ${info.title}｜多: ${info.long}｜空: ${info.short}`;
     });
-    const formulaTexts = activeModes.map(mode => {
-      const info = MODE_FORMULAS[mode];
-      return info ? `${mode} ${info.formula}` : mode;
-    });
-
-    const fixed = [
-      `進場 ${formatTimeParam(headerMap.BeginTime)}`,
-      `結束 ${formatTimeParam(headerMap.EndTime)}`,
-      `強平 ${formatTimeParam(headerMap.ForceExitTime)}`
-    ];
-    if (headerMap.EntryGap != null) fixed.push(`Gap ${headerMap.EntryGap}`);
-    if (headerMap.Penetrate != null) fixed.push(`穿透 ${headerMap.Penetrate}`);
-    if (headerMap.DoTXT != null) fixed.push(`TXT ${Number(headerMap.DoTXT) === 1 ? '開' : '關'}`);
 
     return {
       raw: rawValues,
-      fixed: fixed.join('｜'),
-      mode: modeTexts.length ? modeTexts.join('、') : '未偵測 UseM',
-      formula: formulaTexts.length ? formulaTexts.join('；') : '—'
+      lines: formulaLines.length ? formulaLines : ['未偵測 UseM 公式']
     };
-  }
-
-  function appendParamLine(container, label, value, className) {
-    const row = document.createElement('div');
-    row.className = 'param-row';
-    const labelEl = document.createElement('span');
-    labelEl.className = 'param-label';
-    labelEl.textContent = label;
-    const valueEl = document.createElement('span');
-    valueEl.className = className || 'param-value';
-    valueEl.textContent = value || '—';
-    row.appendChild(labelEl);
-    row.appendChild(valueEl);
-    container.appendChild(row);
   }
 
   function renderParamSummaryCell(td, summary) {
@@ -217,10 +189,12 @@
     td.title = summary.raw || '';
     const wrap = document.createElement('div');
     wrap.className = 'param-brief';
-    appendParamLine(wrap, '固定', summary.fixed, 'param-value');
-    appendParamLine(wrap, '模式', summary.mode, 'param-mode');
-    appendParamLine(wrap, '公式', summary.formula, 'param-formula');
-    if (summary.raw) appendParamLine(wrap, '原始', summary.raw, 'param-raw');
+    (summary.lines || []).forEach(line => {
+      const item = document.createElement('div');
+      item.className = 'param-formula';
+      item.textContent = line;
+      wrap.appendChild(item);
+    });
     td.appendChild(wrap);
   }
 

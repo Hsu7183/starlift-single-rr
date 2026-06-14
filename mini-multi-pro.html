@@ -94,76 +94,6 @@
       display: block;
     }
 
-    /* 參數與公式簡表 */
-    .formula-card {
-      display: grid;
-      gap: 8px;
-    }
-    .formula-head {
-      display: flex;
-      justify-content: space-between;
-      gap: 12px;
-      align-items: flex-start;
-    }
-    .formula-note {
-      font-size: 11px;
-      color: #666;
-      line-height: 1.5;
-    }
-    .formula-chip {
-      flex: 0 0 auto;
-      padding: 4px 8px;
-      border-radius: 999px;
-      background: #eef6ff;
-      border: 1px solid #bfdbfe;
-      color: #1d4ed8;
-      font-size: 11px;
-      font-weight: 700;
-      white-space: nowrap;
-    }
-    .formula-grid {
-      display: grid;
-      grid-template-columns: minmax(300px, 0.9fr) minmax(420px, 1.1fr);
-      gap: 8px;
-      align-items: start;
-    }
-    .formula-table {
-      width: 100%;
-      min-width: 0;
-      table-layout: fixed;
-      font-size: 11px;
-      border: 1px solid #eee;
-      border-radius: 4px;
-      overflow: hidden;
-    }
-    .formula-table th,
-    .formula-table td {
-      white-space: normal;
-      overflow: visible;
-      text-overflow: clip;
-      text-align: left;
-      line-height: 1.45;
-      vertical-align: top;
-    }
-    .formula-table th {
-      background: #fafafa;
-      cursor: default;
-    }
-    .formula-table td:first-child {
-      width: 116px;
-      text-align: left;
-      font-weight: 700;
-      color: #111827;
-    }
-    .formula-table code {
-      font-family: Consolas, "SFMono-Regular", monospace;
-      font-size: 10px;
-      background: #f6f8fa;
-      border: 1px solid #e5e7eb;
-      border-radius: 4px;
-      padding: 1px 4px;
-    }
-
     /* 表格 */
     .table-wrapper {
       max-width: 1200px;
@@ -234,30 +164,9 @@
       gap: 2px;
       color: #333;
     }
-    .param-row {
-      display: grid;
-      grid-template-columns: 42px 1fr;
-      gap: 6px;
-      align-items: baseline;
-    }
-    .param-label {
-      color: #666;
-      font-weight: 700;
-    }
-    .param-value {
-      color: #222;
-    }
-    .param-mode {
-      color: #1d4ed8;
-      font-weight: 700;
-    }
     .param-formula {
       color: #008000;
       font-weight: 600;
-    }
-    .param-raw {
-      color: #888;
-      font-size: 10px;
     }
     tbody tr:nth-child(even) {
       background: #fcfcfc;
@@ -304,15 +213,6 @@
     @media (max-width: 768px) {
       h1 { font-size: 15px; }
       .toolbar { font-size: 11px; }
-      .formula-head {
-        display: grid;
-      }
-      .formula-chip {
-        white-space: normal;
-      }
-      .formula-grid {
-        grid-template-columns: 1fr;
-      }
     }
   </style>
 </head>
@@ -350,97 +250,13 @@
     </div>
   </div>
 
-  <div class="card formula-card">
-    <div class="formula-head">
-      <div>
-        <div class="card-title">參數與 KPI 公式簡表</div>
-        <div class="formula-note">結果表的參數欄會直接顯示固定參數、UseM 模式與公式簡表；這裡補充小台成本口徑與 KPI 欄位公式。</div>
-      </div>
-      <div class="formula-chip">小台：1 點 50 元｜單邊手續費 18｜進出 36｜期交稅 0.00002</div>
-    </div>
-    <div class="formula-grid">
-      <table class="formula-table" aria-label="參數與成本公式">
-        <thead>
-          <tr>
-            <th>項目</th>
-            <th>公式 / 說明</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>參數欄</td>
-            <td>取 TXT 第一行 header 與檔名中的 <code>UseMxx</code>，整理成固定參數、模式、公式三列簡表。</td>
-          </tr>
-          <tr>
-            <td>單筆毛損益</td>
-            <td><code>(出場價 - 進場價) × 多空方向 × 50</code>，多單方向為 1，空單方向為 -1。</td>
-          </tr>
-          <tr>
-            <td>單筆成本</td>
-            <td><code>36 + 進場稅 + 出場稅 + 滑點成本</code>。</td>
-          </tr>
-          <tr>
-            <td>期交稅</td>
-            <td><code>round(價格 × 50 × 0.00002)</code>，進場與出場各算一次。</td>
-          </tr>
-          <tr>
-            <td>滑點成本</td>
-            <td><code>滑點點數 × 2 × 50</code>，每筆交易進出各一邊。</td>
-          </tr>
-        </tbody>
-      </table>
-      <table class="formula-table" aria-label="KPI 公式">
-        <thead>
-          <tr>
-            <th>欄位</th>
-            <th>公式 / 說明</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>分數</td>
-            <td>由 MaxDD、總報酬、CAGR、PF、Hit%、Sharpe、Sortino、Calmar、破產風險、成本比評級平均。</td>
-          </tr>
-          <tr>
-            <td>CAGR</td>
-            <td><code>(期末淨值 / 本金) ^ (365 / 回測天數) - 1</code>。</td>
-          </tr>
-          <tr>
-            <td>MaxDD%</td>
-            <td><code>最大回撤金額 / 本金</code>。</td>
-          </tr>
-          <tr>
-            <td>PF</td>
-            <td><code>總獲利 / abs(總虧損)</code>。</td>
-          </tr>
-          <tr>
-            <td>Sharpe</td>
-            <td><code>平均單筆淨損益 / 單筆標準差 × sqrt(筆數)</code>。</td>
-          </tr>
-          <tr>
-            <td>Sortino</td>
-            <td><code>平均單筆淨損益 / 下行標準差 × sqrt(筆數)</code>。</td>
-          </tr>
-          <tr>
-            <td>Calmar</td>
-            <td><code>CAGR / MaxDD%</code>。</td>
-          </tr>
-          <tr>
-            <td>成本比</td>
-            <td><code>(手續費 + 期交稅 + 滑點成本) / (總獲利 + abs(總虧損))</code>。</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
-
   <!-- 統計表格 -->
   <div class="table-wrapper">
     <table id="resultTable">
       <thead>
         <tr>
           <th class="sortable" data-key="dateTag">製作時間</th>
-          <th>參數 / 公式簡表</th>
+          <th>公式簡表</th>
           <th class="sortable" data-key="score">分數</th>
           <th class="sortable" data-key="cagr">CAGR</th>
           <th class="sortable" data-key="totalReturn">總報酬</th>
@@ -468,7 +284,7 @@
   </div>
 
   <div class="hint">
-    提示：1）製作時間只保留「日_時間」，例如 08_065140。2）參數欄顯示固定參數、UseM 模式與公式簡表。3）圖表顯示分數最高那一檔的資產曲線。
+    提示：1）製作時間只保留「日_時間」，例如 08_065140。2）公式簡表欄顯示 UseM 多空條件。3）圖表顯示分數最高那一檔的資產曲線。
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -481,6 +297,6 @@
       capital: 250000
     };
   </script>
-  <script src="multi-pro.js?v=mini-futures-formula-v2"></script>
+  <script src="multi-pro.js?v=mini-futures-formula-v3"></script>
 </body>
 </html>
