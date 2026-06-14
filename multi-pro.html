@@ -147,7 +147,24 @@
     td:first-child {
       text-align: center;
     }
-    td:nth-child(2) {
+    th.select-head,
+    td.select-cell {
+      width: 34px;
+      min-width: 34px;
+      text-align: center;
+    }
+    .row-select {
+      width: 14px;
+      height: 14px;
+      cursor: pointer;
+    }
+    tbody tr.is-selected {
+      background: #eef6ff;
+    }
+    tbody tr.is-selected:nth-child(even) {
+      background: #e7f1ff;
+    }
+    td:nth-child(3) {
       text-align: left;
       max-width: 260px;
     }
@@ -304,6 +321,7 @@
     <table id="resultTable">
       <thead>
         <tr>
+          <th class="select-head">選</th>
           <th class="sortable" data-key="dateTag">製作時間</th>
           <th>公式</th>
           <th class="sortable" data-key="nTrades">筆數</th>
@@ -335,6 +353,6 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="multi-pro.js?v=multi-pro-kpi-filter-v1"></script>
+  <script src="multi-pro.js?v=multi-pro-row-select-v1"></script>
 </body>
 </html>

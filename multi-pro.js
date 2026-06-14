@@ -80,6 +80,7 @@
   let gSort = { key: 'score', dir: 'desc' };
   let gChart = null;
   let gFilters = {};
+  let gSelectedKeys = new Set();
 
   const KPI_FILTER_KEYS = [
     'nTrades', 'costRatio', 'riskOfRuin', 'pf', 'winRate', 'avgTrade',
@@ -885,12 +886,26 @@
     return gResults.filter(passesFilters);
   }
 
+  function selectedFilteredResults() {
+    if (!gSelectedKeys.size) return [];
+    return filteredResults().filter(row => gSelectedKeys.has(row.resultKey));
+  }
+
+  function chartRows() {
+    if (gSelectedKeys.size) return selectedFilteredResults();
+    return filteredResults().slice(0, 1);
+  }
+
   function updateFilterStatus(visibleCount) {
     if (!gResults.length) return;
+    const selectedVisibleCount = selectedFilteredResults().length;
+    let selectedText = '';
+    if (selectedVisibleCount) selectedText = `，圖表顯示已選 ${selectedVisibleCount} 檔`;
+    else if (gSelectedKeys.size) selectedText = '，已選檔案不在目前篩選結果';
     if (hasActiveFilters()) {
-      statusLine.textContent = `完成：顯示 ${visibleCount} / ${gResults.length} 檔（已套用篩選）。`;
+      statusLine.textContent = `完成：顯示 ${visibleCount} / ${gResults.length} 檔（已套用篩選${selectedText}）。`;
     } else {
-      statusLine.textContent = `完成：共計算 ${gResults.length} 檔。`;
+      statusLine.textContent = `完成：共計算 ${gResults.length} 檔${selectedText}。`;
     }
   }
 
@@ -910,6 +925,7 @@
     statusLine.textContent = `讀取與計算中……（共 ${files.length} 檔）`;
 
     gResults = [];
+    gSelectedKeys = new Set();
 
     for (let i = 0; i < files.length; i++) {
       const f = files[i];
@@ -955,8 +971,10 @@
         const kpiTheo = calcKpi(trades, theoPnls, theoEquity);
         const kpiAct  = calcKpi(trades, actPnls, actEquity);
         const score   = computeScore(kpiAct);
+        const resultKey = `${f.name}::${gResults.length}`;
 
         gResults.push({
+          resultKey,
           fileName: f.name,
           dateTag:  makeCompactTag(f.name),
           params:   headerToValues(parsed.header),
@@ -1001,6 +1019,23 @@
     rows.forEach(r => {
       const k = r.kpi || {};
       const tr = document.createElement('tr');
+      if (gSelectedKeys.has(r.resultKey)) tr.classList.add('is-selected');
+
+      const tdSelect = document.createElement('td');
+      tdSelect.className = 'select-cell';
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.className = 'row-select';
+      checkbox.checked = gSelectedKeys.has(r.resultKey);
+      checkbox.title = `選擇 ${r.fileName} 顯示於上方圖表`;
+      checkbox.addEventListener('change', () => {
+        if (checkbox.checked) gSelectedKeys.add(r.resultKey);
+        else gSelectedKeys.delete(r.resultKey);
+        renderTable();
+        renderChart();
+      });
+      tdSelect.appendChild(checkbox);
+      tr.appendChild(tdSelect);
 
       const tdDate = document.createElement('td');
       tdDate.textContent = r.dateTag;
@@ -1074,38 +1109,53 @@
       gChart = null;
     }
 
-    const rows = filteredResults();
+    const rows = chartRows();
     if (!rows.length) {
-      chartTitleEl.textContent = '頂檔資產曲線（含滑價累積損益）';
+      chartTitleEl.textContent = gSelectedKeys.size
+        ? '已選策略不在目前篩選結果'
+        : '頂檔資產曲線（含滑價累積損益）';
       return;
     }
 
-    const top = rows[0];
-    const eq = top.equitySeries || { x: [], y: [] };
-    const labels = eq.x;
-    const data   = eq.y;
+    const colors = [
+      '#2f80ed', '#d93025', '#188038', '#f29900', '#7b61ff',
+      '#00a3a3', '#c2185b', '#6d4c41', '#455a64', '#8e24aa'
+    ];
+    const longest = rows.reduce((best, row) => {
+      const len = ((row.equitySeries || {}).x || []).length;
+      return len > (((best.equitySeries || {}).x || []).length) ? row : best;
+    }, rows[0]);
+    const labels = ((longest.equitySeries || {}).x || []);
+    const datasets = rows.map((row, idx) => {
+      const eq = row.equitySeries || { x: [], y: [] };
+      const color = colors[idx % colors.length];
+      return {
+        label: row.dateTag || row.fileName,
+        data: eq.y || [],
+        borderColor: color,
+        backgroundColor: color,
+        borderWidth: rows.length > 1 ? 1.5 : 2,
+        pointRadius: 0
+      };
+    });
 
     const ctx = scoreChartEl.getContext('2d');
 
-    chartTitleEl.textContent =
-      `頂檔資產曲線（含滑價累積損益）｜${top.fileName}`;
+    chartTitleEl.textContent = gSelectedKeys.size
+      ? `已選策略資產曲線（${rows.length} 檔）`
+      : `頂檔資產曲線（含滑價累積損益）｜${rows[0].fileName}`;
 
     gChart = new Chart(ctx, {
       type: 'line',
       data: {
         labels,
-        datasets: [{
-          label: '含滑價累積損益',
-          data,
-          borderWidth: 2,
-          pointRadius: 0
-        }]
+        datasets
       },
       options: {
         responsive: true,
         maintainAspectRatio: false,
         plugins: {
-          legend: { display: false },
+          legend: { display: rows.length > 1 },
           tooltip: {
             callbacks: {
               label: (ctx) => `累積損益：${fmtInt(ctx.parsed.y)}`
