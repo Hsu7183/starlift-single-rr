@@ -151,6 +151,44 @@
       text-align: left;
       max-width: 420px;
     }
+    td.param-cell {
+      min-width: 360px;
+      max-width: 520px;
+      white-space: normal;
+      overflow: visible;
+      text-overflow: clip;
+      line-height: 1.45;
+    }
+    .param-brief {
+      display: grid;
+      gap: 2px;
+      color: #333;
+    }
+    .param-row {
+      display: grid;
+      grid-template-columns: 42px 1fr;
+      gap: 6px;
+      align-items: baseline;
+    }
+    .param-label {
+      color: #666;
+      font-weight: 700;
+    }
+    .param-value {
+      color: #222;
+    }
+    .param-mode {
+      color: #1d4ed8;
+      font-weight: 700;
+    }
+    .param-formula {
+      color: #008000;
+      font-weight: 600;
+    }
+    .param-raw {
+      color: #888;
+      font-size: 10px;
+    }
     tbody tr:nth-child(even) {
       background: #fcfcfc;
     }
@@ -239,7 +277,7 @@
       <thead>
         <tr>
           <th class="sortable" data-key="dateTag">製作時間</th>
-          <th>參數（只顯示數值）</th>
+          <th>參數 / 公式簡表</th>
           <th class="sortable" data-key="score">分數</th>
           <th class="sortable" data-key="cagr">CAGR</th>
           <th class="sortable" data-key="totalReturn">總報酬</th>
@@ -267,10 +305,10 @@
   </div>
 
   <div class="hint">
-    提示：1）製作時間只保留「日_時間」，例如 08_065140。2）參數欄只顯示數值。3）圖表顯示分數最高那一檔的資產曲線。
+    提示：1）製作時間只保留「日_時間」，例如 08_065140。2）參數欄顯示固定參數、UseM 模式與公式簡表。3）圖表顯示分數最高那一檔的資產曲線。
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="multi-pro.js?v=mini-futures-v1"></script>
+  <script src="multi-pro.js?v=multi-pro-formula-v2"></script>
 </body>
 </html>

@@ -111,6 +111,119 @@
     }).join(',');
   }
 
+  const MODE_FORMULAS = {
+    UseM00: { title: 'M00 基準', formula: '第0層 C1 ROD 基準' },
+    UseM01: { title: 'M01 同向破高低', formula: '前K同向，O 突破前高/前低' },
+    UseM02: { title: 'M02 同向 M1', formula: '前K同向，O 站上/跌破 M1' },
+    UseM03: { title: 'M03 同向未破', formula: '前K同向，O 未突破前高/前低' },
+    UseM04: { title: 'M04 同向未 M1', formula: '前K同向，O 未站上/跌破 M1' },
+    UseM05: { title: 'M05 同向區間', formula: '前K同向，O 在 M1 到 H1/L1 區間' },
+    UseM06: { title: 'M06 反向破高低', formula: '前K反向，O 突破前高/前低' },
+    UseM07: { title: 'M07 反向 M1', formula: '前K反向，O 站上/跌破 M1' },
+    UseM08: { title: 'M08 反向 BM1', formula: '前K反向，O 站上/跌破 BM1' },
+    UseM09: { title: 'M09 反向 O1', formula: '前K反向，O 站上/跌破 O1' },
+    UseM10: { title: 'M10 反向未破', formula: '前K反向，O 未突破前高/前低' },
+    UseM11: { title: 'M11 反向未 M1', formula: '前K反向，O 未站上/跌破 M1' },
+    UseM12: { title: 'M12 反向未 BM1', formula: '前K反向，O 未站上/跌破 BM1' },
+    UseM13: { title: 'M13 反向未 O1', formula: '前K反向，O 未站回/跌回 O1' },
+    UseM14: { title: 'M14 反向 M1-H1/L1', formula: '前K反向，O 在 M1 到 H1/L1 區間' },
+    UseM15: { title: 'M15 反向 M1-BM1', formula: '前K反向，O 在 M1 到 BM1 區間' },
+    UseM16: { title: 'M16 反向 M1-O1', formula: '前K反向，O 在 M1 到 O1 區間' },
+    UseM17: { title: 'M17 反向 BM1-H1/L1', formula: '前K反向，O 在 BM1 到 H1/L1 區間' },
+    UseM18: { title: 'M18 反向 BM1-M1', formula: '前K反向，O 在 BM1 到 M1 區間' },
+    UseM19: { title: 'M19 反向 BM1-O1', formula: '前K反向，O 在 BM1 到 O1 區間' },
+    UseM20: { title: 'M20 反向 O1-H1/L1', formula: '前K反向，O 在 O1 到 H1/L1 區間' },
+    UseM21: { title: 'M21 反向 O1-M1', formula: '前K反向，O 在 O1 到 M1 區間' }
+  };
+
+  function parseHeaderParams(header) {
+    const map = {};
+    if (!header) return map;
+    header.split(',').forEach(seg => {
+      const part = String(seg || '').trim();
+      if (!part) return;
+      const idx = part.indexOf('=');
+      if (idx < 0) return;
+      map[part.slice(0, idx).trim()] = part.slice(idx + 1).trim();
+    });
+    return map;
+  }
+
+  function formatTimeParam(value) {
+    const digits = String(value == null ? '' : value).replace(/\D/g, '');
+    if (!digits) return '—';
+    const padded = digits.padStart(6, '0');
+    return `${padded.slice(0, 2)}:${padded.slice(2, 4)}`;
+  }
+
+  function activeModesFromHeader(headerMap, fileName) {
+    const modes = Object.keys(headerMap)
+      .filter(key => /^UseM\d{2}$/.test(key) && Number(headerMap[key]) === 1)
+      .sort();
+
+    if (modes.length) return modes;
+
+    const found = String(fileName || '').match(/UseM\d{2}/g);
+    if (found && found.length) return Array.from(new Set(found)).sort();
+    return [];
+  }
+
+  function buildParamSummary(header, fileName) {
+    const headerMap = parseHeaderParams(header);
+    const rawValues = headerToValues(header);
+    const activeModes = activeModesFromHeader(headerMap, fileName);
+    const modeTexts = activeModes.map(mode => {
+      const info = MODE_FORMULAS[mode];
+      return info ? `${mode}：${info.title.replace(/^M\d{2}\s*/, '')}` : mode;
+    });
+    const formulaTexts = activeModes.map(mode => {
+      const info = MODE_FORMULAS[mode];
+      return info ? `${mode} ${info.formula}` : mode;
+    });
+
+    const fixed = [
+      `進場 ${formatTimeParam(headerMap.BeginTime)}`,
+      `結束 ${formatTimeParam(headerMap.EndTime)}`,
+      `強平 ${formatTimeParam(headerMap.ForceExitTime)}`
+    ];
+    if (headerMap.EntryGap != null) fixed.push(`Gap ${headerMap.EntryGap}`);
+    if (headerMap.Penetrate != null) fixed.push(`穿透 ${headerMap.Penetrate}`);
+    if (headerMap.DoTXT != null) fixed.push(`TXT ${Number(headerMap.DoTXT) === 1 ? '開' : '關'}`);
+
+    return {
+      raw: rawValues,
+      fixed: fixed.join('｜'),
+      mode: modeTexts.length ? modeTexts.join('、') : '未偵測 UseM',
+      formula: formulaTexts.length ? formulaTexts.join('；') : '—'
+    };
+  }
+
+  function appendParamLine(container, label, value, className) {
+    const row = document.createElement('div');
+    row.className = 'param-row';
+    const labelEl = document.createElement('span');
+    labelEl.className = 'param-label';
+    labelEl.textContent = label;
+    const valueEl = document.createElement('span');
+    valueEl.className = className || 'param-value';
+    valueEl.textContent = value || '—';
+    row.appendChild(labelEl);
+    row.appendChild(valueEl);
+    container.appendChild(row);
+  }
+
+  function renderParamSummaryCell(td, summary) {
+    td.classList.add('param-cell');
+    td.title = summary.raw || '';
+    const wrap = document.createElement('div');
+    wrap.className = 'param-brief';
+    appendParamLine(wrap, '固定', summary.fixed, 'param-value');
+    appendParamLine(wrap, '模式', summary.mode, 'param-mode');
+    appendParamLine(wrap, '公式', summary.formula, 'param-formula');
+    if (summary.raw) appendParamLine(wrap, '原始', summary.raw, 'param-raw');
+    td.appendChild(wrap);
+  }
+
   // ===== 時間工具 =====
   function tsToDate(ts) {
     if (!ts) return null;
@@ -746,6 +859,7 @@
           fileName: f.name,
           dateTag:  makeCompactTag(f.name),
           params:   headerToValues(parsed.header),
+          paramSummary: buildParamSummary(parsed.header, f.name),
           score,
           kpi: kpiAct,
           kpiTheo,
@@ -779,7 +893,7 @@
       tr.appendChild(tdDate);
 
       const tdParam = document.createElement('td');
-      tdParam.textContent = r.params;
+      renderParamSummaryCell(tdParam, r.paramSummary || { raw: r.params });
       tr.appendChild(tdParam);
 
       const tdScore = document.createElement('td');
