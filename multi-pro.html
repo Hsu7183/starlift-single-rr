@@ -268,25 +268,24 @@
       <thead>
         <tr>
           <th class="sortable" data-key="dateTag">製作時間</th>
-          <th>公式簡表</th>
-          <th class="sortable" data-key="score">分數</th>
-          <th class="sortable" data-key="cagr">CAGR</th>
-          <th class="sortable" data-key="totalReturn">總報酬</th>
-          <th class="sortable" data-key="maxDdPct">MaxDD%</th>
+          <th>公式做多</th>
+          <th>公式做空</th>
+          <th class="sortable" data-key="nTrades">筆數</th>
+          <th class="sortable" data-key="costRatio">成本比</th>
+          <th class="sortable" data-key="riskOfRuin">破產風險</th>
           <th class="sortable" data-key="pf">PF</th>
           <th class="sortable" data-key="winRate">Hit%</th>
+          <th class="sortable" data-key="avgTrade">平均損益</th>
+          <th class="sortable" data-key="maxDdPct">MaxDD%</th>
+          <th class="sortable" data-key="worstDay">最差單日</th>
+          <th class="sortable" data-key="worstWeek">最差期間</th>
+          <th class="sortable" data-key="ulcer">Ulcer</th>
+          <th class="sortable" data-key="totalReturn">總報酬</th>
+          <th class="sortable" data-key="cagr">CAGR</th>
           <th class="sortable" data-key="sharpe">Sharpe</th>
           <th class="sortable" data-key="sortino">Sortino</th>
           <th class="sortable" data-key="calmar">Calmar</th>
-          <th class="sortable" data-key="riskOfRuin">破產風險</th>
-          <th class="sortable" data-key="costRatio">成本比</th>
-          <th class="sortable" data-key="nTrades">筆數</th>
-          <th class="sortable" data-key="avgTrade">平均單筆</th>
-          <th class="sortable" data-key="worstDay">最差單日</th>
-          <th class="sortable" data-key="worstWeek">最差單週</th>
-          <th class="sortable" data-key="ulcer">Ulcer</th>
-          <th class="sortable" data-key="recoveryFactor">Recovery</th>
-          <th class="sortable" data-key="turnover">Turnover</th>
+          <th class="sortable" data-key="score">分數</th>
         </tr>
       </thead>
       <tbody>
@@ -296,10 +295,10 @@
   </div>
 
   <div class="hint">
-    提示：1）製作時間只保留「日_時間」，例如 08_065140。2）公式簡表欄顯示 UseM 多空條件。3）圖表顯示分數最高那一檔的資產曲線。
+    提示：1）製作時間只保留「日_時間」，例如 08_065140。2）公式做多/做空欄顯示 UseM 核心條件。3）圖表顯示分數最高那一檔的資產曲線。
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="multi-pro.js?v=multi-pro-formula-v4"></script>
+  <script src="multi-pro.js?v=multi-pro-kpi-order-v1"></script>
 </body>
 </html>

@@ -209,7 +209,7 @@
     };
   }
 
-  function renderParamSummaryCell(td, summary) {
+  function renderFormulaCell(td, summary, side) {
     td.classList.add('param-cell');
     td.title = summary.raw || '';
     const wrap = document.createElement('div');
@@ -223,22 +223,10 @@
         wrap.appendChild(modeSep);
       }
 
-      const longSpan = document.createElement('span');
-      longSpan.className = 'param-long';
-      longSpan.textContent = `多 ${formula.long}`;
-      wrap.appendChild(longSpan);
-
-      if (formula.short) {
-        const sep = document.createElement('span');
-        sep.className = 'param-sep';
-        sep.textContent = ' / ';
-        wrap.appendChild(sep);
-
-        const shortSpan = document.createElement('span');
-        shortSpan.className = 'param-short';
-        shortSpan.textContent = `空 ${formula.short}`;
-        wrap.appendChild(shortSpan);
-      }
+      const span = document.createElement('span');
+      span.className = side === 'long' ? 'param-long' : 'param-short';
+      span.textContent = side === 'long' ? formula.long : (formula.short || '—');
+      wrap.appendChild(span);
     });
 
     td.appendChild(wrap);
@@ -912,16 +900,14 @@
       tdDate.textContent = r.dateTag;
       tr.appendChild(tdDate);
 
-      const tdParam = document.createElement('td');
-      renderParamSummaryCell(tdParam, r.paramSummary || { raw: r.params });
-      tr.appendChild(tdParam);
+      const summary = r.paramSummary || { raw: r.params };
+      const tdLongFormula = document.createElement('td');
+      renderFormulaCell(tdLongFormula, summary, 'long');
+      tr.appendChild(tdLongFormula);
 
-      const tdScore = document.createElement('td');
-      const span = document.createElement('span');
-      span.textContent = r.score != null && isFinite(r.score) ? r.score.toFixed(1) : '—';
-      span.className = scoreBadgeClass(r.score);
-      tdScore.appendChild(span);
-      tr.appendChild(tdScore);
+      const tdShortFormula = document.createElement('td');
+      renderFormulaCell(tdShortFormula, summary, 'short');
+      tr.appendChild(tdShortFormula);
 
       function kpiCell(value, fmt, ratingKey) {
         const td = document.createElement('td');
@@ -940,24 +926,28 @@
         return td;
       }
 
-      tr.appendChild(kpiCell(k.cagr,           'pct', 'cagr'));
-      tr.appendChild(kpiCell(k.totalReturnPct, 'pct', 'total_return'));
-      tr.appendChild(kpiCell(k.maxDdPct,       'pct', 'maxdd_pct'));
+      tr.appendChild(kpiCell(k.nTrades,        'int'));
+      tr.appendChild(kpiCell(k.costRatio,      'pct', 'cost_ratio'));
+      tr.appendChild(kpiCell(k.riskOfRuin,     'pct', 'risk_ruin'));
       tr.appendChild(kpiCell(k.pf,             'f2',  'pf'));
       tr.appendChild(kpiCell(k.winRate,        'pct', 'winrate'));
-      tr.appendChild(kpiCell(k.sharpeTrade,    'f2',  'sharpe'));
-      tr.appendChild(kpiCell(k.sortinoTrade,   'f2',  'sortino'));
-      tr.appendChild(kpiCell(k.calmar,         'f2',  'calmar'));
-      tr.appendChild(kpiCell(k.riskOfRuin,     'pct', 'risk_ruin'));
-      tr.appendChild(kpiCell(k.costRatio,      'pct', 'cost_ratio'));
-
-      tr.appendChild(kpiCell(k.nTrades,        'int'));
       tr.appendChild(kpiCell(k.avg,            'int'));
+      tr.appendChild(kpiCell(k.maxDdPct,       'pct', 'maxdd_pct'));
       tr.appendChild(kpiCell(k.worstDayPnl,    'int'));
       tr.appendChild(kpiCell(k.worstWeekPnl,   'int'));
       tr.appendChild(kpiCell(k.ulcerIndex,     'f3'));
-      tr.appendChild(kpiCell(k.recoveryFactor, 'f2'));
-      tr.appendChild(kpiCell(k.turnover,       'f2'));
+      tr.appendChild(kpiCell(k.totalReturnPct, 'pct', 'total_return'));
+      tr.appendChild(kpiCell(k.cagr,           'pct', 'cagr'));
+      tr.appendChild(kpiCell(k.sharpeTrade,    'f2',  'sharpe'));
+      tr.appendChild(kpiCell(k.sortinoTrade,   'f2',  'sortino'));
+      tr.appendChild(kpiCell(k.calmar,         'f2',  'calmar'));
+
+      const tdScore = document.createElement('td');
+      const span = document.createElement('span');
+      span.textContent = r.score != null && isFinite(r.score) ? r.score.toFixed(1) : '—';
+      span.className = scoreBadgeClass(r.score);
+      tdScore.appendChild(span);
+      tr.appendChild(tdScore);
 
       tbody.appendChild(tr);
     });
