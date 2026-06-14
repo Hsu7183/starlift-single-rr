@@ -152,21 +152,33 @@
       max-width: 420px;
     }
     td.param-cell {
-      min-width: 360px;
-      max-width: 520px;
-      white-space: normal;
-      overflow: visible;
-      text-overflow: clip;
-      line-height: 1.45;
+      min-width: 240px;
+      max-width: 420px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      line-height: 1.25;
     }
     .param-brief {
-      display: grid;
-      gap: 2px;
+      display: block;
+      white-space: nowrap;
       color: #333;
     }
-    .param-formula {
-      color: #008000;
-      font-weight: 600;
+    .param-long {
+      color: #d93025;
+      font-weight: 700;
+    }
+    .param-short {
+      color: #188038;
+      font-weight: 700;
+    }
+    .param-sep {
+      color: #777;
+      padding: 0 3px;
+    }
+    .param-mode-sep {
+      color: #aaa;
+      padding: 0 6px;
     }
     tbody tr:nth-child(even) {
       background: #fcfcfc;
@@ -288,6 +300,6 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="multi-pro.js?v=multi-pro-formula-v3"></script>
+  <script src="multi-pro.js?v=multi-pro-formula-v4"></script>
 </body>
 </html>

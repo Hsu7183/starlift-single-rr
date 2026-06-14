@@ -136,6 +136,31 @@
     UseM21: { title: '反向 O[1]-M1', long: 'O[1] < O < M1 且 C[1] < O[1]', short: 'M1 < O < O[1] 且 C[1] > O[1]' }
   };
 
+  const MODE_BRIEF_FORMULAS = {
+    UseM00: { long: 'ON', short: 'ON' },
+    UseM01: { long: 'O>H[1]', short: 'O<L[1]' },
+    UseM02: { long: 'O>M1', short: 'O<M1' },
+    UseM03: { long: 'O<H[1]', short: 'O>L[1]' },
+    UseM04: { long: 'O<M1', short: 'O>M1' },
+    UseM05: { long: 'M1<O<H[1]', short: 'L[1]<O<M1' },
+    UseM06: { long: 'O>H[1]', short: 'O<L[1]' },
+    UseM07: { long: 'O>M1', short: 'O<M1' },
+    UseM08: { long: 'O>BM1', short: 'O<BM1' },
+    UseM09: { long: 'O>O[1]', short: 'O<O[1]' },
+    UseM10: { long: 'O<H[1]', short: 'O>L[1]' },
+    UseM11: { long: 'O<M1', short: 'O>M1' },
+    UseM12: { long: 'O<BM1', short: 'O>BM1' },
+    UseM13: { long: 'O<O[1]', short: 'O>O[1]' },
+    UseM14: { long: 'M1<O<H[1]', short: 'L[1]<O<M1' },
+    UseM15: { long: 'M1<O<BM1', short: 'BM1<O<M1' },
+    UseM16: { long: 'M1<O<O[1]', short: 'O[1]<O<M1' },
+    UseM17: { long: 'BM1<O<H[1]', short: 'L[1]<O<BM1' },
+    UseM18: { long: 'BM1<O<M1', short: 'M1<O<BM1' },
+    UseM19: { long: 'BM1<O<O[1]', short: 'O[1]<O<BM1' },
+    UseM20: { long: 'O[1]<O<H[1]', short: 'L[1]<O<O[1]' },
+    UseM21: { long: 'O[1]<O<M1', short: 'M1<O<O[1]' }
+  };
+
   function parseHeaderParams(header) {
     const map = {};
     if (!header) return map;
@@ -172,15 +197,15 @@
     const headerMap = parseHeaderParams(header);
     const rawValues = headerToValues(header);
     const activeModes = activeModesFromHeader(headerMap, fileName);
-    const formulaLines = activeModes.map(mode => {
-      const info = MODE_FORMULAS[mode];
-      if (!info) return mode;
-      return `${mode} ${info.title}｜多: ${info.long}｜空: ${info.short}`;
+    const formulas = activeModes.map(mode => {
+      const brief = MODE_BRIEF_FORMULAS[mode];
+      if (!brief) return { mode, long: mode, short: '' };
+      return { mode, long: brief.long, short: brief.short };
     });
 
     return {
       raw: rawValues,
-      lines: formulaLines.length ? formulaLines : ['未偵測 UseM 公式']
+      formulas: formulas.length ? formulas : [{ mode: '', long: 'No UseM', short: '' }]
     };
   }
 
@@ -189,12 +214,33 @@
     td.title = summary.raw || '';
     const wrap = document.createElement('div');
     wrap.className = 'param-brief';
-    (summary.lines || []).forEach(line => {
-      const item = document.createElement('div');
-      item.className = 'param-formula';
-      item.textContent = line;
-      wrap.appendChild(item);
+
+    (summary.formulas || []).forEach((formula, idx) => {
+      if (idx > 0) {
+        const modeSep = document.createElement('span');
+        modeSep.className = 'param-mode-sep';
+        modeSep.textContent = '; ';
+        wrap.appendChild(modeSep);
+      }
+
+      const longSpan = document.createElement('span');
+      longSpan.className = 'param-long';
+      longSpan.textContent = `多 ${formula.long}`;
+      wrap.appendChild(longSpan);
+
+      if (formula.short) {
+        const sep = document.createElement('span');
+        sep.className = 'param-sep';
+        sep.textContent = ' / ';
+        wrap.appendChild(sep);
+
+        const shortSpan = document.createElement('span');
+        shortSpan.className = 'param-short';
+        shortSpan.textContent = `空 ${formula.short}`;
+        wrap.appendChild(shortSpan);
+      }
     });
+
     td.appendChild(wrap);
   }
 
