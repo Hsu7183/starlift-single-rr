@@ -126,6 +126,77 @@
     return `${y}${m}${day}`;
   }
 
+  function formatDateAxisLabel(d) {
+    if (!d) return '';
+    return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`;
+  }
+
+  function buildSparseDateTicks(dates) {
+    const tickIndexToLabel = {};
+    if (!dates.length) return tickIndexToLabel;
+
+    const last = dates.length - 1;
+    [0, 0.25, 0.5, 0.75, 1].forEach(r => {
+      const idx = Math.round(last * r);
+      const d = dates[idx];
+      if (!d) return;
+      tickIndexToLabel[idx] = formatDateAxisLabel(d);
+    });
+    return tickIndexToLabel;
+  }
+
+  function makeAlignedDateScale(dates, titleText) {
+    const tickIndexToLabel = buildSparseDateTicks(dates);
+    const maxIndex = Math.max(0, dates.length - 1);
+    return {
+      type: 'linear',
+      display: true,
+      offset: false,
+      min: 0,
+      max: maxIndex,
+      bounds: 'ticks',
+      grid: { offset: false },
+      title: { display: true, text: titleText },
+      afterBuildTicks: function (axis) {
+        axis.ticks = dates.map((_, index) => ({ value: index }));
+      },
+      ticks: {
+        autoSkip: false,
+        maxRotation: 0,
+        minRotation: 0,
+        callback: function (value, index) {
+          return tickIndexToLabel[index] || '';
+        }
+      }
+    };
+  }
+
+  function makeAlignedYScale(titleText) {
+    return {
+      display: true,
+      title: { display: true, text: titleText },
+      afterFit: function (scale) {
+        scale.width = 72;
+      }
+    };
+  }
+
+  function toChartPoints(vals) {
+    return vals.map((y, x) => ({ x, y }));
+  }
+
+  function toMarkerPoints(vals, markerIndex) {
+    return vals.map((y, x) => ({ x, y: x === markerIndex ? y : null }));
+  }
+
+  function toPositiveBarPoints(vals) {
+    return vals.map((y, x) => ({ x, y: y > 0 ? y : null }));
+  }
+
+  function toNegativeBarPoints(vals) {
+    return vals.map((y, x) => ({ x, y: y < 0 ? y : null }));
+  }
+
   function getSlipPointsPerTrade() {
     const entry = Number(CFG.entrySlipPoints);
     const exit = Number(CFG.exitSlipPoints);
@@ -814,10 +885,6 @@
       outDates.push(lastDate);
       outVals.push(lastVal);
     }
-    if (outDates.length > 0) {
-      outDates.unshift(outDates[0]);
-      outVals.unshift(0);
-    }
     return { dates: outDates, vals: outVals };
   }
 
@@ -835,7 +902,7 @@
     const aggShortAct   = aggregateDaily(exitDates, shortAct);
 
     const dayDates = aggTotalAct.dates;
-    const labels    = aggTotalAct.vals.map((_, i) => i + 1);
+    const labels = dayDates.map(formatDateAxisLabel);
 
     let maxVal = -Infinity, minVal = Infinity;
     let maxIdx = null, minIdx = null;
@@ -844,23 +911,12 @@
       if (v > maxVal) { maxVal = v; maxIdx = i; }
       if (v < minVal) { minVal = v; minIdx = i; }
     }
-    const maxMarker = aggTotalAct.vals.map((_, i) => (i === maxIdx ? aggTotalAct.vals[i] : null));
-    const minMarker = aggTotalAct.vals.map((_, i) => (i === minIdx ? aggTotalAct.vals[i] : null));
+    const maxMarker = toMarkerPoints(aggTotalAct.vals, maxIdx);
+    const minMarker = toMarkerPoints(aggTotalAct.vals, minIdx);
 
     if (gChart) {
       gChart.destroy();
       gChart = null;
-    }
-
-    const tickIndexToLabel = {};
-    if (dayDates.length > 0 && labels.length === dayDates.length) {
-      const last = dayDates.length - 1;
-      [0, 0.25, 0.5, 0.75, 1].forEach(r => {
-        const idx = Math.round(last * r);
-        const d   = dayDates[idx];
-        if (!d) return;
-        tickIndexToLabel[idx] = `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`;
-      });
     }
 
     gChart = new Chart(ctx, {
@@ -868,12 +924,12 @@
       data: {
         labels,
         datasets: [
-          { label: '含滑價總損益', data: aggTotalAct.vals, borderColor: 'rgba(0,0,0,1)', backgroundColor: 'rgba(0,0,0,0)', borderWidth: 2, tension: 0, pointRadius: 0 },
-          { label: '理論總損益',   data: aggTotalTheo.vals, borderColor: 'rgba(0,0,0,0.5)', backgroundColor: 'rgba(0,0,0,0)', borderWidth: 1, borderDash: [4, 3], tension: 0, pointRadius: 0 },
-          { label: '多頭含滑價',   data: aggLongAct.vals, borderColor: 'rgba(220,0,0,1)', backgroundColor: 'rgba(0,0,0,0)', borderWidth: 1.5, tension: 0, pointRadius: 0 },
-          { label: '多頭理論',     data: aggLongTheo.vals, borderColor: 'rgba(220,0,0,0.5)', backgroundColor: 'rgba(0,0,0,0)', borderWidth: 1, borderDash: [4, 3], tension: 0, pointRadius: 0 },
-          { label: '空頭含滑價',   data: aggShortAct.vals, borderColor: 'rgba(0,150,0,1)', backgroundColor: 'rgba(0,0,0,0)', borderWidth: 1.5, tension: 0, pointRadius: 0 },
-          { label: '空頭理論',     data: aggShortTheo.vals, borderColor: 'rgba(0,150,0,0.5)', backgroundColor: 'rgba(0,0,0,0)', borderWidth: 1, borderDash: [4, 3], tension: 0, pointRadius: 0 },
+          { label: '含滑價總損益', data: toChartPoints(aggTotalAct.vals), borderColor: 'rgba(0,0,0,1)', backgroundColor: 'rgba(0,0,0,0)', borderWidth: 2, tension: 0, pointRadius: 0 },
+          { label: '理論總損益',   data: toChartPoints(aggTotalTheo.vals), borderColor: 'rgba(0,0,0,0.5)', backgroundColor: 'rgba(0,0,0,0)', borderWidth: 1, borderDash: [4, 3], tension: 0, pointRadius: 0 },
+          { label: '多頭含滑價',   data: toChartPoints(aggLongAct.vals), borderColor: 'rgba(220,0,0,1)', backgroundColor: 'rgba(0,0,0,0)', borderWidth: 1.5, tension: 0, pointRadius: 0 },
+          { label: '多頭理論',     data: toChartPoints(aggLongTheo.vals), borderColor: 'rgba(220,0,0,0.5)', backgroundColor: 'rgba(0,0,0,0)', borderWidth: 1, borderDash: [4, 3], tension: 0, pointRadius: 0 },
+          { label: '空頭含滑價',   data: toChartPoints(aggShortAct.vals), borderColor: 'rgba(0,150,0,1)', backgroundColor: 'rgba(0,0,0,0)', borderWidth: 1.5, tension: 0, pointRadius: 0 },
+          { label: '空頭理論',     data: toChartPoints(aggShortTheo.vals), borderColor: 'rgba(0,150,0,0.5)', backgroundColor: 'rgba(0,0,0,0)', borderWidth: 1, borderDash: [4, 3], tension: 0, pointRadius: 0 },
           { label: '期間最高點',   data: maxMarker, borderColor: 'rgba(220,0,0,0)', backgroundColor: 'rgba(220,0,0,1)', pointRadius: 4, pointHoverRadius: 5, showLine: false },
           { label: '期間最低點',   data: minMarker, borderColor: 'rgba(0,150,0,0)', backgroundColor: 'rgba(0,150,0,1)', pointRadius: 4, pointHoverRadius: 5, showLine: false }
         ]
@@ -902,22 +958,8 @@
           }
         },
         scales: {
-          x: {
-            display: true,
-            title: { display: true, text: '日期' },
-            ticks: {
-              autoSkip: false,
-              maxRotation: 0,
-              minRotation: 0,
-              callback: function (value, index) {
-                return tickIndexToLabel[index] || '';
-              }
-            }
-          },
-          y: {
-            display: true,
-            title: { display: true, text: '累積損益（金額）' }
-          }
+          x: makeAlignedDateScale(dayDates, '日期'),
+          y: makeAlignedYScale('累積損益（金額）')
         }
       }
     });
@@ -935,18 +977,10 @@
 
     if (!dayDates.length) return;
 
-    const labels = dayDates.map((d, i) => i + 1);
-    const tickIndexToLabel = {};
-    const last = dayDates.length - 1;
-    [0, 0.25, 0.5, 0.75, 1].forEach(r => {
-      const idx = Math.round(last * r);
-      const d = dayDates[idx];
-      if (!d) return;
-      tickIndexToLabel[idx] = `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`;
-    });
+    const labels = dayDates.map(formatDateAxisLabel);
 
-    const pos = dayPnls.map(v => (v > 0 ? v : null));
-    const neg = dayPnls.map(v => (v < 0 ? v : null));
+    const pos = toPositiveBarPoints(dayPnls);
+    const neg = toNegativeBarPoints(dayPnls);
 
     gWeeklyChart = new Chart(ctx, {
       type: 'bar',
@@ -981,21 +1015,9 @@
           }
         },
         scales: {
-          x: {
-            display: true,
-            title: { display: true, text: '日期' },
-            ticks: {
-              autoSkip: false,
-              maxRotation: 0,
-              minRotation: 0,
-              callback: function (value, index) {
-                return tickIndexToLabel[index] || '';
-              }
-            }
-          },
+          x: makeAlignedDateScale(dayDates, '日期'),
           y: {
-            display: true,
-            title: { display: true, text: '每日損益（金額）' },
+            ...makeAlignedYScale('每日損益（金額）'),
             grid: { zeroLineWidth: 1 }
           }
         }
