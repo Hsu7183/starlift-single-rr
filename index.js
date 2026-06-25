@@ -52,6 +52,10 @@
   const btnSlipDefault = $('#btnSlipDefault');
   const slipErr = $('#slipErr');
 
+  function hasHomeReportCards() {
+    return !!document.getElementById('row-wk1-1001pp');
+  }
+
   if (window.top !== window.self) {
     try { window.top.location = window.self.location.href; } catch (_) {}
   }
@@ -145,6 +149,10 @@
   }
 
   function showSlipGate() {
+    if (!hasHomeReportCards()) {
+      startAppWithSlip(DEFAULT_SLIP_PER_SIDE);
+      return;
+    }
     gate.classList.add('hidden');
     app.classList.add('hidden');
     slipGate.classList.remove('hidden');
@@ -193,7 +201,9 @@
     app.classList.remove('hidden');
     startIdleLogout();
     enableDevtoolsWatchAfterLogin();
-    loadDepsAndRun(slipPerSide);
+    if (hasHomeReportCards()) {
+      loadDepsAndRun(slipPerSide);
+    }
   }
 
   function confirmSlip(customValue) {

@@ -329,8 +329,13 @@
         </label>
 
         <label>
-          滑點（每邊點數）：
-          <input type="number" id="slipInput" value="2" step="0.1">
+          進場滑點：
+          <input type="number" id="entrySlipInput" value="0" step="0.1">
+        </label>
+
+        <label>
+          出場滑點：
+          <input type="number" id="exitSlipInput" value="2" step="0.1">
         </label>
 
         <!-- TXT 檔 + 雲端檔 block：隱藏，但保留給 single-trades.js 使用 -->
@@ -426,8 +431,8 @@
 
   <script src="data/local-reports.js"></script>
   <!-- 單檔分析主邏輯 -->
-  <script src="single-trades.js?v=mini-futures-v1"></script>
+  <script src="single-trades.js?v=split-slip-daily-v1"></script>
   <!-- 1001plus+ 專屬：自動找最新 1001plus+ + 基準，合併後直接餵給 single-trades.js -->
-  <script src="1001plusplus.js?v=mini-futures-v1"></script>
+  <script src="1001plusplus.js?v=split-slip-daily-v1"></script>
 </body>
 </html>

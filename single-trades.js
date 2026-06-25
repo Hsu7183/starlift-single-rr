@@ -1,5 +1,5 @@
 // single-trades.js
-// 三劍客量化科技機構級單檔分析：KPI + 每週資產曲線 + 交易明細
+// 三劍客量化科技機構級單檔分析：KPI + 每日資產曲線 + 交易明細
 // 最終版：
 // 1. 嚴格依 action 語義配對（新買/新賣/平賣/平買/強制平倉）
 // 2. 避免新賣被誤翻成新買
@@ -40,7 +40,8 @@
     pointValue: PRODUCT_PROFILE.pointValue,
     feePerSide: PRODUCT_PROFILE.feePerSide,
     taxRate: 0.00002,
-    slipPerSide: 0,
+    entrySlipPoints: 0,
+    exitSlipPoints: 2,
     capital: PRODUCT_PROFILE.capital
   };
 
@@ -115,6 +116,20 @@
     const yearStart = new Date(Date.UTC(tmp.getUTCFullYear(), 0, 1));
     const weekNo = Math.ceil((((tmp - yearStart) / 86400000) + 1) / 7);
     return tmp.getUTCFullYear() + '-W' + (weekNo < 10 ? '0' + weekNo : weekNo);
+  }
+
+  function dateDayKey(d) {
+    if (!d) return '';
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}${m}${day}`;
+  }
+
+  function getSlipPointsPerTrade() {
+    const entry = Number(CFG.entrySlipPoints);
+    const exit = Number(CFG.exitSlipPoints);
+    return Math.max(0, isFinite(entry) ? entry : 0) + Math.max(0, isFinite(exit) ? exit : 0);
   }
 
   function normAction(s) {
@@ -368,7 +383,7 @@
     `;
   }
 
-  function calcKpi(trades, pnls, equity, slipPerSide) {
+  function calcKpi(trades, pnls, equity, slipPointsPerTrade) {
     const n = pnls.length;
     if (!n) return null;
 
@@ -533,7 +548,7 @@
     let totalFee  = 0;
     let totalTax  = 0;
     let notionalTraded = 0;
-    const slipPerTradeMoney = CFG.pointValue * slipPerSide * 2;
+    const slipPerTradeMoney = CFG.pointValue * (Number(slipPointsPerTrade) || 0);
     trades.forEach(t => {
       totalFee  += t.fee;
       totalTax  += t.tax;
@@ -776,7 +791,7 @@
     renderScore(score);
   }
 
-  function aggregateWeekly(dates, series) {
+  function aggregateDaily(dates, series) {
     const outDates = [];
     const outVals  = [];
     let prevKey = null;
@@ -786,7 +801,7 @@
     for (let i = 1; i < series.length; i++) {
       const d = dates[i];
       if (!d) continue;
-      const key = dateWeekKey(d);
+      const key = dateDayKey(d);
       if (prevKey !== null && key !== prevKey) {
         outDates.push(lastDate);
         outVals.push(lastVal);
@@ -806,20 +821,20 @@
     return { dates: outDates, vals: outVals };
   }
 
-  function renderEquityChartWeekly(exitDates, totalTheo, totalAct,
-                                   longTheo, longAct, shortTheo, shortAct) {
+  function renderEquityChartDaily(exitDates, totalTheo, totalAct,
+                                  longTheo, longAct, shortTheo, shortAct) {
     const canvas = document.getElementById('equityChart');
     if (!canvas || !window.Chart) return;
     const ctx = canvas.getContext('2d');
 
-    const aggTotalTheo  = aggregateWeekly(exitDates, totalTheo);
-    const aggTotalAct   = aggregateWeekly(exitDates, totalAct);
-    const aggLongTheo   = aggregateWeekly(exitDates, longTheo);
-    const aggLongAct    = aggregateWeekly(exitDates, longAct);
-    const aggShortTheo  = aggregateWeekly(exitDates, shortTheo);
-    const aggShortAct   = aggregateWeekly(exitDates, shortAct);
+    const aggTotalTheo  = aggregateDaily(exitDates, totalTheo);
+    const aggTotalAct   = aggregateDaily(exitDates, totalAct);
+    const aggLongTheo   = aggregateDaily(exitDates, longTheo);
+    const aggLongAct    = aggregateDaily(exitDates, longAct);
+    const aggShortTheo  = aggregateDaily(exitDates, shortTheo);
+    const aggShortAct   = aggregateDaily(exitDates, shortAct);
 
-    const weekDates = aggTotalAct.dates;
+    const dayDates = aggTotalAct.dates;
     const labels    = aggTotalAct.vals.map((_, i) => i + 1);
 
     let maxVal = -Infinity, minVal = Infinity;
@@ -838,13 +853,13 @@
     }
 
     const tickIndexToLabel = {};
-    if (weekDates.length > 0 && labels.length === weekDates.length) {
-      const last = weekDates.length - 1;
+    if (dayDates.length > 0 && labels.length === dayDates.length) {
+      const last = dayDates.length - 1;
       [0, 0.25, 0.5, 0.75, 1].forEach(r => {
         const idx = Math.round(last * r);
-        const d   = weekDates[idx];
+        const d   = dayDates[idx];
         if (!d) return;
-        tickIndexToLabel[idx] = `${d.getFullYear()}/${d.getMonth() + 1}`;
+        tickIndexToLabel[idx] = `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`;
       });
     }
 
@@ -873,7 +888,7 @@
             callbacks: {
               title: function (items) {
                 const idx = items[0].dataIndex;
-                const d = weekDates[idx];
+                const d = dayDates[idx];
                 if (!d) return '';
                 const y = d.getFullYear();
                 const m = (d.getMonth() + 1).toString().padStart(2, '0');
@@ -908,7 +923,7 @@
     });
   }
 
-  function renderWeeklyPnlChart(weekDates, weekPnls) {
+  function renderDailyPnlChart(dayDates, dayPnls) {
     const canvas = document.getElementById('weeklyPnlChart');
     if (!canvas || !window.Chart) return;
     const ctx = canvas.getContext('2d');
@@ -918,28 +933,28 @@
       gWeeklyChart = null;
     }
 
-    if (!weekDates.length) return;
+    if (!dayDates.length) return;
 
-    const labels = weekDates.map((d, i) => i + 1);
+    const labels = dayDates.map((d, i) => i + 1);
     const tickIndexToLabel = {};
-    const last = weekDates.length - 1;
+    const last = dayDates.length - 1;
     [0, 0.25, 0.5, 0.75, 1].forEach(r => {
       const idx = Math.round(last * r);
-      const d = weekDates[idx];
+      const d = dayDates[idx];
       if (!d) return;
-      tickIndexToLabel[idx] = `${d.getFullYear()}/${d.getMonth() + 1}`;
+      tickIndexToLabel[idx] = `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`;
     });
 
-    const pos = weekPnls.map(v => (v > 0 ? v : null));
-    const neg = weekPnls.map(v => (v < 0 ? v : null));
+    const pos = dayPnls.map(v => (v > 0 ? v : null));
+    const neg = dayPnls.map(v => (v < 0 ? v : null));
 
     gWeeklyChart = new Chart(ctx, {
       type: 'bar',
       data: {
         labels,
         datasets: [
-          { label: '每週獲利（>0）', data: pos, borderColor: 'rgba(220,0,0,1)', backgroundColor: 'rgba(220,0,0,0.8)', borderWidth: 1, barPercentage: 0.7, categoryPercentage: 0.9 },
-          { label: '每週虧損（<0）', data: neg, borderColor: 'rgba(0,150,0,1)', backgroundColor: 'rgba(0,150,0,0.8)', borderWidth: 1, barPercentage: 0.7, categoryPercentage: 0.9 }
+          { label: '每日獲利（>0）', data: pos, borderColor: 'rgba(220,0,0,1)', backgroundColor: 'rgba(220,0,0,0.8)', borderWidth: 1, barPercentage: 0.7, categoryPercentage: 0.9 },
+          { label: '每日虧損（<0）', data: neg, borderColor: 'rgba(0,150,0,1)', backgroundColor: 'rgba(0,150,0,0.8)', borderWidth: 1, barPercentage: 0.7, categoryPercentage: 0.9 }
         ]
       },
       options: {
@@ -952,7 +967,7 @@
             callbacks: {
               title: function (items) {
                 const idx = items[0].dataIndex;
-                const d = weekDates[idx];
+                const d = dayDates[idx];
                 if (!d) return '';
                 const y = d.getFullYear();
                 const m = (d.getMonth() + 1).toString().padStart(2, '0');
@@ -968,7 +983,7 @@
         scales: {
           x: {
             display: true,
-            title: { display: true, text: '週期' },
+            title: { display: true, text: '日期' },
             ticks: {
               autoSkip: false,
               maxRotation: 0,
@@ -980,7 +995,7 @@
           },
           y: {
             display: true,
-            title: { display: true, text: '每週損益（金額）' },
+            title: { display: true, text: '每日損益（金額）' },
             grid: { zeroLineWidth: 1 }
           }
         }
@@ -989,12 +1004,14 @@
   }
 
   function renderTrades(parsed) {
+    syncSlipConfigFromInputs();
+
     const tbody = $('#tradesBody');
     if (!tbody) return;
 
     tbody.innerHTML = '';
     renderKpi(null, null);
-    renderWeeklyPnlChart([], []);
+    renderDailyPnlChart([], []);
 
     const paramLine = $('#paramLine');
     if (paramLine) {
@@ -1016,7 +1033,8 @@
     const dirs       = [];
     const exitDates  = [];
 
-    const slipCostPerTrade = CFG.pointValue * CFG.slipPerSide * 2;
+    const slipPointsPerTrade = getSlipPointsPerTrade();
+    const slipCostPerTrade = CFG.pointValue * slipPointsPerTrade;
 
     parsed.trades.forEach((t, idx) => {
       cumTheo += t.theoNet;
@@ -1059,7 +1077,7 @@
     });
 
     const kpiTheo = calcKpi(parsed.trades, theoPnls, theoEquity, 0);
-    const kpiAct  = calcKpi(parsed.trades, actPnls, actEquity, CFG.slipPerSide);
+    const kpiAct  = calcKpi(parsed.trades, actPnls, actEquity, slipPointsPerTrade);
     renderKpi(kpiTheo, kpiAct);
 
     const totalTheo = [0], totalAct = [0];
@@ -1097,29 +1115,29 @@
     const datesForChart = [exitDates[0] || new Date()];
     exitDates.forEach(d => datesForChart.push(d || exitDates[0]));
 
-    renderEquityChartWeekly(datesForChart, totalTheo, totalAct, longTheo, longAct, shortTheo, shortAct);
+    renderEquityChartDaily(datesForChart, totalTheo, totalAct, longTheo, longAct, shortTheo, shortAct);
 
-    const weekMap = {};
+    const dayMap = {};
     for (let i = 0; i < actPnls.length; i++) {
       const d = exitDates[i];
       if (!d) continue;
-      const key = dateWeekKey(d);
-      if (!weekMap[key]) {
-        weekMap[key] = { sum: 0, date: d };
-      } else if (d > weekMap[key].date) {
-        weekMap[key].date = d;
+      const key = dateDayKey(d);
+      if (!dayMap[key]) {
+        dayMap[key] = { sum: 0, date: d };
+      } else if (d > dayMap[key].date) {
+        dayMap[key].date = d;
       }
-      weekMap[key].sum += actPnls[i];
+      dayMap[key].sum += actPnls[i];
     }
 
-    const weekKeys = Object.keys(weekMap).sort();
-    const weekDatesArr = [];
-    const weekPnlsArr  = [];
-    weekKeys.forEach(k => {
-      weekDatesArr.push(weekMap[k].date);
-      weekPnlsArr.push(weekMap[k].sum);
+    const dayKeys = Object.keys(dayMap).sort();
+    const dayDatesArr = [];
+    const dayPnlsArr  = [];
+    dayKeys.forEach(k => {
+      dayDatesArr.push(dayMap[k].date);
+      dayPnlsArr.push(dayMap[k].sum);
     });
-    renderWeeklyPnlChart(weekDatesArr, weekPnlsArr);
+    renderDailyPnlChart(dayDatesArr, dayPnlsArr);
   }
 
   async function readFileTextSmart(file) {
@@ -1191,6 +1209,8 @@
 
   const fileInput = $('#fileInput');
   const capitalInput = $('#capitalInput');
+  const entrySlipInput = $('#entrySlipInput');
+  const exitSlipInput = $('#exitSlipInput');
   const slipInput = $('#slipInput');
   const runBtn = $('#runBtn');
   const localDataSelect = $('#localDataSelect');
@@ -1217,6 +1237,31 @@
     if (h1 && !h1.textContent.includes('小台')) {
       h1.textContent = h1.textContent.replace('機構級單檔分析', '機構級小台單檔分析');
     }
+  }
+
+  function numberFromInput(input, fallback) {
+    if (!input) return fallback;
+    const v = Number(input.value);
+    return Number.isFinite(v) && v >= 0 ? v : fallback;
+  }
+
+  function syncSlipConfigFromInputs() {
+    if (entrySlipInput || exitSlipInput) {
+      CFG.entrySlipPoints = numberFromInput(entrySlipInput, 0);
+      CFG.exitSlipPoints = numberFromInput(exitSlipInput, 2);
+      return;
+    }
+
+    if (slipInput) {
+      const v = numberFromInput(slipInput, 0);
+      CFG.entrySlipPoints = v;
+      CFG.exitSlipPoints = v;
+    }
+  }
+
+  function updateSlipAndRender() {
+    syncSlipConfigFromInputs();
+    if (gParsed) renderTrades(gParsed);
   }
 
   function localDataName(key) {
@@ -1348,12 +1393,16 @@
     });
   }
 
-  if (slipInput) {
-    slipInput.addEventListener('change', function () {
-      const v = Number(this.value);
-      CFG.slipPerSide = isFinite(v) ? v : 0;
-      if (gParsed) renderTrades(gParsed);
-    });
+  if (entrySlipInput) {
+    entrySlipInput.addEventListener('change', updateSlipAndRender);
+  }
+
+  if (exitSlipInput) {
+    exitSlipInput.addEventListener('change', updateSlipAndRender);
+  }
+
+  if (slipInput && !entrySlipInput && !exitSlipInput) {
+    slipInput.addEventListener('change', updateSlipAndRender);
   }
 
   if (runBtn) {
@@ -1367,6 +1416,7 @@
   }
 
   applyProductChrome();
+  syncSlipConfigFromInputs();
   populateLocalDataSelect();
 
   if (btnLoadLocalData) {

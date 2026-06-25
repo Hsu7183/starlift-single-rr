@@ -276,9 +276,22 @@
     const fileInput = $('#fileInput');
     const runBtn    = $('#runBtn');
 
-    // 確保第一次自動計算就用滑點=2
+    // 確保第一次自動計算就用進場滑點=0、出場滑點=2。
+    const entrySlipInput = $('#entrySlipInput');
+    const exitSlipInput = $('#exitSlipInput');
+    if (entrySlipInput) {
+      entrySlipInput.value = '0';
+      entrySlipInput.dispatchEvent(new Event('input',  { bubbles: true }));
+      entrySlipInput.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    if (exitSlipInput) {
+      exitSlipInput.value = '2';
+      exitSlipInput.dispatchEvent(new Event('input',  { bubbles: true }));
+      exitSlipInput.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
     const slipInput = $('#slipInput');
-    if (slipInput) {
+    if (slipInput && !entrySlipInput && !exitSlipInput) {
       slipInput.value = '2';
       slipInput.dispatchEvent(new Event('input',  { bubbles: true }));
       slipInput.dispatchEvent(new Event('change', { bubbles: true }));
