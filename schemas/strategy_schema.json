@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "XS Strategy Schema",
+  "type": "object",
+  "required": ["name", "inputs", "indicators", "conditions"],
+  "properties": {
+    "name": {"type": "string", "minLength": 1},
+    "inputs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "type", "default"],
+        "properties": {
+          "name": {"type": "string"},
+          "type": {"type": "string", "enum": ["NumericSimple", "NumericSeries"]},
+          "default": {"type": ["number", "integer"]}
+        }
+      }
+    },
+    "indicators": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["var", "expression"],
+        "properties": {
+          "var": {"type": "string"},
+          "expression": {"type": "string"}
+        }
+      }
+    },
+    "conditions": {
+      "type": "object",
+      "required": ["long", "short"],
+      "properties": {
+        "long": {"type": "string"},
+        "short": {"type": "string"}
+      }
+    }
+  }
+}

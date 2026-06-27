@@ -1,0 +1,17 @@
+{
+  "name": "EMA_RSI_Momentum",
+  "inputs": [
+    {"name": "fastLen", "type": "NumericSimple", "default": 12},
+    {"name": "slowLen", "type": "NumericSimple", "default": 26},
+    {"name": "rsiLen", "type": "NumericSimple", "default": 14}
+  ],
+  "indicators": [
+    {"var": "emaFast", "expression": "XAverage(Close[1], fastLen)"},
+    {"var": "emaSlow", "expression": "XAverage(Close[1], slowLen)"},
+    {"var": "rsiVal", "expression": "RSI(Close[1], rsiLen)"}
+  ],
+  "conditions": {
+    "long": "Open > emaFast and emaFast > emaSlow and rsiVal > 55",
+    "short": "Open < emaFast and emaFast < emaSlow and rsiVal < 45"
+  }
+}
